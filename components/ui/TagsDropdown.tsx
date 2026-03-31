@@ -52,7 +52,7 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
   const isFormMode = mode === 'add' || typeof mode === 'object';
 
   return (
-    <div className="flex flex-col min-w-[220px]">
+    <div className="flex flex-col w-max">
       {/* Tag list */}
       {!isFormMode && (
         <>
@@ -118,7 +118,7 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
 
       {/* Add / Edit form */}
       {isFormMode && (
-        <div className="flex flex-col gap-3 p-3">
+        <div className="flex flex-col gap-3 p-3 min-w-[200px]">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
             {mode === 'add' ? 'New tag' : 'Edit tag'}
           </p>

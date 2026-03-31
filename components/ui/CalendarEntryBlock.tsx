@@ -14,6 +14,7 @@ interface CalendarEntryBlockProps {
   entry: CalendarEntry;
   style?: React.CSSProperties;
   compact?: boolean;
+  readOnly?: boolean;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
   onResizeEnd?: (id: string, newEndTime: string) => void;
   onRepositionEnd?: (id: string, newStartTime: string, newEndTime: string, pos?: { x: number; y: number }) => void;
@@ -25,6 +26,7 @@ export function CalendarEntryBlock({
   entry,
   style,
   compact = false,
+  readOnly = false,
   onDoubleClick,
   onResizeEnd,
   onRepositionEnd,
@@ -35,7 +37,7 @@ export function CalendarEntryBlock({
 
   // ── Drag to reposition ──────────────────────────────────────────────────
   const handleDragPointerDown = (e: React.PointerEvent) => {
-    if (!onRepositionEnd) return;
+    if (readOnly || !onRepositionEnd) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
 
@@ -131,26 +133,37 @@ export function CalendarEntryBlock({
       ref={blockRef}
       onPointerDown={handleDragPointerDown}
       onDoubleClick={(e) => {
+        if (readOnly) return;
         e.stopPropagation();
         onDoubleClick?.(entry.id, e.currentTarget);
       }}
       style={{ ...style, boxShadow: 'var(--shadow-card)' }}
       className={[
-        `absolute left-1 right-1 rounded-lg ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden`,
-        'border border-[var(--color-accent)] bg-[var(--color-accent-subtle)]',
-        'hover:bg-[rgba(124,106,247,0.2)] transition-colors',
-        onRepositionEnd ? 'cursor-grab' : 'cursor-pointer',
+        `absolute left-1 right-1 rounded-lg ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden transition-colors`,
+        readOnly
+          ? 'border border-[#10b981]/50 bg-[#10b981]/10 cursor-default'
+          : [
+              'border border-[var(--color-accent)] bg-[var(--color-accent-subtle)]',
+              'hover:bg-[rgba(124,106,247,0.2)]',
+              onRepositionEnd ? 'cursor-grab' : 'cursor-pointer',
+            ].join(' '),
         className,
       ].join(' ')}
     >
-      <p className={`${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-[var(--color-accent)] leading-tight truncate`}>
+      <p className={[
+        `${compact ? 'text-[10px]' : 'text-xs'} font-semibold leading-tight truncate`,
+        readOnly ? 'text-[#10b981]' : 'text-[var(--color-accent)]',
+      ].join(' ')}>
         {entry.title}
       </p>
-      <p className={`${compact ? 'text-[9px]' : 'text-[10px]'} text-[var(--color-text-secondary)] mt-0.5`}>
+      <p className={[
+        `${compact ? 'text-[9px]' : 'text-[10px]'} mt-0.5`,
+        readOnly ? 'text-[#10b981]/70' : 'text-[var(--color-text-secondary)]',
+      ].join(' ')}>
         {entry.startTime} – {entry.endTime}
       </p>
 
-      {onResizeEnd && (
+      {!readOnly && onResizeEnd && (
         <div
           onPointerDown={handleResizePointerDown}
           className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group"

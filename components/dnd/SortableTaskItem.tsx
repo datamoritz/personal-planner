@@ -8,6 +8,7 @@ import type { Task } from '@/types';
 interface SortableTaskItemProps {
   task: Task;
   containerId: string;
+  noHover?: boolean;
   isOverdue?: boolean;
   showRecurrenceIcon?: boolean;
   topLabel?: string;
@@ -20,6 +21,7 @@ interface SortableTaskItemProps {
 export function SortableTaskItem({
   task,
   containerId,
+  noHover = false,
   suffix,
   topLabel,
   ...pillProps
@@ -36,7 +38,7 @@ export function SortableTaskItem({
     data: { type: 'task', containerId },
   });
 
-  return (
+return (
     <div
       ref={setNodeRef}
       style={{
@@ -45,11 +47,24 @@ export function SortableTaskItem({
         opacity: isDragging ? 0.35 : 1,
         zIndex: isDragging ? 10 : undefined,
       }}
-      className="flex items-center gap-1 min-w-0"
+      /* Add dynamic classes here */
+      className={[
+        "flex items-center gap-1 min-w-0 rounded-xl transition-colors",
+        !noHover 
+          ? "hover:bg-[var(--color-surface-raised)] cursor-pointer" 
+          : "cursor-default"
+      ].join(' ')}
       {...attributes}
       {...listeners}
     >
-      <TaskPill task={task} className="flex-1 min-w-0" topLabel={topLabel} {...pillProps} />
+      <TaskPill 
+        task={task} 
+        className="flex-1 min-w-0" 
+        topLabel={topLabel} 
+        /* Pass noHover to the pill if the pill also has hover styles */
+        noHover={noHover} 
+        {...pillProps} 
+      />
       {suffix}
     </div>
   );

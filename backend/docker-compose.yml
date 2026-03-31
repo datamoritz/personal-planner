@@ -1,0 +1,21 @@
+services:
+  planner-backend:
+    build: .
+    container_name: planner-backend
+    environment:
+      ENV: production
+      API_SECRET: ${API_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+    ports:
+      - "127.0.0.1:8001:8000"
+    restart: unless-stopped
+    networks:
+      - creditcycle-net
+
+networks:
+  creditcycle-net:
+    external: true
+    name: credit-cycle-app_creditcycle-net

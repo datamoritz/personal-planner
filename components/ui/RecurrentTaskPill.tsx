@@ -41,13 +41,13 @@ export function RecurrentTaskPill({ task, hasActiveInstance = false, onDoubleCli
         'border transition-all duration-150',
         isDue
           ? 'bg-[var(--color-accent-subtle)] border-[var(--color-accent)]'
-          : 'border-[var(--color-border)] bg-[var(--color-surface-raised)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)]',
+          : 'border-[var(--color-border)] bg-[var(--color-surface-raised)]',
       ].join(' ')}
     >
       <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
         <RefreshCw
           size={12}
-          className={isDue ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)]'}
+          className={isDue ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
           strokeWidth={2.5}
         />
       </div>

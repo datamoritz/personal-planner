@@ -15,6 +15,9 @@ import {
 import { addDays, format } from 'date-fns';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
+import { usePlannerData } from '@/lib/usePlannerData';
+import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
+import { ImportBanner } from './ImportBanner';
 import { DayHeader } from './DayHeader';
 import { ProjectsColumn } from './columns/ProjectsColumn';
 import { MyDayColumn } from './columns/MyDayColumn';
@@ -94,9 +97,12 @@ function CollapsedStrip({
 
 export function PlannerApp() {
   const theme = usePlannerStore((s) => s.theme);
+  const { isLoading, error, legacyData } = usePlannerData();
   const viewMode = usePlannerStore((s) => s.viewMode);
   const { currentDate, tasks, recurrentTasks, reorderTask, moveTask, spawnRecurrentInstance } =
     usePlannerStore();
+
+  const { refresh: refreshGoogle } = useGoogleCalendar();
 
   const [activeDrag, setActiveDrag]         = useState<ActiveDrag>(null);
   const [leftCollapsed, setLeftCollapsed]   = useState(false);
@@ -177,6 +183,21 @@ export function PlannerApp() {
     }
   }
 
+  if (isLoading || error) {
+    return (
+      <div data-theme={theme} className="flex h-full items-center justify-center bg-[var(--color-background)]">
+        {error
+          ? <p className="text-sm text-red-500">{error}</p>
+          : <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+        }
+      </div>
+    );
+  }
+
+  if (legacyData) {
+    return <ImportBanner legacyData={legacyData} theme={theme} />;
+  }
+
   return (
     <div data-theme={theme} className="flex h-full p-7 bg-[var(--color-background)]">
       <DndContext
@@ -188,7 +209,7 @@ export function PlannerApp() {
       >
         {/* Floating canvas */}
         <div className="flex flex-col flex-1 rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-2xl min-w-0">
-          <DayHeader />
+          <DayHeader onRefreshGoogle={refreshGoogle} />
 
           <div className="flex flex-1 min-h-0">
             {/* ── Left panel — Projects ──────────────────────────── */}

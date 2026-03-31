@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Moon, Sun, Tag } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Moon, RefreshCw, Sun, Tag } from 'lucide-react';
 import { format, isToday, parseISO, startOfWeek, endOfWeek, isSameMonth } from 'date-fns';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { ViewToggle } from '@/components/ui/ViewToggle';
@@ -26,11 +26,11 @@ function isCurrentWeek(currentDate: string): boolean {
   return today >= start && today <= end;
 }
 
-export function DayHeader() {
+export function DayHeader({ onRefreshGoogle }: { onRefreshGoogle?: () => void }) {
   const {
     currentDate, navigateDay, navigateWeek, setCurrentDate,
     theme, toggleTheme, viewMode, setViewMode,
-    tags, activeTagFilter,
+    tags, activeTagFilter, googleNeedsReconnect,
   } = usePlannerStore();
 
   const [mounted, setMounted] = useState(false);
@@ -62,6 +62,14 @@ export function DayHeader() {
 
   const atPresentUnit = isWeek ? thisWeek : todayFlag;
 
+const activeTag = tags.find((t) => t.id === activeTagFilter);
+
+const activeTagStyle = activeTag ? {
+  backgroundColor: activeTag.color,
+  color: activeTag.colorDark,
+  borderColor: activeTag.colorDark,
+} : {};
+
   return (
     <header className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)] flex-shrink-0 bg-[var(--color-canvas)]">
       {/* Left — brand + view toggle + tags */}
@@ -74,22 +82,29 @@ export function DayHeader() {
         <div className="relative flex-shrink-0">
           <button
             ref={tagsAnchorRef}
-            onClick={() => setTagsOpen((v) => !v)}
-            title="Filter by tag"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTagsOpen((v) => !v);
+            }}
+            // Add the style line here:
+            style={activeTagFilter !== null ? activeTagStyle : {}}
             className={[
-              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer',
-              activeTagFilter !== null
-                ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
-                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]',
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer select-none outline-none border border-transparent',
+              activeTagFilter === null
+                ? 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]'
+                : '',
             ].join(' ')}
           >
-            <Tag size={13} strokeWidth={2} />
-            {activeTagFilter !== null
-              ? (tags.find((t) => t.id === activeTagFilter)?.name ?? 'Tag')
-              : 'Tags'}
+            <Tag
+              size={13}
+              strokeWidth={2.5}
+              color={activeTagFilter !== null ? activeTag?.colorDark : 'currentColor'}
+            />
+            {activeTagFilter !== null ? activeTag?.name : 'Tags'}
           </button>
           {tagsOpen && tagsAnchorRef.current && (
-            <DetailPopover anchor={tagsAnchorRef.current} onClose={() => setTagsOpen(false)}>
+            <DetailPopover anchor={tagsAnchorRef.current} onClose={() => setTagsOpen(false)} className="w-auto" noPadding>
               <TagsDropdown onClose={() => setTagsOpen(false)} />
             </DetailPopover>
           )}
@@ -136,8 +151,26 @@ export function DayHeader() {
         </button>
       </div>
 
-      {/* Right — theme toggle */}
+      {/* Right — refresh Google + theme toggle */}
       <div className="flex items-center justify-end gap-1" style={{ width: '23%' }}>
+        {googleNeedsReconnect ? (
+          <button
+            onClick={() => window.open('https://planner-api.moritzknodler.com/auth/google/login', '_blank')}
+            title="Reconnect Google Calendar"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 hover:bg-amber-100 dark:bg-amber-900/20 dark:border-amber-700/40 dark:text-amber-400 transition-colors cursor-pointer"
+          >
+            <RefreshCw size={11} strokeWidth={2.5} />
+            Reconnect
+          </button>
+        ) : onRefreshGoogle && (
+          <button
+            onClick={onRefreshGoogle}
+            title="Refresh Google Calendar"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[#10b981] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+          >
+            <RefreshCw size={14} strokeWidth={2} />
+          </button>
+        )}
         <button
           onClick={toggleTheme}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}

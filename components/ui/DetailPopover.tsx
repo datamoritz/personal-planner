@@ -20,9 +20,11 @@ interface DetailPopoverProps {
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
+  className?: string;   // overrides the default w-72
+  noPadding?: boolean;  // removes the p-4 content wrapper
 }
 
-export function DetailPopover({ anchor, onClose, children, title }: DetailPopoverProps) {
+export function DetailPopover({ anchor, onClose, children, title, className, noPadding }: DetailPopoverProps) {
   const { refs, floatingStyles, context } = useFloating({
     open: true,
     onOpenChange: (open) => { if (!open) onClose(); },
@@ -45,7 +47,7 @@ export function DetailPopover({ anchor, onClose, children, title }: DetailPopove
           ref={refs.setFloating}
           style={{ ...floatingStyles, zIndex: 50 }}
           {...getFloatingProps()}
-          className="w-72 rounded-xl border border-[var(--color-popover-border)] bg-[var(--color-popover)] shadow-2xl"
+          className={`${className ?? 'w-72'} rounded-xl border border-[var(--color-popover-border)] bg-[var(--color-popover)] shadow-2xl`}
         >
           {/* Header */}
           {title && (
@@ -69,7 +71,7 @@ export function DetailPopover({ anchor, onClose, children, title }: DetailPopove
               <X size={12} strokeWidth={2.5} />
             </button>
           )}
-          <div className="p-4">{children}</div>
+          <div className={noPadding ? '' : 'p-4'}>{children}</div>
         </div>
       </FloatingFocusManager>
     </FloatingPortal>

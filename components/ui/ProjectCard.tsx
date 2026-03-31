@@ -1,8 +1,8 @@
 'use client';
 
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import type { Project, Task } from '@/types';
+import { useRef, useState } from 'react';
+import type { Project, Tag, Task } from '@/types';
 import { SortableTaskItem } from '@/components/dnd/SortableTaskItem';
 import { DroppableSection } from '@/components/dnd/DroppableSection';
 import { InlineTaskInput } from './InlineTaskInput';
@@ -10,31 +10,55 @@ import { InlineTaskInput } from './InlineTaskInput';
 interface ProjectCardProps {
   project: Project;
   tasks: Task[];
+  tags?: Tag[];
   onAddSubtask: (projectId: string, title: string) => void;
   onToggleTask: (taskId: string) => void;
   onDoubleClickTask: (taskId: string, anchor: HTMLElement) => void;
   onFinish: (projectId: string) => void;
   onDelete: (projectId: string) => void;
+  onSetTag?: (projectId: string, tagId: string | undefined) => void;
 }
 
 export function ProjectCard({
   project,
   tasks,
+  tags = [],
   onAddSubtask,
   onToggleTask,
   onDoubleClickTask,
   onFinish,
   onDelete,
+  onSetTag,
 }: ProjectCardProps) {
   const [expanded, setExpanded] = useState(true);
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const tagBtnRef = useRef<HTMLButtonElement>(null);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
   const doneCount = tasks.filter((t) => t.status === 'done').length;
   const total = tasks.length;
   const progressPct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
 
+  const projectTag = project.tagId ? tags.find((t) => t.id === project.tagId) : undefined;
+
+  const openTagPicker = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!tagBtnRef.current) return;
+    const rect = tagBtnRef.current.getBoundingClientRect();
+    setPickerPos({ top: rect.bottom + 4, left: rect.left });
+    setTagPickerOpen(true);
+  };
+
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+    <div
+      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] overflow-hidden"
+      style={{
+        boxShadow: 'var(--shadow-card)',
+        borderLeftWidth: projectTag ? '4px' : undefined,
+        borderLeftColor: projectTag ? projectTag.colorDark : undefined,
+      }}
+    >
       {/* Header */}
       <div className="group flex items-center gap-2 px-3 py-2.5">
         <button
@@ -55,6 +79,18 @@ export function ProjectCard({
             {doneCount}/{total}
           </span>
         )}
+
+        {/* Tag color circle */}
+        <button
+          ref={tagBtnRef}
+          onClick={openTagPicker}
+          title="Set project color"
+          className="flex-shrink-0 w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-colors"
+          style={{
+            background: projectTag ? projectTag.color : 'transparent',
+            borderColor: projectTag ? projectTag.colorDark : 'var(--color-border)',
+          }}
+        />
 
         <button
           onClick={() => setAddingSubtask(true)}
@@ -126,6 +162,50 @@ export function ProjectCard({
             Mark project as finished
           </button>
         </div>
+      )}
+
+      {/* Tag picker — fixed positioned to escape overflow:hidden */}
+      {tagPickerOpen && pickerPos && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setTagPickerOpen(false)}
+          />
+          <div
+            className="fixed z-50 flex flex-col gap-1 p-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-lg"
+            style={{ top: pickerPos.top, left: pickerPos.left }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Clear option */}
+            <button
+              onClick={() => { onSetTag?.(project.id, undefined); setTagPickerOpen(false); }}
+              className="flex items-center gap-2 px-2 py-1 rounded-lg text-[11px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] cursor-pointer transition-colors"
+            >
+              <span className="w-3 h-3 rounded-full border-2 border-[var(--color-border)] flex-shrink-0" />
+              None
+            </button>
+            <div className="border-t border-[var(--color-border-subtle)] my-0.5" />
+            {tags.map((tag) => (
+              <button
+                key={tag.id}
+                onClick={() => { onSetTag?.(project.id, tag.id); setTagPickerOpen(false); }}
+                className="flex items-center gap-2 px-2 py-1 rounded-lg text-[11px] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] cursor-pointer transition-colors"
+              >
+                <span
+                  className="w-3 h-3 rounded-full flex-shrink-0 border"
+                  style={{ background: tag.color, borderColor: tag.colorDark }}
+                />
+                {tag.name}
+                {project.tagId === tag.id && (
+                  <svg className="ml-auto" width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

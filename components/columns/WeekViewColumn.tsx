@@ -11,6 +11,8 @@ import {
   usePlannerStore,
   selectMyDayTasks,
   selectCalendarEntriesForDate,
+  selectGoogleCalendarEntriesForDate,
+  selectGoogleAllDayEventsForDate,
 } from '@/store/usePlannerStore';
 import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { TimedTaskBlock } from '@/components/ui/TimedTaskBlock';
@@ -144,7 +146,7 @@ interface WeekViewColumnProps { sidebarVisible: boolean; onNKey: () => void; }
 
 export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) {
   const {
-    currentDate, tasks, calendarEntries,
+    currentDate, tasks, calendarEntries, googleCalendarEntries, googleAllDayEvents,
     toggleTask, addTask, addCalendarEntry,
     updateCalendarEntry, updateTask, moveTask,
   } = usePlannerStore();
@@ -317,6 +319,35 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
         })}
       </div>
 
+      {/* All-day events row — only rendered when at least one day has events */}
+      {weekDays.some((d) => selectGoogleAllDayEventsForDate(googleAllDayEvents, format(d, 'yyyy-MM-dd')).length > 0) && (
+        <div className="flex flex-shrink-0 border-b border-[var(--color-border)]">
+          <div
+            className="flex-shrink-0 flex items-start justify-end pt-1.5 pr-1 text-[8px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]"
+            style={{ width: TIME_GUTTER_W }}
+          >
+            All day
+          </div>
+          {weekDays.map((day) => {
+            const ds     = format(day, 'yyyy-MM-dd');
+            const events = selectGoogleAllDayEventsForDate(googleAllDayEvents, ds);
+            return (
+              <div key={ds} className="flex-1 flex flex-col gap-0.5 p-0.5 border-l border-[var(--color-border-grid)] min-w-0">
+                {events.map((ev) => (
+                  <div
+                    key={ev.id}
+                    title={ev.notes ?? ev.title}
+                    className="px-1 py-0.5 rounded text-[10px] font-medium text-[#10b981] bg-[#10b981]/10 truncate select-none"
+                  >
+                    {ev.title}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Calendar grid — single shared scroll */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex" style={{ height: GRID_HEIGHT }}>
@@ -347,11 +378,13 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
             const isToday   = ds === todayStr;
             const isPastDay = ds < todayStr;
 
-            const dayEntries    = selectCalendarEntriesForDate(calendarEntries, ds);
-            const dayTimedTasks = selectMyDayTasks(tasks, ds).filter((t) => t.startTime && t.endTime);
+            const dayEntries       = selectCalendarEntriesForDate(calendarEntries, ds);
+            const dayGoogleEntries = selectGoogleCalendarEntriesForDate(googleCalendarEntries, ds);
+            const dayTimedTasks    = selectMyDayTasks(tasks, ds).filter((t) => t.startTime && t.endTime);
 
             const overlapItems = [
               ...dayEntries.map((e) => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
+              ...dayGoogleEntries.map((e) => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
               ...dayTimedTasks.map((t) => ({ id: t.id, startTime: t.startTime!, endTime: t.endTime! })),
             ];
             const depths = computeOverlapDepths(overlapItems);
@@ -390,6 +423,19 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                     <div className="flex-1 bg-red-500" style={{ height: '1.5px' }} />
                   </div>
                 )}
+
+                {dayGoogleEntries.map((entry) => {
+                  const depth = depths.get(entry.id) ?? 0;
+                  return (
+                    <CalendarEntryBlock
+                      key={entry.id}
+                      compact
+                      readOnly
+                      entry={entry}
+                      style={{ top: minutesToOffset(timeToMinutes(entry.startTime)) + 1, height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 20), left: depth * WEEK_OVERLAP_SHIFT, right: 2, zIndex: 5 + depth }}
+                    />
+                  );
+                })}
 
                 {dayEntries.map((entry) => {
                   const depth = depths.get(entry.id) ?? 0;

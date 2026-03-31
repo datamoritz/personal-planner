@@ -25,17 +25,18 @@ import {
 import { ProjectCard } from '@/components/ui/ProjectCard';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
-import type { Project, Task } from '@/types';
+import type { Project, Tag, Task } from '@/types';
 
 function SortableProjectCard({
-  project, tasks, onAddSubtask, onToggleTask, onDoubleClickTask, onFinish, onDelete, isNoteSelected, onSelectForNotes,
+  project, tasks, tags, onAddSubtask, onToggleTask, onDoubleClickTask, onFinish, onDelete, onSetTag, isNoteSelected, onSelectForNotes,
 }: {
-  project: Project; tasks: Task[];
+  project: Project; tasks: Task[]; tags: Tag[];
   onAddSubtask: (pid: string, title: string) => void;
   onToggleTask: (id: string) => void;
   onDoubleClickTask: (id: string, anchor: HTMLElement) => void;
   onFinish: (id: string) => void;
   onDelete: (id: string) => void;
+  onSetTag: (projectId: string, tagId: string | undefined) => void;
   isNoteSelected: boolean;
   onSelectForNotes: () => void;
 }) {
@@ -66,12 +67,13 @@ function SortableProjectCard({
         </svg>
       </div>
       <ProjectCard
-        project={project} tasks={tasks}
+        project={project} tasks={tasks} tags={tags}
         onAddSubtask={onAddSubtask}
         onToggleTask={onToggleTask}
         onDoubleClickTask={onDoubleClickTask}
         onFinish={onFinish}
         onDelete={onDelete}
+        onSetTag={onSetTag}
       />
     </div>
   );
@@ -85,8 +87,8 @@ interface ProjectsColumnProps {
 }
 
 export function ProjectsColumn({ onCollapse, highlightSelection = false }: ProjectsColumnProps) {
-  const { projects, tasks, addProject, deleteProject, addTask, toggleTask, finishProject, reorderProject,
-    selectedProjectIdForNotes, setSelectedProjectIdForNotes } = usePlannerStore();
+  const { projects, tasks, tags, addProject, deleteProject, addTask, toggleTask, finishProject, reorderProject,
+    setProjectTag, activeTagFilter, selectedProjectIdForNotes, setSelectedProjectIdForNotes } = usePlannerStore();
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -95,7 +97,10 @@ export function ProjectsColumn({ onCollapse, highlightSelection = false }: Proje
     if (over && active.id !== over.id) reorderProject(String(active.id), String(over.id));
   }
 
-  const active   = selectActiveProjects(projects);
+  const allActive = selectActiveProjects(projects);
+  const active = activeTagFilter
+    ? allActive.filter((p) => p.tagId === activeTagFilter)
+    : allActive;
   const finished = selectFinishedProjects(projects);
 
   const [addingProject, setAddingProject]   = useState(false);
@@ -152,11 +157,13 @@ export function ProjectsColumn({ onCollapse, highlightSelection = false }: Proje
                 <SortableProjectCard
                   project={project}
                   tasks={selectProjectTasks(tasks, project.id)}
+                  tags={tags}
                   onAddSubtask={(pid, title) => addTask({ title, location: 'project', projectId: pid })}
                   onToggleTask={toggleTask}
                   onDoubleClickTask={(id, anchor) => setPopover({ id, anchor })}
                   onFinish={finishProject}
                   onDelete={deleteProject}
+                  onSetTag={setProjectTag}
                   isNoteSelected={highlightSelection && selectedProjectIdForNotes === project.id}
                   onSelectForNotes={() => setSelectedProjectIdForNotes(
                     selectedProjectIdForNotes === project.id ? null : project.id

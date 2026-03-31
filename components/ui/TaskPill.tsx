@@ -8,6 +8,7 @@ interface TaskPillProps {
   task: Task;
   isOverdue?: boolean;
   showRecurrenceIcon?: boolean;
+  noHover?: boolean;
   topLabel?: string;       // small label shown above title inside the pill (e.g. date for upcoming)
   onToggle?: (id: string) => void;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
@@ -19,6 +20,7 @@ export function TaskPill({
   isOverdue = false,
   showRecurrenceIcon = false,
   topLabel,
+  noHover = false,
   onToggle,
   onDoubleClick,
   className = '',
@@ -27,7 +29,8 @@ export function TaskPill({
   const tags = usePlannerStore((s) => s.tags);
   const tag = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
 
-  const tagBg = (!isDone && !isOverdue && tag) ? tag.color + 'CC' : undefined;
+  // Use colorDark at low opacity so the tint works on both dark and light backgrounds
+  const tagBg = (!isDone && !isOverdue && tag) ? tag.colorDark + '33' : undefined;
 
   return (
     <div
@@ -48,7 +51,7 @@ export function TaskPill({
           ? 'bg-[var(--color-overdue-subtle)]'
           : tag
           ? ''
-          : 'bg-[var(--color-surface)] hover:bg-[var(--color-accent-subtle)]',
+          : 'bg-[var(--color-surface)]',
         className,
       ].join(' ')}
     >
@@ -64,8 +67,8 @@ export function TaskPill({
           isDone
             ? 'bg-[var(--color-done)] border-[var(--color-done)]'
             : isOverdue
-            ? 'border-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)]'
-            : 'border-[var(--color-text-muted)] hover:border-[var(--color-accent)]',
+            ? 'border-[var(--color-overdue)]'
+            : 'border-[var(--color-text-muted)]',
         ].join(' ')}
       >
         {isDone && (

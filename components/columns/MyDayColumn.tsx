@@ -8,7 +8,10 @@ import {
   usePlannerStore,
   selectMyDayTasks,
   selectCalendarEntriesForDate,
+  selectGoogleCalendarEntriesForDate,
+  selectGoogleAllDayEventsForDate,
 } from '@/store/usePlannerStore';
+import { AllDayStrip } from '@/components/ui/AllDayStrip';
 import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { DraggableTimedTaskBlock } from '@/components/dnd/DraggableTimedTaskBlock';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
@@ -57,7 +60,7 @@ type PopoverState = TaskPopover | EntryPopover | null;
 
 export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (active: boolean) => void; onActionsMode?: (active: boolean) => void }) {
   const {
-    currentDate, tasks, calendarEntries,
+    currentDate, tasks, calendarEntries, googleCalendarEntries, googleAllDayEvents,
     toggleTask, addCalendarEntry,
     updateCalendarEntry, updateTask, moveTask,
   } = usePlannerStore();
@@ -77,12 +80,13 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     onFocusMode?.(next);
   };
 
-  const timedTasks = selectMyDayTasks(tasks, currentDate);
-  const entries    = selectCalendarEntriesForDate(calendarEntries, currentDate);
+  const timedTasks    = selectMyDayTasks(tasks, currentDate);
+  const entries       = selectCalendarEntriesForDate(calendarEntries, currentDate);
+  const googleEntries = selectGoogleCalendarEntriesForDate(googleCalendarEntries, currentDate);
+  const allDayEvents  = selectGoogleAllDayEventsForDate(googleAllDayEvents, currentDate);
   const [today, setToday] = useState('');
   useEffect(() => { setToday(format(new Date(), 'yyyy-MM-dd')); }, []);
   const isToday    = today !== '' && currentDate === today;
-  const isPastDay  = today !== '' && currentDate < today;
 
   const [timeOffset, setTimeOffset] = useState<number | null>(isToday ? getCurrentTimeOffset() : null);
   const [timeLabel,  setTimeLabel]  = useState<string>(isToday ? getCurrentTimeLabel() : '');
@@ -168,6 +172,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
 
   const overlapItems: OverlapItem[] = [
     ...entries.map(e => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
+    ...googleEntries.map(e => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
     ...timedTasks.filter(t => t.startTime && t.endTime).map(t => ({ id: t.id, startTime: t.startTime!, endTime: t.endTime! })),
   ];
   const depths = computeOverlapDepths(overlapItems);
@@ -229,6 +234,9 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
         </div>
       </div>
 
+      {/* All-day events strip — only when not in notepad mode */}
+      {!notepadOpen && <AllDayStrip events={allDayEvents} />}
+
       {/* Notepad mode */}
       {notepadOpen && (
         <div className="flex-1 flex flex-col min-h-0 bg-[#fefce8]">
@@ -261,27 +269,35 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
               />
             ))}
 
-            {/* Past tint — full grid if past day, up to now if today */}
-            {(isPastDay || timeOffset !== null) && (
+            {/* Past tint — only on today, only up to the red line */}
+            {timeOffset !== null && (
               <div
                 className="absolute left-0 right-0 top-0 pointer-events-none z-[1]"
                 style={{
-                  height: isPastDay ? GRID_HEIGHT : (timeOffset ?? 0),
+                  height: timeOffset,
                   background: 'var(--color-past-overlay)',
                 }}
               />
             )}
-
+            
             {timeOffset !== null && (
               <div
-                className="absolute left-0 right-0 flex items-center pointer-events-none z-20"
+                className="absolute left-0 right-0 flex items-center pointer-events-none z-50 -translate-y-1/2"
                 style={{ top: timeOffset }}
               >
-                <span className="w-12 flex-shrink-0 text-right pr-1.5 -translate-y-1/2 text-[9px] font-bold leading-none text-red-500 select-none">
+                {/* 1. The Apple-style Time Pill */}
+                <div 
+                  className="bg-[#ff3b30] text-white text-[10px] font-bold px-1.5 h-5 flex items-center justify-center rounded-full shadow-sm z-50 select-none"
+                  style={{ 
+                    marginLeft: '2px', // Slight nudge from the very edge
+                    minWidth: '38px' 
+                  }}
+                >
                   {timeLabel}
-                </span>
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0 -ml-1.5 shadow-[0_0_0_2px_rgba(239,68,68,0.25)]" />
-                <div className="flex-1 bg-red-500" style={{ height: '1.5px' }} />
+                </div>
+
+                {/* 2. The Red Line - Perfectly centered via the parent's flex items-center */}
+                <div className="flex-1 h-[1px] bg-[#ff3b30]" />
               </div>
             )}
 
@@ -302,6 +318,25 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
                   onDoubleClick={(id, anchor) => setPopover({ type: 'entry', id, anchor })}
                   onResizeEnd={(id, t) => updateCalendarEntry(id, { endTime: t })}
                   onRepositionEnd={(id, s, e) => updateCalendarEntry(id, { startTime: s, endTime: e })}
+                />
+              );
+            })}
+
+            {googleEntries.map((entry) => {
+              const depth = depths.get(entry.id) ?? 0;
+              return (
+                <CalendarEntryBlock
+                  key={entry.id}
+                  entry={entry}
+                  readOnly
+                  style={{
+                    top:    minutesToOffset(timeToMinutes(entry.startTime)) + 1,
+                    height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 24),
+                    left:   LEFT_BASE + depth * OVERLAP_SHIFT,
+                    right:  4,
+                    zIndex: 5 + depth,
+                  }}
+                  verticalOnly
                 />
               );
             })}
