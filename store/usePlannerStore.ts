@@ -589,8 +589,9 @@ export const usePlannerStore = create<PlannerStore>()(
         const updated = get().tags.find((t) => t.id === id);
         if (updated?.backendId) {
           const apiFields: Record<string, unknown> = {};
-          if ('name' in data)  apiFields.name  = data.name;
-          if ('color' in data) apiFields.color = data.color;
+          if ('name' in data)      apiFields.name       = data.name;
+          if ('color' in data)     apiFields.color      = data.color;
+          if ('colorDark' in data) apiFields.color_dark = data.colorDark;
 
           api.patchTag(updated.backendId, apiFields).catch((err) => {
             console.error('[updateTag]', err);

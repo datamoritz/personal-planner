@@ -139,6 +139,7 @@ function toTask(
   b: BackendTask,
   projectIdMap: Map<number, string>,
   recurrentTaskIdMap: Map<number, string>,
+  tagIdMap: Map<number, string>,
 ): Task {
   return {
     id:               b.client_id ?? String(b.id),
@@ -151,6 +152,7 @@ function toTask(
     endTime:          fromApiTime(b.end_time),
     projectId:        b.project_id != null ? projectIdMap.get(b.project_id) : undefined,
     recurrentTaskId:  b.recurrent_task_id != null ? recurrentTaskIdMap.get(b.recurrent_task_id) : undefined,
+    tagId:            b.tag_id != null ? tagIdMap.get(b.tag_id) : undefined,
     notes:            b.notes ?? undefined,
     createdAt:        b.created_at,
     updatedAt:        b.updated_at,
@@ -203,7 +205,7 @@ function toTag(b: BackendTag): Tag {
     backendId: b.id,
     name:      b.name,
     color:     b.color ?? '#e5e7eb',
-    colorDark: b.color ?? '#6b7280',  // same value — visual regression accepted for now
+    colorDark: b.color_dark ?? b.color ?? '#6b7280',
     createdAt: b.created_at,
     updatedAt: b.updated_at,
   };
@@ -241,12 +243,15 @@ export async function fetchAll(): Promise<BootData> {
   const recurrentTaskIdMap = new Map<number, string>(
     backendRecurrentTasks.map((r) => [r.id, r.client_id ?? String(r.id)]),
   );
+  const tagIdMap = new Map<number, string>(
+    backendTags.map((t) => [t.id, t.client_id ?? String(t.id)]),
+  );
 
   const projects        = backendProjects.map(toProject);
   const tags            = backendTags.map(toTag);
   const recurrentTasks  = backendRecurrentTasks.map(toRecurrentTask);
   const calendarEntries = backendCalendarEntries.map(toCalendarEntry);
-  const tasks           = backendTasks.map((t) => toTask(t, projectIdMap, recurrentTaskIdMap));
+  const tasks           = backendTasks.map((t) => toTask(t, projectIdMap, recurrentTaskIdMap, tagIdMap));
 
   return { projects, tags, recurrentTasks, calendarEntries, tasks };
 }
@@ -263,10 +268,16 @@ function resolveRecurrentTaskBackendId(recId: string | undefined, recurrentTasks
   return recurrentTasks.find((r) => r.id === recId)?.backendId ?? null;
 }
 
+function resolveTagBackendId(tagId: string | undefined, tags: Tag[]): number | null {
+  if (!tagId) return null;
+  return tags.find((t) => t.id === tagId)?.backendId ?? null;
+}
+
 export async function createTask(
   task: Task,
   projects: Project[],
   recurrentTasks: RecurrentTask[],
+  tags: Tag[],
 ): Promise<{ id: number }> {
   return post<{ id: number }>('/tasks', {
     client_id:           task.id,
@@ -279,6 +290,7 @@ export async function createTask(
     end_time:            toApiTime(task.endTime),
     project_id:          resolveProjectBackendId(task.projectId, projects),
     recurrent_task_id:   resolveRecurrentTaskBackendId(task.recurrentTaskId, recurrentTasks),
+    tag_id:              resolveTagBackendId(task.tagId, tags),
     sort_order:          0,
   });
 }
@@ -355,9 +367,10 @@ export async function deleteCalendarEntry(backendId: number): Promise<void> {
 
 export async function createTag(tag: Tag): Promise<{ id: number }> {
   return post<{ id: number }>('/tags', {
-    client_id: tag.id,
-    name:      tag.name,
-    color:     tag.color,
+    client_id:  tag.id,
+    name:       tag.name,
+    color:      tag.color,
+    color_dark: tag.colorDark,
   });
 }
 

@@ -50,6 +50,7 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db)):
         end_time=payload.end_time,
         project_id=payload.project_id,
         recurrent_task_id=payload.recurrent_task_id,
+        tag_id=payload.tag_id,
         sort_order=payload.sort_order,
     )
     if payload.status == "done":

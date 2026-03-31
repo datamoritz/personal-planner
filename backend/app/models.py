@@ -71,6 +71,7 @@ class Task(Base):
     client_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, default=uuid.uuid4)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     recurrent_task_id: Mapped[int | None] = mapped_column(ForeignKey("recurrent_tasks.id"), nullable=True)
+    tag_id: Mapped[int | None] = mapped_column(ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")

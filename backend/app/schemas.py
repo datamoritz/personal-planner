@@ -134,6 +134,7 @@ class TaskCreate(BaseModel):
     end_time: time | None = None
     project_id: int | None = None
     recurrent_task_id: int | None = None
+    tag_id: int | None = None
     sort_order: int = 0
 
 
@@ -149,6 +150,7 @@ class TaskRead(BaseModel):
     end_time: Optional[time] = None
     project_id: Optional[int] = None
     recurrent_task_id: Optional[int] = None
+    tag_id: Optional[int] = None
     sort_order: int
     completed_at: Optional[datetime] = None
     created_at: datetime
@@ -168,6 +170,7 @@ class TaskUpdate(BaseModel):
     end_time: time | None = None
     project_id: int | None = None
     recurrent_task_id: int | None = None
+    tag_id: int | None = None
     sort_order: int | None = None
     completed_at: datetime | None = None
 
@@ -184,6 +187,7 @@ class TaskOut(BaseModel):
     end_time: time | None
     project_id: int | None
     recurrent_task_id: int | None
+    tag_id: int | None
     sort_order: int
     completed_at: datetime | None
     created_at: datetime
