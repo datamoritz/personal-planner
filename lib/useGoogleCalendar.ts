@@ -38,11 +38,10 @@ export function useGoogleCalendar(): { refresh: () => void } {
     try {
       const url = `${API_BASE}/google/calendar-entries?start=${start}&end=${end}&tz=${encodeURIComponent(tz)}`;
       const res = await fetch(url, { signal: controller.signal });
-      if (res.status === 401) {
+      if (!res.ok) {
         setGoogleNeedsReconnect(true);
         return;
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: { timed: CalendarEntry[]; allDay: AllDayEvent[] } = await res.json();
       setGoogleNeedsReconnect(false);
       setGoogleCalendarEntries(data.timed ?? []);
@@ -50,6 +49,7 @@ export function useGoogleCalendar(): { refresh: () => void } {
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       console.error('[Google Calendar] fetch failed:', err);
+      setGoogleNeedsReconnect(true);
     }
   }, [currentDate, viewMode, setGoogleCalendarEntries, setGoogleAllDayEvents, setGoogleNeedsReconnect]);
 

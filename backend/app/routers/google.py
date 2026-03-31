@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -84,7 +85,10 @@ def get_google_service(db: Session):
     )
 
     if not creds.valid:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError:
+            raise HTTPException(status_code=401, detail="Google token expired — reconnect required")
         db.execute(
             text("""
                 UPDATE google_oauth_tokens
@@ -98,7 +102,8 @@ def get_google_service(db: Session):
     return build("calendar", "v3", credentials=creds)
 
 
-def _normalize_google_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
+def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
+    """Normalize a Google Calendar timed event for the frontend CalendarEntry shape."""
     if event.get("status") == "cancelled":
         return None
 
@@ -125,6 +130,26 @@ def _normalize_google_event(event: dict, tz_name: str = "America/Denver") -> dic
         "notes": event.get("description"),
         "createdAt": event.get("created", start_dt.isoformat()),
         "updatedAt": event.get("updated", end_dt.isoformat()),
+    }
+
+
+def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
+    """Normalize a Google Calendar all-day event for the frontend AllDayEvent shape."""
+    if event.get("status") == "cancelled":
+        return None
+
+    date_raw = event.get("start", {}).get("date")
+    if not date_raw:
+        return None
+
+    return {
+        "id": event["id"],
+        "title": event.get("summary", "(No title)"),
+        "date": date_raw,  # already "YYYY-MM-DD"
+        "source": "google",
+        "notes": event.get("description"),
+        "createdAt": event.get("created", date_raw),
+        "updatedAt": event.get("updated", date_raw),
     }
 
 
@@ -182,8 +207,8 @@ def google_calendar_entries(start: str, end: str, tz: str = "America/Denver", db
         orderBy="startTime",
     ).execute()
 
-    return [
-        entry
-        for event in result.get("items", [])
-        if (entry := _normalize_google_event(event, tz_name=tz)) is not None
-    ]
+    items = result.get("items", [])
+    timed = [e for event in items if (e := _normalize_timed_event(event, tz_name=tz)) is not None]
+    all_day = [e for event in items if (e := _normalize_allday_event(event, tz_name=tz)) is not None]
+
+    return {"timed": timed, "allDay": all_day}

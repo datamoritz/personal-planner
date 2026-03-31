@@ -26,7 +26,7 @@ function isCurrentWeek(currentDate: string): boolean {
   return today >= start && today <= end;
 }
 
-export function DayHeader({ onRefreshGoogle }: { onRefreshGoogle?: () => void }) {
+export function DayHeader({ onRefresh }: { onRefresh?: () => void }) {
   const {
     currentDate, navigateDay, navigateWeek, setCurrentDate,
     theme, toggleTheme, viewMode, setViewMode,
@@ -162,11 +162,11 @@ const activeTagStyle = activeTag ? {
             <RefreshCw size={11} strokeWidth={2.5} />
             Reconnect
           </button>
-        ) : onRefreshGoogle && (
+        ) : onRefresh && (
           <button
-            onClick={onRefreshGoogle}
-            title="Refresh Google Calendar"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[#10b981] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+            onClick={onRefresh}
+            title="Refresh"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
           >
             <RefreshCw size={14} strokeWidth={2} />
           </button>

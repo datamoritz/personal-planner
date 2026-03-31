@@ -97,12 +97,13 @@ function CollapsedStrip({
 
 export function PlannerApp() {
   const theme = usePlannerStore((s) => s.theme);
-  const { isLoading, error, legacyData } = usePlannerData();
+  const { isLoading, error, legacyData, refresh: refreshPlanner } = usePlannerData();
   const viewMode = usePlannerStore((s) => s.viewMode);
   const { currentDate, tasks, recurrentTasks, reorderTask, moveTask, spawnRecurrentInstance } =
     usePlannerStore();
 
   const { refresh: refreshGoogle } = useGoogleCalendar();
+  const handleRefresh = useCallback(() => { refreshPlanner(); refreshGoogle(); }, [refreshPlanner, refreshGoogle]);
 
   const [activeDrag, setActiveDrag]         = useState<ActiveDrag>(null);
   const [leftCollapsed, setLeftCollapsed]   = useState(false);
@@ -209,7 +210,7 @@ export function PlannerApp() {
       >
         {/* Floating canvas */}
         <div className="flex flex-col flex-1 rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-2xl min-w-0">
-          <DayHeader onRefreshGoogle={refreshGoogle} />
+          <DayHeader onRefresh={handleRefresh} />
 
           <div className="flex flex-1 min-h-0">
             {/* ── Left panel — Projects ──────────────────────────── */}
