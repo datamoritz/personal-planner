@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, date, time
-from typing import Optional
+from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +194,21 @@ class TaskOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BulkTaskCreate(BaseModel):
+    tasks: List[TaskCreate]
+
+    @model_validator(mode="after")
+    def tasks_not_empty(self) -> "BulkTaskCreate":
+        if not self.tasks:
+            raise ValueError("tasks must be a non-empty array")
+        return self
+
+
+class BulkTaskOut(BaseModel):
+    count: int
+    created: List[TaskOut]
 
 
 # ---------------------------------------------------------------------------

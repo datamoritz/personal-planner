@@ -210,14 +210,35 @@ const COLOR_DARK_MAP: Record<string, string> = {
   '#f1f5f9': '#64748b',
 };
 
+function darkenHex(hex: string, factor = 0.82): string {
+  const clean = hex.toLowerCase().replace('#', '');
+  const num = parseInt(clean, 16);
+
+  const r = Math.round(((num >> 16) & 255) * factor);
+  const g = Math.round(((num >> 8) & 255) * factor);
+  const b = Math.round((num & 255) * factor);
+
+  return `#${[r, g, b]
+    .map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
 function toTag(b: BackendTag): Tag {
-  const color = b.color ?? '#e5e7eb';
+
+  const color = (b.color ?? '#e5e7eb').toLowerCase();
+
   return {
     id:        b.client_id ?? String(b.id),
     backendId: b.id,
     name:      b.name,
     color,
-    colorDark: b.color_dark ?? COLOR_DARK_MAP[color] ?? '#6b7280',
+
+    // ✅ FIXED
+    colorDark:
+      b.color_dark ??
+      COLOR_DARK_MAP[color] ??
+      darkenHex(color),   // <-- key addition
+
     createdAt: b.created_at,
     updatedAt: b.updated_at,
   };
@@ -280,7 +301,7 @@ function resolveRecurrentTaskBackendId(recId: string | undefined, recurrentTasks
   return recurrentTasks.find((r) => r.id === recId)?.backendId ?? null;
 }
 
-function resolveTagBackendId(tagId: string | undefined, tags: Tag[]): number | null {
+export function resolveTagBackendId(tagId: string | undefined, tags: Tag[]): number | null {
   if (!tagId) return null;
   return tags.find((t) => t.id === tagId)?.backendId ?? null;
 }
@@ -291,7 +312,7 @@ export async function createTask(
   recurrentTasks: RecurrentTask[],
   tags: Tag[],
 ): Promise<{ id: number }> {
-  return post<{ id: number }>('/tasks', {
+  const payload = {
     client_id:           task.id,
     title:               task.title,
     notes:               task.notes ?? null,
@@ -304,7 +325,9 @@ export async function createTask(
     recurrent_task_id:   resolveRecurrentTaskBackendId(task.recurrentTaskId, recurrentTasks),
     tag_id:              resolveTagBackendId(task.tagId, tags),
     sort_order:          0,
-  });
+  };
+
+  return post<{ id: number }>('/tasks', payload);
 }
 
 export async function patchTask(backendId: number, fields: Record<string, unknown>): Promise<void> {

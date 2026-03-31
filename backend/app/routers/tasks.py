@@ -37,8 +37,7 @@ def list_tasks(
     ).all()
 
 
-@router.post("", response_model=schemas.TaskOut, status_code=201)
-def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db)):
+def _build_task(payload: schemas.TaskCreate) -> models.Task:
     task = models.Task(
         client_id=payload.client_id or uuid.uuid4(),
         title=payload.title,
@@ -55,11 +54,26 @@ def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db)):
     )
     if payload.status == "done":
         task.completed_at = datetime.utcnow()
+    return task
 
+
+@router.post("", response_model=schemas.TaskOut, status_code=201)
+def create_task(payload: schemas.TaskCreate, db: Session = Depends(get_db)):
+    task = _build_task(payload)
     db.add(task)
     db.commit()
     db.refresh(task)
     return task
+
+
+@router.post("/bulk", response_model=schemas.BulkTaskOut, status_code=201)
+def create_tasks_bulk(payload: schemas.BulkTaskCreate, db: Session = Depends(get_db)):
+    tasks = [_build_task(t) for t in payload.tasks]
+    db.add_all(tasks)
+    db.commit()
+    for task in tasks:
+        db.refresh(task)
+    return {"count": len(tasks), "created": tasks}
 
 
 @router.patch("/{task_id}", response_model=schemas.TaskOut)

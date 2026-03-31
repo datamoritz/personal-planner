@@ -625,13 +625,23 @@ export const usePlannerStore = create<PlannerStore>()(
         }
       },
 
-      setTaskTag: (taskId, tagId) =>
+      setTaskTag: (taskId, tagId) => {
+        const prevTasks = get().tasks;
         set((s) => ({
           tasks: s.tasks.map((t) =>
             t.id === taskId ? { ...t, tagId, updatedAt: now() } : t
           ),
-          // Note: tag associations not synced to backend in Phase 2
-        })),
+        }));
+        const task = get().tasks.find((t) => t.id === taskId);
+        if (task?.backendId) {
+          api.patchTask(task.backendId, {
+            tag_id: api.resolveTagBackendId(tagId, get().tags),
+          }).catch((err) => {
+            console.error('[setTaskTag]', err);
+            set({ tasks: prevTasks });
+          });
+        }
+      },
 
       // ── DnD ────────────────────────────────────────────────────────────
 
