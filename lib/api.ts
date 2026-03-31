@@ -199,13 +199,25 @@ function toCalendarEntry(b: BackendCalendarEntry): CalendarEntry {
   };
 }
 
+const COLOR_DARK_MAP: Record<string, string> = {
+  '#dbeafe': '#3b82f6',
+  '#ede9fe': '#8b5cf6',
+  '#dcfce7': '#22c55e',
+  '#fef9c3': '#eab308',
+  '#ffedd5': '#f97316',
+  '#fce7f3': '#ec4899',
+  '#cffafe': '#06b6d4',
+  '#f1f5f9': '#64748b',
+};
+
 function toTag(b: BackendTag): Tag {
+  const color = b.color ?? '#e5e7eb';
   return {
     id:        b.client_id ?? String(b.id),
     backendId: b.id,
     name:      b.name,
-    color:     b.color ?? '#e5e7eb',
-    colorDark: b.color_dark ?? b.color ?? '#6b7280',
+    color,
+    colorDark: b.color_dark ?? COLOR_DARK_MAP[color] ?? '#6b7280',
     createdAt: b.created_at,
     updatedAt: b.updated_at,
   };
