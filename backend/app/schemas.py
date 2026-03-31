@@ -197,7 +197,19 @@ class TaskOut(BaseModel):
 
 
 class BulkTaskCreate(BaseModel):
-    tasks: List[TaskCreate]
+    tasks: List[TaskCreate] | str
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_tasks_string(cls, values: dict) -> dict:
+        import json
+        raw = values.get("tasks")
+        if isinstance(raw, str):
+            try:
+                values["tasks"] = json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"tasks string is not valid JSON: {e}")
+        return values
 
     @model_validator(mode="after")
     def tasks_not_empty(self) -> "BulkTaskCreate":
