@@ -34,10 +34,13 @@ export function CalendarEntryBlock({
   className = '',
 }: CalendarEntryBlockProps) {
   const blockRef = useRef<HTMLDivElement>(null);
+  const canReposition = !!onRepositionEnd;
+  const canResize = !!onResizeEnd;
+  const canOpen = !!onDoubleClick;
 
   // ── Drag to reposition ──────────────────────────────────────────────────
   const handleDragPointerDown = (e: React.PointerEvent) => {
-    if (readOnly || !onRepositionEnd) return;
+    if (!canReposition) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
 
@@ -92,6 +95,7 @@ export function CalendarEntryBlock({
 
   // ── Resize handle ───────────────────────────────────────────────────────
   const handleResizePointerDown = (e: React.PointerEvent) => {
+    if (!canResize) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -133,7 +137,7 @@ export function CalendarEntryBlock({
       ref={blockRef}
       onPointerDown={handleDragPointerDown}
       onDoubleClick={(e) => {
-        if (readOnly) return;
+        if (!canOpen) return;
         e.stopPropagation();
         onDoubleClick?.(entry.id, e.currentTarget);
       }}
@@ -141,11 +145,11 @@ export function CalendarEntryBlock({
       className={[
         `absolute left-1 right-1 rounded-lg ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden transition-colors`,
         readOnly
-          ? 'border border-[#10b981]/50 bg-[#10b981]/10 cursor-default'
+          ? `border border-[#10b981]/50 bg-[#10b981]/10 ${canReposition ? 'cursor-grab' : canOpen ? 'cursor-pointer' : 'cursor-default'}`
           : [
               'border border-[var(--color-accent)] bg-[var(--color-accent-subtle)]',
               'hover:bg-[rgba(124,106,247,0.2)]',
-              onRepositionEnd ? 'cursor-grab' : 'cursor-pointer',
+              canReposition ? 'cursor-grab' : 'cursor-pointer',
             ].join(' '),
         className,
       ].join(' ')}
@@ -163,12 +167,12 @@ export function CalendarEntryBlock({
         {entry.startTime} – {entry.endTime}
       </p>
 
-      {!readOnly && onResizeEnd && (
+      {canResize && (
         <div
           onPointerDown={handleResizePointerDown}
           className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group"
         >
-          <div className="w-6 h-0.5 rounded-full bg-[var(--color-accent)] opacity-40 group-hover:opacity-100 transition-opacity" />
+          <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[#10b981]' : 'bg-[var(--color-accent)]'} opacity-40 group-hover:opacity-100 transition-opacity`} />
         </div>
       )}
     </div>

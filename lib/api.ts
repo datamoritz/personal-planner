@@ -412,6 +412,30 @@ export async function createGoogleTimedEvent(input: {
   });
 }
 
+export async function patchGoogleTimedEvent(eventId: string, input: {
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  notes?: string;
+  tz: string;
+  endDate?: string;
+}): Promise<CalendarEntry> {
+  return patch<CalendarEntry>(`/google/events/${eventId}`, {
+    title: input.title,
+    date: input.date,
+    end_date: input.endDate ?? null,
+    start_time: toApiTime(input.startTime),
+    end_time: toApiTime(input.endTime),
+    notes: input.notes ?? null,
+    tz: input.tz,
+  });
+}
+
+export async function deleteGoogleTimedEvent(eventId: string): Promise<void> {
+  await del(`/google/events/${eventId}`);
+}
+
 export async function patchCalendarEntry(backendId: number, fields: Record<string, unknown>): Promise<void> {
   await patch<unknown>(`/calendar-entries/${backendId}`, fields);
 }

@@ -22,6 +22,7 @@ import { TimedTaskBlock } from '@/components/ui/TimedTaskBlock';
 import { DroppableSection } from '@/components/dnd/DroppableSection';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { CalendarEntryDetailPopover } from '@/components/ui/CalendarEntryDetailPopover';
+import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
 import { computeOverlapDepths } from '@/lib/overlapLayout';
 import {
   END_HOUR,
@@ -33,6 +34,8 @@ import {
   snapTo15Min,
 } from '@/lib/timeGrid';
 import type { Task } from '@/types';
+import * as api from '@/lib/api';
+import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
 
 const TOTAL_HOURS        = END_HOUR;
 const GRID_HEIGHT        = TOTAL_HOURS * SLOT_HEIGHT;
@@ -146,6 +149,7 @@ function WeekTaskItem({
 type Popover =
   | { type: 'task';  id: string; anchor: HTMLElement }
   | { type: 'entry'; id: string; anchor: HTMLElement }
+  | { type: 'google-entry'; id: string; anchor: HTMLElement }
   | null;
 
 interface WeekViewColumnProps { sidebarVisible: boolean; onNKey: () => void; }
@@ -157,6 +161,8 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
     toggleTask, addTask, addCalendarEntry,
     updateCalendarEntry, updateTask, moveTask,
   } = usePlannerStore();
+  const { refresh: refreshGoogle } = useGoogleCalendar();
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const weekStart = startOfWeek(new Date(currentDate + 'T00:00:00'), { weekStartsOn: 1 });
   const weekDays  = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -173,6 +179,35 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
   const [addValue, setAddValue]       = useState('');
   const [timeOffset, setTimeOffset]   = useState(getCurrentTimeOffset());
   const [timeLabel,  setTimeLabel]    = useState(getCurrentTimeLabel());
+
+  const updateGoogleEntry = useCallback((entryId: string, updates: { date?: string; startTime?: string; endTime?: string; title?: string; notes?: string }) => {
+    const entry = usePlannerStore.getState().googleCalendarEntries.find((e) => e.id === entryId);
+    if (!entry) return;
+
+    const nextDate = updates.date ?? entry.date;
+    const nextStart = updates.startTime ?? entry.startTime;
+    const nextEnd = updates.endTime ?? entry.endTime;
+    const nextTitle = updates.title ?? entry.title;
+    const nextNotes = updates.notes ?? entry.notes;
+    const startMinutes = timeToMinutes(nextStart);
+    const endMinutes = timeToMinutes(nextEnd);
+    const baseDate = new Date(`${nextDate}T00:00:00`);
+    const endDate = endMinutes < startMinutes ? format(addDays(baseDate, 1), 'yyyy-MM-dd') : nextDate;
+
+    api.patchGoogleTimedEvent(entry.id.split('::')[0], {
+      title: nextTitle,
+      date: nextDate,
+      endDate,
+      startTime: nextStart,
+      endTime: nextEnd,
+      notes: nextNotes,
+      tz,
+    }).then(() => {
+      refreshGoogle();
+    }).catch((err) => {
+      console.error('[patchGoogleTimedEvent]', err);
+    });
+  }, [refreshGoogle, tz]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = DEFAULT_SCROLL_H * SLOT_HEIGHT;
@@ -470,6 +505,12 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                       readOnly
                       entry={entry}
                       style={{ top: minutesToOffset(timeToMinutes(entry.startTime)) + 1, height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 20), left: depth * WEEK_OVERLAP_SHIFT, right: 2, zIndex: 5 + depth }}
+                      onDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+                      onResizeEnd={(id, t) => updateGoogleEntry(id, { endTime: t })}
+                      onRepositionEnd={(id, s, en, pos) => {
+                        const targetDate = pos ? (dateFromClientX(pos.x) ?? entry.date) : entry.date;
+                        updateGoogleEntry(id, { date: targetDate, startTime: s, endTime: en });
+                      }}
                     />
                   );
                 })}
@@ -550,6 +591,12 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                     compact
                     readOnly
                     style={{ top: minutesToOffset(24 * 60 + timeToMinutes(entry.startTime)) + 1, height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 20), left: 0, right: 2, zIndex: 4, opacity: 0.7 }}
+                    onDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+                    onResizeEnd={(id, t) => updateGoogleEntry(id, { endTime: t })}
+                    onRepositionEnd={(id, s, en, pos) => {
+                      const targetDate = pos ? (dateFromClientX(pos.x) ?? entry.date) : entry.date;
+                      updateGoogleEntry(id, { date: targetDate, startTime: s, endTime: en });
+                    }}
                   />
                 ))}
 
@@ -642,6 +689,9 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
       )}
       {popover?.type === 'entry' && (
         <CalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
+      )}
+      {popover?.type === 'google-entry' && (
+        <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
       )}
     </div>
   );

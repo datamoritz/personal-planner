@@ -114,6 +114,16 @@ class GoogleTimedEventOut(BaseModel):
     updatedAt: str
 
 
+class GoogleTimedEventUpdate(BaseModel):
+    title: str
+    date: date
+    end_date: Optional[date] = None
+    start_time: time
+    end_time: time
+    notes: Optional[str] = None
+    tz: str = "America/Denver"
+
+
 # ---------------------------------------------------------------------------
 # Projects
 # ---------------------------------------------------------------------------

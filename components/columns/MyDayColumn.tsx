@@ -19,6 +19,7 @@ import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { DraggableTimedTaskBlock } from '@/components/dnd/DraggableTimedTaskBlock';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { CalendarEntryDetailPopover } from '@/components/ui/CalendarEntryDetailPopover';
+import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
 import { UncertaintyNotepad } from '@/components/ui/UncertaintyNotepad';
 import { HelpCircle, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import {
@@ -64,13 +65,14 @@ function formatHour(h: number) {
 
 type TaskPopover  = { type: 'task';  id: string; anchor: HTMLElement };
 type EntryPopover = { type: 'entry'; id: string; anchor: HTMLElement };
-type PopoverState = TaskPopover | EntryPopover | null;
+type GoogleEntryPopover = { type: 'google-entry'; id: string; anchor: HTMLElement };
+type PopoverState = TaskPopover | EntryPopover | GoogleEntryPopover | null;
 
 export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (active: boolean) => void; onActionsMode?: (active: boolean) => void }) {
   const {
     currentDate, tasks, calendarEntries, googleCalendarEntries, googleAllDayEvents,
     toggleTask,
-    updateCalendarEntry, updateTask, moveTask,
+    updateCalendarEntry, updateTask, moveTask, setGoogleCalendarEntries,
   } = usePlannerStore();
   const { refresh: refreshGoogle } = useGoogleCalendar();
 
@@ -108,6 +110,36 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   const [timeOffset, setTimeOffset] = useState<number | null>(isToday ? getCurrentTimeOffset() : null);
   const [timeLabel,  setTimeLabel]  = useState<string>(isToday ? getCurrentTimeLabel() : '');
   const [popover, setPopover]       = useState<PopoverState>(null);
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const updateGoogleEntry = useCallback((entryId: string, updates: { date?: string; startTime?: string; endTime?: string; title?: string; notes?: string }) => {
+    const entry = usePlannerStore.getState().googleCalendarEntries.find((e) => e.id === entryId);
+    if (!entry) return;
+
+    const nextDate = updates.date ?? entry.date;
+    const nextStart = updates.startTime ?? entry.startTime;
+    const nextEnd = updates.endTime ?? entry.endTime;
+    const nextTitle = updates.title ?? entry.title;
+    const nextNotes = updates.notes ?? entry.notes;
+    const startMinutes = timeToMinutes(nextStart);
+    const endMinutes = timeToMinutes(nextEnd);
+    const baseDate = new Date(`${nextDate}T00:00:00`);
+    const endDate = endMinutes < startMinutes ? format(addDays(baseDate, 1), 'yyyy-MM-dd') : nextDate;
+
+    api.patchGoogleTimedEvent(entry.id.split('::')[0], {
+      title: nextTitle,
+      date: nextDate,
+      endDate,
+      startTime: nextStart,
+      endTime: nextEnd,
+      notes: nextNotes,
+      tz,
+    }).then(() => {
+      refreshGoogle();
+    }).catch((err) => {
+      console.error('[patchGoogleTimedEvent]', err);
+    });
+  }, [refreshGoogle, tz]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const setRef = useCallback((el: HTMLDivElement | null) => {
@@ -190,8 +222,6 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     const endDate = endMinutes >= 24 * 60 ? addDays(baseDate, 1) : baseDate;
     const start = minutesToTime(startMinutes % (24 * 60));
     const end = minutesToTime(endMinutes % (24 * 60));
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
     api.createGoogleTimedEvent({
       title: 'New event',
       date: format(startDate, 'yyyy-MM-dd'),
@@ -199,7 +229,9 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       startTime: start,
       endTime: end,
       tz,
-    }).then(() => {
+    }).then((created) => {
+      setGoogleCalendarEntries([...googleCalendarEntries, created]);
+      setPopover({ type: 'google-entry', id: created.id, anchor: e.currentTarget });
       refreshGoogle();
     }).catch((err) => {
       console.error('[createGoogleTimedEvent]', err);
@@ -396,6 +428,9 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
                     zIndex: 5 + depth,
                   }}
                   verticalOnly
+                  onDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+                  onResizeEnd={(id, t) => updateGoogleEntry(id, { endTime: t })}
+                  onRepositionEnd={(id, s, e) => updateGoogleEntry(id, { startTime: s, endTime: e })}
                 />
               );
             })}
@@ -456,6 +491,9 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
                   opacity: 0.7,
                 }}
                 verticalOnly
+                onDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+                onResizeEnd={(id, t) => updateGoogleEntry(id, { endTime: t })}
+                onRepositionEnd={(id, s, e) => updateGoogleEntry(id, { startTime: s, endTime: e })}
               />
             ))}
 
@@ -488,6 +526,9 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       )}
       {popover?.type === 'entry' && (
         <CalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
+      )}
+      {popover?.type === 'google-entry' && (
+        <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
       )}
     </div>
   );

@@ -103,20 +103,31 @@ def get_google_service(db: Session):
     return build("calendar", "v3", credentials=creds)
 
 
+def _event_part_to_local_dt(event_part: dict, fallback_tz: str) -> datetime | None:
+    raw = event_part.get("dateTime")
+    if not raw:
+        return None
+
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo(event_part.get("timeZone") or fallback_tz))
+
+    return parsed.astimezone(ZoneInfo(fallback_tz))
+
+
 def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> list[dict]:
     """Normalize a Google Calendar timed event into one or more frontend CalendarEntry day segments."""
     if event.get("status") == "cancelled":
         return []
 
-    start_raw = event.get("start", {}).get("dateTime")
-    end_raw = event.get("end", {}).get("dateTime")
-
     # Skip all-day events (no dateTime field, only date)
-    if not start_raw or not end_raw:
+    if not event.get("start", {}).get("dateTime") or not event.get("end", {}).get("dateTime"):
         return []
 
-    start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00")).astimezone(ZoneInfo(tz_name))
-    end_dt = datetime.fromisoformat(end_raw.replace("Z", "+00:00")).astimezone(ZoneInfo(tz_name))
+    start_dt = _event_part_to_local_dt(event.get("start", {}), tz_name)
+    end_dt = _event_part_to_local_dt(event.get("end", {}), tz_name)
+    if start_dt is None or end_dt is None:
+        return []
     if end_dt <= start_dt:
         return []
 
@@ -262,6 +273,41 @@ def create_google_event(payload: schemas.GoogleTimedEventCreate, db: Session = D
     if not normalized:
         raise HTTPException(status_code=500, detail="Google event was created but could not be normalized")
     return normalized[0]
+
+
+@router.patch("/google/events/{event_id}", response_model=schemas.GoogleTimedEventOut)
+def update_google_event(event_id: str, payload: schemas.GoogleTimedEventUpdate, db: Session = Depends(get_db)):
+    end_date = payload.end_date or payload.date
+    if end_date < payload.date:
+        raise HTTPException(status_code=400, detail="end_date cannot be before date")
+    if end_date == payload.date and payload.end_time <= payload.start_time:
+        raise HTTPException(status_code=400, detail="end_time must be after start_time when end_date matches date")
+
+    service = get_google_service(db)
+    body = {
+        "summary": payload.title,
+        "description": payload.notes,
+        "start": {
+            "dateTime": _to_local_iso(payload.date, payload.start_time, payload.tz),
+            "timeZone": payload.tz,
+        },
+        "end": {
+            "dateTime": _to_local_iso(end_date, payload.end_time, payload.tz),
+            "timeZone": payload.tz,
+        },
+    }
+
+    updated = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+    normalized = _normalize_timed_event(updated, tz_name=payload.tz)
+    if not normalized:
+        raise HTTPException(status_code=500, detail="Google event was updated but could not be normalized")
+    return normalized[0]
+
+
+@router.delete("/google/events/{event_id}", status_code=204)
+def delete_google_event(event_id: str, db: Session = Depends(get_db)):
+    service = get_google_service(db)
+    service.events().delete(calendarId="primary", eventId=event_id).execute()
 
 
 @router.get("/google/calendar-entries")
