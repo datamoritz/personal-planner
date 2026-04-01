@@ -13,6 +13,9 @@ import {
   selectCalendarEntriesForDate,
   selectGoogleCalendarEntriesForDate,
   selectGoogleAllDayEventsForDate,
+  selectNextDayEarlyCalendarEntries,
+  selectNextDayEarlyGoogleCalendarEntries,
+  selectNextDayEarlyMyDayTasks,
 } from '@/store/usePlannerStore';
 import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { TimedTaskBlock } from '@/components/ui/TimedTaskBlock';
@@ -51,8 +54,11 @@ function getCurrentTimeLabel() {
   return `${h}:${m}`;
 }
 function formatHour(h: number) {
-  if (h === 0 || h === 24) return '12 AM';
+  if (h === 0) return '12 AM';
   if (h === 12) return '12 PM';
+  if (h === 24) return '+12 AM';
+  if (h === 25) return '+1 AM';
+  if (h === 26) return '+2 AM';
   return h < 12 ? `${h} AM` : `${h - 12} PM`;
 }
 
@@ -374,13 +380,22 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
 
           {/* 7 day columns */}
           {weekDays.map((day) => {
-            const ds        = format(day, 'yyyy-MM-dd');
-            const isToday   = ds === todayStr;
-            const isPastDay = ds < todayStr;
+            const ds           = format(day, 'yyyy-MM-dd');
+            const isToday      = ds === todayStr;
+            const now          = new Date();
+            const isYesterday  = todayStr !== '' && (() => {
+              const d = new Date(todayStr + 'T00:00:00');
+              d.setDate(d.getDate() - 1);
+              return ds === format(d, 'yyyy-MM-dd') && now.getHours() < 2;
+            })();
+            const isPastDay    = ds < todayStr && !isYesterday;
 
-            const dayEntries       = selectCalendarEntriesForDate(calendarEntries, ds);
-            const dayGoogleEntries = selectGoogleCalendarEntriesForDate(googleCalendarEntries, ds);
-            const dayTimedTasks    = selectMyDayTasks(tasks, ds).filter((t) => t.startTime && t.endTime);
+            const dayEntries          = selectCalendarEntriesForDate(calendarEntries, ds);
+            const dayGoogleEntries    = selectGoogleCalendarEntriesForDate(googleCalendarEntries, ds);
+            const dayTimedTasks       = selectMyDayTasks(tasks, ds).filter((t) => t.startTime && t.endTime);
+            const dayOverflowEntries  = selectNextDayEarlyCalendarEntries(calendarEntries, ds);
+            const dayOverflowGoogleEntries = selectNextDayEarlyGoogleCalendarEntries(googleCalendarEntries, ds);
+            const dayOverflowTasks    = selectNextDayEarlyMyDayTasks(tasks, ds);
 
             const overlapItems = [
               ...dayEntries.map((e) => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
@@ -413,9 +428,23 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                   <div key={`h-${i}`} className="absolute left-0 right-0 border-t border-dashed border-[var(--color-border-grid)] opacity-40 pointer-events-none" style={{ top: (i + 0.5) * SLOT_HEIGHT }} />
                 ))}
 
-                {(isPastDay || isToday) && (
+                {isPastDay && (
                   <div className="absolute left-0 right-0 top-0 pointer-events-none z-[1]"
-                    style={{ height: isPastDay ? GRID_HEIGHT : timeOffset, background: 'var(--color-past-overlay)' }} />
+                    style={{ height: GRID_HEIGHT, background: 'var(--color-past-overlay)' }} />
+                )}
+                {isYesterday && (
+                  <div className="absolute left-0 right-0 top-0 pointer-events-none z-[1]"
+                    style={{ height: minutesToOffset(24 * 60 + now.getHours() * 60 + now.getMinutes()), background: 'var(--color-past-overlay)' }} />
+                )}
+                {isYesterday && (
+                  <div className="absolute left-0 right-0 flex items-center pointer-events-none z-20" style={{ top: minutesToOffset(24 * 60 + now.getHours() * 60 + now.getMinutes()) }}>
+                    <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 -ml-1 shadow-[0_0_0_2px_rgba(239,68,68,0.25)]" />
+                    <div className="flex-1 bg-red-500" style={{ height: '1.5px' }} />
+                  </div>
+                )}
+                {isToday && (
+                  <div className="absolute left-0 right-0 top-0 pointer-events-none z-[1]"
+                    style={{ height: timeOffset, background: 'var(--color-past-overlay)' }} />
                 )}
                 {isToday && (
                   <div className="absolute left-0 right-0 flex items-center pointer-events-none z-20" style={{ top: timeOffset }}>
@@ -478,10 +507,8 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                         if (!isInCalendar(pos.y)) {
                           const dayAtX = dateFromClientX(pos.x);
                           if (dayAtX) {
-                            // Dropped in the tasks section of a day column → untimed task
                             moveTask(id, { location: 'today', date: dayAtX });
                           } else {
-                            // Dropped outside all day columns (sidebar, projects) → backlog
                             moveTask(id, { location: 'backlog', date: undefined });
                           }
                           return;
@@ -496,6 +523,40 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                     />
                   );
                 })}
+
+                {/* Overflow zone: next-day 00:00–01:59 items at 24:xx */}
+                {dayOverflowEntries.map((entry) => (
+                  <CalendarEntryBlock
+                    key={`overflow-${entry.id}`}
+                    entry={entry}
+                    compact
+                    readOnly
+                    style={{ top: minutesToOffset(24 * 60 + timeToMinutes(entry.startTime)) + 1, height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 20), left: 0, right: 2, zIndex: 4, opacity: 0.7 }}
+                  />
+                ))}
+
+                {dayOverflowGoogleEntries.map((entry) => (
+                  <CalendarEntryBlock
+                    key={`overflow-google-${entry.id}`}
+                    entry={entry}
+                    compact
+                    readOnly
+                    style={{ top: minutesToOffset(24 * 60 + timeToMinutes(entry.startTime)) + 1, height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 20), left: 0, right: 2, zIndex: 4, opacity: 0.7 }}
+                  />
+                ))}
+
+                {dayOverflowTasks.map((task) => (
+                  <TimedTaskBlock
+                    key={`overflow-${task.id}`}
+                    compact
+                    task={task}
+                    style={{ top: minutesToOffset(24 * 60 + timeToMinutes(task.startTime!)) + 1, height: Math.max(durationToHeight(task.startTime!, task.endTime!) - 2, 20), left: 0, right: 2, zIndex: 4, opacity: 0.7 }}
+                    onToggle={toggleTask}
+                    onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
+                    onResizeEnd={(id, t) => updateTask(id, { endTime: t })}
+                    onRepositionEnd={(id, s, en) => updateTask(id, { startTime: s, endTime: en })}
+                  />
+                ))}
               </CalendarDayDropZone>
             );
           })}

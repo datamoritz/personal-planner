@@ -223,6 +223,36 @@ class BulkTaskOut(BaseModel):
     created: List[TaskOut]
 
 
+class ProjectWithTasksCreate(BaseModel):
+    project: "ProjectCreate | str"
+    tasks: List[TaskCreate] | str
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_strings(cls, values: dict) -> dict:
+        import json
+        for field in ("project", "tasks"):
+            raw = values.get(field)
+            if isinstance(raw, str):
+                try:
+                    values[field] = json.loads(raw)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"'{field}' string is not valid JSON: {e}")
+        return values
+
+    @model_validator(mode="after")
+    def tasks_not_empty(self) -> "ProjectWithTasksCreate":
+        if not self.tasks:
+            raise ValueError("tasks must be a non-empty array")
+        return self
+
+
+class ProjectWithTasksOut(BaseModel):
+    project: ProjectOut
+    tasks_count: int
+    tasks: List[TaskOut]
+
+
 # ---------------------------------------------------------------------------
 # Tags
 # ---------------------------------------------------------------------------

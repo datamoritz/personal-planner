@@ -6,6 +6,7 @@ import {
   DragOverlay,
   PointerSensor,
   closestCenter,
+  pointerWithin,
   useSensor,
   useSensors,
   type CollisionDetection,
@@ -47,7 +48,7 @@ const REORDERABLE_CONTAINERS = new Set(['today', 'backlog']);
 function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
   const { active, pointerCoordinates, droppableRects, droppableContainers } = args;
 
-  // Prefer pointer coordinates; fall back to translated drag-rect center
+  // 1. week-cal columns: always use exact pointer containment (unchanged)
   const translated = active?.rect.current.translated;
   const px = pointerCoordinates?.x ?? (translated ? translated.left + translated.width  / 2 : null);
   const py = pointerCoordinates?.y ?? (translated ? translated.top  + translated.height / 2 : null);
@@ -62,6 +63,12 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
       }
     }
   }
+
+  // 2. For all other drops: pointer-within first so sidebar→center drops register
+  //    on whichever droppable the pointer is physically over, not the nearest center.
+  const within = pointerWithin(args);
+  if (within.length > 0) return within;
+
   return closestCenter(args);
 }
 const COLLAPSED_W = 32; // px — collapsed strip width

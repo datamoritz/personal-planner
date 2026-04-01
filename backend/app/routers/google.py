@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -102,35 +102,59 @@ def get_google_service(db: Session):
     return build("calendar", "v3", credentials=creds)
 
 
-def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
-    """Normalize a Google Calendar timed event for the frontend CalendarEntry shape."""
+def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> list[dict]:
+    """Normalize a Google Calendar timed event into one or more frontend CalendarEntry day segments."""
     if event.get("status") == "cancelled":
-        return None
+        return []
 
     start_raw = event.get("start", {}).get("dateTime")
     end_raw = event.get("end", {}).get("dateTime")
 
     # Skip all-day events (no dateTime field, only date)
     if not start_raw or not end_raw:
-        return None
+        return []
 
     start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00")).astimezone(ZoneInfo(tz_name))
     end_dt = datetime.fromisoformat(end_raw.replace("Z", "+00:00")).astimezone(ZoneInfo(tz_name))
+    if end_dt <= start_dt:
+        return []
 
-    # Skip multi-day events
-    if start_dt.date() != end_dt.date():
-        return None
+    segments: list[dict] = []
+    segment_start = start_dt
+    segment_index = 0
 
-    return {
-        "id": event["id"],
+    while segment_start.date() < end_dt.date():
+        segment_id = event["id"] if segment_index == 0 and start_dt.date() == end_dt.date() else f'{event["id"]}::{segment_start.strftime("%Y-%m-%d")}'
+        segments.append({
+            "id": segment_id,
+            "title": event.get("summary", "(No title)"),
+            "date": segment_start.strftime("%Y-%m-%d"),
+            "startTime": segment_start.strftime("%H:%M"),
+            "endTime": "24:00",
+            "notes": event.get("description"),
+            "createdAt": event.get("created", start_dt.isoformat()),
+            "updatedAt": event.get("updated", end_dt.isoformat()),
+        })
+        segment_start = datetime.combine(
+            segment_start.date(),
+            time.min,
+            tzinfo=segment_start.tzinfo,
+        ).replace(day=segment_start.day) + timedelta(days=1)
+        segment_index += 1
+
+    segment_id = event["id"] if segment_index == 0 else f'{event["id"]}::{segment_start.strftime("%Y-%m-%d")}'
+    segments.append({
+        "id": segment_id,
         "title": event.get("summary", "(No title)"),
-        "date": start_dt.strftime("%Y-%m-%d"),
-        "startTime": start_dt.strftime("%H:%M"),
+        "date": segment_start.strftime("%Y-%m-%d"),
+        "startTime": segment_start.strftime("%H:%M"),
         "endTime": end_dt.strftime("%H:%M"),
         "notes": event.get("description"),
         "createdAt": event.get("created", start_dt.isoformat()),
         "updatedAt": event.get("updated", end_dt.isoformat()),
-    }
+    })
+
+    return segments
 
 
 def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
@@ -151,6 +175,15 @@ def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dic
         "createdAt": event.get("created", date_raw),
         "updatedAt": event.get("updated", date_raw),
     }
+
+
+def _to_utc_iso(date_str: str, wall_time: time, tz_name: str) -> str:
+    local_dt = datetime.combine(
+        datetime.strptime(date_str, "%Y-%m-%d").date(),
+        wall_time,
+        tzinfo=ZoneInfo(tz_name),
+    )
+    return local_dt.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
 
 # ---------------------------------------------------------------------------
@@ -184,12 +217,12 @@ def auth_google_callback(code: str, state: str, db: Session = Depends(get_db)):
 
 
 @router.get("/google/events")
-def google_events(start: str, end: str, db: Session = Depends(get_db)):
+def google_events(start: str, end: str, tz: str = "America/Denver", db: Session = Depends(get_db)):
     service = get_google_service(db)
     result = service.events().list(
         calendarId="primary",
-        timeMin=f"{start}T00:00:00Z",
-        timeMax=f"{end}T23:59:59Z",
+        timeMin=_to_utc_iso(start, time.min, tz),
+        timeMax=_to_utc_iso(end, time(23, 59, 59), tz),
         singleEvents=True,
         orderBy="startTime",
     ).execute()
@@ -201,14 +234,14 @@ def google_calendar_entries(start: str, end: str, tz: str = "America/Denver", db
     service = get_google_service(db)
     result = service.events().list(
         calendarId="primary",
-        timeMin=f"{start}T00:00:00Z",
-        timeMax=f"{end}T23:59:59Z",
+        timeMin=_to_utc_iso(start, time.min, tz),
+        timeMax=_to_utc_iso(end, time(23, 59, 59), tz),
         singleEvents=True,
         orderBy="startTime",
     ).execute()
 
     items = result.get("items", [])
-    timed = [e for event in items if (e := _normalize_timed_event(event, tz_name=tz)) is not None]
+    timed = [segment for event in items for segment in _normalize_timed_event(event, tz_name=tz)]
     all_day = [e for event in items if (e := _normalize_allday_event(event, tz_name=tz)) is not None]
 
     return {"timed": timed, "allDay": all_day}

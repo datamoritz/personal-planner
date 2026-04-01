@@ -10,6 +10,9 @@ import {
   selectCalendarEntriesForDate,
   selectGoogleCalendarEntriesForDate,
   selectGoogleAllDayEventsForDate,
+  selectNextDayEarlyCalendarEntries,
+  selectNextDayEarlyGoogleCalendarEntries,
+  selectNextDayEarlyMyDayTasks,
 } from '@/store/usePlannerStore';
 import { AllDayStrip } from '@/components/ui/AllDayStrip';
 import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
@@ -49,8 +52,11 @@ function getCurrentTimeLabel() {
 }
 
 function formatHour(h: number) {
-  if (h === 0 || h === 24) return '12 AM';
+  if (h === 0) return '12 AM';
   if (h === 12) return '12 PM';
+  if (h === 24) return '+12 AM';
+  if (h === 25) return '+1 AM';
+  if (h === 26) return '+2 AM';
   return h < 12 ? `${h} AM` : `${h - 12} PM`;
 }
 
@@ -84,9 +90,17 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   const entries       = selectCalendarEntriesForDate(calendarEntries, currentDate);
   const googleEntries = selectGoogleCalendarEntriesForDate(googleCalendarEntries, currentDate);
   const allDayEvents  = selectGoogleAllDayEventsForDate(googleAllDayEvents, currentDate);
+  const overflowEntries   = selectNextDayEarlyCalendarEntries(calendarEntries, currentDate);
+  const overflowGoogleEntries = selectNextDayEarlyGoogleCalendarEntries(googleCalendarEntries, currentDate);
+  const overflowTasks     = selectNextDayEarlyMyDayTasks(tasks, currentDate);
   const [today, setToday] = useState('');
   useEffect(() => { setToday(format(new Date(), 'yyyy-MM-dd')); }, []);
-  const isToday    = today !== '' && currentDate === today;
+  const isToday     = today !== '' && currentDate === today;
+  const isYesterday = today !== '' && (() => {
+    const d = new Date(today + 'T00:00:00');
+    d.setDate(d.getDate() - 1);
+    return currentDate === format(d, 'yyyy-MM-dd') && new Date().getHours() < 2;
+  })();
 
   const [timeOffset, setTimeOffset] = useState<number | null>(isToday ? getCurrentTimeOffset() : null);
   const [timeLabel,  setTimeLabel]  = useState<string>(isToday ? getCurrentTimeLabel() : '');
@@ -176,6 +190,14 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     ...timedTasks.filter(t => t.startTime && t.endTime).map(t => ({ id: t.id, startTime: t.startTime!, endTime: t.endTime! })),
   ];
   const depths = computeOverlapDepths(overlapItems);
+
+  // Overflow items render in the 24:xx zone — offset their minutes by +24h
+  function overflowTop(startTime: string) {
+    return minutesToOffset(24 * 60 + timeToMinutes(startTime)) + 1;
+  }
+  function overflowHeight(startTime: string, endTime: string) {
+    return Math.max(durationToHeight(startTime, endTime) - 2, 24);
+  }
   const hours  = Array.from({ length: TOTAL_HOURS + 1 }, (_, i) => i);
 
   return (
@@ -269,34 +291,49 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
               />
             ))}
 
-            {/* Past tint — only on today, only up to the red line */}
-            {timeOffset !== null && (
+            {/* Past tint */}
+            {isYesterday && (
               <div
                 className="absolute left-0 right-0 top-0 pointer-events-none z-[1]"
                 style={{
-                  height: timeOffset,
+                  height: minutesToOffset(24 * 60 + new Date().getHours() * 60 + new Date().getMinutes()),
                   background: 'var(--color-past-overlay)',
                 }}
               />
             )}
-            
-            {timeOffset !== null && (
+            {timeOffset !== null && !isYesterday && (
+              <div
+                className="absolute left-0 right-0 top-0 pointer-events-none z-[1]"
+                style={{ height: timeOffset, background: 'var(--color-past-overlay)' }}
+              />
+            )}
+
+            {/* Red line */}
+            {isYesterday && (() => {
+              const overflowOffset = minutesToOffset(24 * 60 + new Date().getHours() * 60 + new Date().getMinutes());
+              return (
+                <div
+                  className="absolute left-0 right-0 flex items-center pointer-events-none z-50 -translate-y-1/2"
+                  style={{ top: overflowOffset }}
+                >
+                  <div className="bg-[#ff3b30] text-white text-[10px] font-bold px-1.5 h-5 flex items-center justify-center rounded-full shadow-sm z-50 select-none" style={{ marginLeft: '2px', minWidth: '38px' }}>
+                    {getCurrentTimeLabel()}
+                  </div>
+                  <div className="flex-1 h-[1px] bg-[#ff3b30]" />
+                </div>
+              );
+            })()}
+            {timeOffset !== null && !isYesterday && (
               <div
                 className="absolute left-0 right-0 flex items-center pointer-events-none z-50 -translate-y-1/2"
                 style={{ top: timeOffset }}
               >
-                {/* 1. The Apple-style Time Pill */}
-                <div 
+                <div
                   className="bg-[#ff3b30] text-white text-[10px] font-bold px-1.5 h-5 flex items-center justify-center rounded-full shadow-sm z-50 select-none"
-                  style={{ 
-                    marginLeft: '2px', // Slight nudge from the very edge
-                    minWidth: '38px' 
-                  }}
+                  style={{ marginLeft: '2px', minWidth: '38px' }}
                 >
                   {timeLabel}
                 </div>
-
-                {/* 2. The Red Line - Perfectly centered via the parent's flex items-center */}
                 <div className="flex-1 h-[1px] bg-[#ff3b30]" />
               </div>
             )}
@@ -364,6 +401,63 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
                 />
               );
             })}
+
+            {/* Overflow zone: next-day 00:00–01:59 items rendered at 24:xx–25:59 */}
+            {overflowEntries.map((entry) => (
+              <CalendarEntryBlock
+                key={`overflow-${entry.id}`}
+                entry={entry}
+                readOnly
+                style={{
+                  top:    overflowTop(entry.startTime),
+                  height: overflowHeight(entry.startTime, entry.endTime),
+                  left:   LEFT_BASE,
+                  right:  4,
+                  zIndex: 4,
+                  opacity: 0.7,
+                }}
+                verticalOnly
+              />
+            ))}
+
+            {overflowGoogleEntries.map((entry) => (
+              <CalendarEntryBlock
+                key={`overflow-google-${entry.id}`}
+                entry={entry}
+                readOnly
+                style={{
+                  top:    overflowTop(entry.startTime),
+                  height: overflowHeight(entry.startTime, entry.endTime),
+                  left:   LEFT_BASE,
+                  right:  4,
+                  zIndex: 4,
+                  opacity: 0.7,
+                }}
+                verticalOnly
+              />
+            ))}
+
+            {overflowTasks.map((task) => (
+              <DraggableTimedTaskBlock
+                key={`overflow-${task.id}`}
+                task={task}
+                style={{
+                  top:    task.startTime ? overflowTop(task.startTime) : 0,
+                  height: task.startTime && task.endTime
+                    ? overflowHeight(task.startTime, task.endTime)
+                    : SLOT_HEIGHT - 2,
+                  left:   LEFT_BASE,
+                  right:  4,
+                  zIndex: 4,
+                  opacity: 0.7,
+                }}
+                onToggle={toggleTask}
+                verticalOnly
+                onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
+                onResizeEnd={(id, t) => updateTask(id, { endTime: t })}
+                onRepositionEnd={(id, s, e) => updateTask(id, { startTime: s, endTime: e })}
+              />
+            ))}
           </div>
       </div>}
 

@@ -845,3 +845,28 @@ export function selectGoogleCalendarEntriesForDate(entries: CalendarEntry[], dat
 export function selectGoogleAllDayEventsForDate(events: AllDayEvent[], date: string) {
   return events.filter((e) => e.date === date);
 }
+
+/** Returns timed calendar entries from the day AFTER `date` that start before 02:00 (overflow zone). */
+export function selectNextDayEarlyCalendarEntries(entries: CalendarEntry[], date: string): CalendarEntry[] {
+  const d = new Date(date + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  const nextDate = format(d, 'yyyy-MM-dd');
+  return entries.filter((e) => e.date === nextDate && e.startTime < '02:00');
+}
+
+export function selectNextDayEarlyGoogleCalendarEntries(entries: CalendarEntry[], date: string): CalendarEntry[] {
+  const d = new Date(date + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  const nextDate = format(d, 'yyyy-MM-dd');
+  return entries.filter((e) => e.date === nextDate && e.startTime < '02:00');
+}
+
+/** Returns myday tasks from the day AFTER `date` that start before 02:00 (overflow zone). */
+export function selectNextDayEarlyMyDayTasks(tasks: Task[], date: string): Task[] {
+  const d = new Date(date + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  const nextDate = format(d, 'yyyy-MM-dd');
+  return tasks.filter(
+    (t) => t.location === 'myday' && t.date === nextDate && !!t.startTime && t.startTime < '02:00'
+  );
+}

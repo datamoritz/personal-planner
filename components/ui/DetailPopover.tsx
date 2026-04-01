@@ -22,9 +22,18 @@ interface DetailPopoverProps {
   title?: string;
   className?: string;   // overrides the default w-72
   noPadding?: boolean;  // removes the p-4 content wrapper
+  headerActions?: React.ReactNode;
 }
 
-export function DetailPopover({ anchor, onClose, children, title, className, noPadding }: DetailPopoverProps) {
+export function DetailPopover({
+  anchor,
+  onClose,
+  children,
+  title,
+  className,
+  noPadding,
+  headerActions,
+}: DetailPopoverProps) {
   const { refs, floatingStyles, context } = useFloating({
     open: true,
     onOpenChange: (open) => { if (!open) onClose(); },
@@ -55,6 +64,20 @@ export function DetailPopover({ anchor, onClose, children, title, className, noP
               <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
                 {title}
               </span>
+              <div className="flex items-center gap-1">
+                {headerActions}
+                <button
+                  onClick={onClose}
+                  className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+                >
+                  <X size={12} strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+          )}
+          {!title && (
+            <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
+              {headerActions}
               <button
                 onClick={onClose}
                 className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
@@ -62,14 +85,6 @@ export function DetailPopover({ anchor, onClose, children, title, className, noP
                 <X size={12} strokeWidth={2.5} />
               </button>
             </div>
-          )}
-          {!title && (
-            <button
-              onClick={onClose}
-              className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer z-10"
-            >
-              <X size={12} strokeWidth={2.5} />
-            </button>
           )}
           <div className={noPadding ? '' : 'p-4'}>{children}</div>
         </div>
