@@ -30,6 +30,7 @@ import {
   minutesToOffset,
   durationToHeight,
   snapTo15Min,
+  normalizeGridEventRange,
 } from '@/lib/timeGrid';
 import { computeOverlapDepths } from '@/lib/overlapLayout';
 import type { OverlapItem } from '@/lib/overlapLayout';
@@ -113,7 +114,8 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const updateGoogleEntry = useCallback((entryId: string, updates: { date?: string; startTime?: string; endTime?: string; title?: string; notes?: string }) => {
-    const entry = usePlannerStore.getState().googleCalendarEntries.find((e) => e.id === entryId);
+    const prevEntries = usePlannerStore.getState().googleCalendarEntries;
+    const entry = prevEntries.find((e) => e.id === entryId);
     if (!entry) return;
 
     const nextDate = updates.date ?? entry.date;
@@ -121,25 +123,35 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     const nextEnd = updates.endTime ?? entry.endTime;
     const nextTitle = updates.title ?? entry.title;
     const nextNotes = updates.notes ?? entry.notes;
-    const startMinutes = timeToMinutes(nextStart);
-    const endMinutes = timeToMinutes(nextEnd);
-    const baseDate = new Date(`${nextDate}T00:00:00`);
-    const endDate = endMinutes < startMinutes ? format(addDays(baseDate, 1), 'yyyy-MM-dd') : nextDate;
+    const normalizedRange = normalizeGridEventRange(nextDate, nextStart, nextEnd);
+    const optimisticEntry = {
+      ...entry,
+      title: nextTitle,
+      date: nextDate,
+      startTime: nextStart,
+      endTime: nextEnd,
+      notes: nextNotes,
+    };
+
+    setGoogleCalendarEntries(
+      prevEntries.map((e) => (e.id === entryId ? optimisticEntry : e))
+    );
 
     api.patchGoogleTimedEvent(entry.id.split('::')[0], {
       title: nextTitle,
-      date: nextDate,
-      endDate,
-      startTime: nextStart,
-      endTime: nextEnd,
+      date: normalizedRange.startDate,
+      endDate: normalizedRange.endDate,
+      startTime: normalizedRange.startTime,
+      endTime: normalizedRange.endTime,
       notes: nextNotes,
       tz,
     }).then(() => {
       refreshGoogle();
     }).catch((err) => {
       console.error('[patchGoogleTimedEvent]', err);
+      setGoogleCalendarEntries(prevEntries);
     });
-  }, [refreshGoogle, tz]);
+  }, [refreshGoogle, setGoogleCalendarEntries, tz]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const setRef = useCallback((el: HTMLDivElement | null) => {
@@ -429,8 +441,8 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
                   }}
                   verticalOnly
                   onDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
-                  onResizeEnd={(id, t) => updateGoogleEntry(id, { endTime: t })}
-                  onRepositionEnd={(id, s, e) => updateGoogleEntry(id, { startTime: s, endTime: e })}
+                  onResizeEnd={(id, t) => updateGoogleEntry(id, { date: currentDate, endTime: t })}
+                  onRepositionEnd={(id, s, e) => updateGoogleEntry(id, { date: currentDate, startTime: s, endTime: e })}
                 />
               );
             })}
@@ -492,8 +504,8 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
                 }}
                 verticalOnly
                 onDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
-                onResizeEnd={(id, t) => updateGoogleEntry(id, { endTime: t })}
-                onRepositionEnd={(id, s, e) => updateGoogleEntry(id, { startTime: s, endTime: e })}
+                onResizeEnd={(id, t) => updateGoogleEntry(id, { date: currentDate, endTime: t })}
+                onRepositionEnd={(id, s, e) => updateGoogleEntry(id, { date: currentDate, startTime: s, endTime: e })}
               />
             ))}
 

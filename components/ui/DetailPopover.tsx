@@ -51,7 +51,7 @@ export function DetailPopover({
 
   return (
     <FloatingPortal>
-      <FloatingFocusManager context={context} modal={false}>
+      <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
         <div
           ref={refs.setFloating}
           style={{ ...floatingStyles, zIndex: 50 }}
@@ -68,7 +68,7 @@ export function DetailPopover({
                 {headerActions}
                 <button
                   onClick={onClose}
-                  className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+                  className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
                 >
                   <X size={12} strokeWidth={2.5} />
                 </button>
@@ -80,7 +80,7 @@ export function DetailPopover({
               {headerActions}
               <button
                 onClick={onClose}
-                className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+                className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
               >
                 <X size={12} strokeWidth={2.5} />
               </button>

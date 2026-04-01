@@ -15,6 +15,34 @@ export function minutesToTime(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+function shiftIsoDate(date: string, dayOffset: number): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const shifted = new Date(year, month - 1, day + dayOffset);
+  const y = shifted.getFullYear();
+  const m = String(shifted.getMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function normalizeGridEventRange(baseDate: string, startTime: string, endTime: string) {
+  const startRawMinutes = timeToMinutes(startTime);
+  let endRawMinutes = timeToMinutes(endTime);
+
+  if (endRawMinutes < startRawMinutes) {
+    endRawMinutes += 24 * 60;
+  }
+
+  const startDayOffset = Math.floor(startRawMinutes / (24 * 60));
+  const endDayOffset = Math.floor(endRawMinutes / (24 * 60));
+
+  return {
+    startDate: shiftIsoDate(baseDate, startDayOffset),
+    startTime: minutesToTime(startRawMinutes % (24 * 60)),
+    endDate: shiftIsoDate(baseDate, endDayOffset),
+    endTime: minutesToTime(endRawMinutes % (24 * 60)),
+  };
+}
+
 /** Pixel offset from top of grid for a given wall-clock minute value */
 export function minutesToOffset(minutes: number): number {
   return (minutes / 60) * SLOT_HEIGHT;

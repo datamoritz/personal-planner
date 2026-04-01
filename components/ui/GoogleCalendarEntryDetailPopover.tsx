@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { addDays, format } from 'date-fns';
 import { Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
@@ -45,7 +45,7 @@ export function GoogleCalendarEntryDetailPopover({
   if (!entry) return null;
   const baseEventId = entry.id.split('::')[0];
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     const nextTitle = title.trim() || entry.title;
     const nextDate = date ?? entry.date;
     const nextStart = startTime || entry.startTime;
@@ -85,7 +85,22 @@ export function GoogleCalendarEntryDetailPopover({
     }).finally(() => {
       onClose();
     });
-  };
+  }, [baseEventId, date, endTime, entry, notes, onClose, refresh, startTime, title]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+
+      const target = event.target;
+      if (target instanceof HTMLTextAreaElement) return;
+
+      event.preventDefault();
+      handleClose();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleClose]);
 
   const handleDelete = () => {
     api.deleteGoogleTimedEvent(baseEventId).then(() => {
@@ -104,17 +119,18 @@ export function GoogleCalendarEntryDetailPopover({
     <DetailPopover
       anchor={anchor}
       onClose={handleClose}
+      className="w-[24rem]"
       headerActions={(
         <button
           onClick={handleDelete}
-          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer"
+          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
           aria-label="Delete Google event"
         >
           <Trash2 size={12} strokeWidth={2.25} />
         </button>
       )}
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         <PopoverField label="Title">
           <PopoverInput value={title} onChange={setTitle} placeholder="Event title" />
         </PopoverField>

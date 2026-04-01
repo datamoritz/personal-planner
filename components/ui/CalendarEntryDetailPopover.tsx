@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { DetailPopover } from './DetailPopover';
@@ -24,7 +24,7 @@ export function CalendarEntryDetailPopover({ entryId, anchor, onClose }: Calenda
 
   if (!entry) return null;
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     updateCalendarEntry(entryId, {
       title:     title.trim() || entry.title,
       startTime: startTime    || entry.startTime,
@@ -32,11 +32,39 @@ export function CalendarEntryDetailPopover({ entryId, anchor, onClose }: Calenda
       notes,
     });
     onClose();
-  };
+  }, [endTime, entry, entryId, notes, onClose, startTime, title, updateCalendarEntry]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+
+      const target = event.target;
+      if (target instanceof HTMLTextAreaElement) return;
+
+      event.preventDefault();
+      handleClose();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleClose]);
 
   return (
-    <DetailPopover anchor={anchor} onClose={handleClose}>
-      <div className="flex flex-col gap-4">
+    <DetailPopover
+      anchor={anchor}
+      onClose={handleClose}
+      className="w-[24rem]"
+      headerActions={(
+        <button
+          onClick={() => { deleteCalendarEntry(entryId); onClose(); }}
+          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+          aria-label="Delete event"
+        >
+          <Trash2 size={12} strokeWidth={2.25} />
+        </button>
+      )}
+    >
+      <div className="flex flex-col gap-5">
         <PopoverField label="Title">
           <PopoverInput value={title} onChange={setTitle} placeholder="Event title" />
         </PopoverField>
@@ -56,15 +84,6 @@ export function CalendarEntryDetailPopover({ entryId, anchor, onClose }: Calenda
         <PopoverField label="Notes">
           <PopoverInput value={notes} onChange={setNotes} placeholder="Add notes…" multiline />
         </PopoverField>
-
-        <div className="flex justify-end pt-1 border-t border-[var(--color-popover-border)]">
-          <button
-            onClick={() => { deleteCalendarEntry(entryId); onClose(); }}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer"
-          >
-            <Trash2 size={13} strokeWidth={2} />
-          </button>
-        </div>
       </div>
     </DetailPopover>
   );
