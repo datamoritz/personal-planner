@@ -213,8 +213,8 @@ export const usePlannerStore = create<PlannerStore>()(
           return { tasks };
         });
 
-        const { projects, recurrentTasks } = get();
-        api.createTask(newTask, projects, recurrentTasks)
+        const { projects, recurrentTasks, tags } = get();
+        api.createTask(newTask, projects, recurrentTasks, tags)
           .then(({ id: backendId }) => {
             set((s) => ({
               tasks: s.tasks.map((t) => (t.id === newTask.id ? { ...t, backendId } : t)),
@@ -541,19 +541,48 @@ export const usePlannerStore = create<PlannerStore>()(
           // Note: sort_order not synced to backend in Phase 2
         }),
 
-      setProjectTag: (projectId, tagId) =>
-        set((s) => {
-          const ts = now();
-          return {
-            projects: s.projects.map((p) =>
-              p.id === projectId ? { ...p, tagId, updatedAt: ts } : p
-            ),
-            tasks: s.tasks.map((t) =>
-              t.projectId === projectId ? { ...t, tagId, updatedAt: ts } : t
-            ),
-          };
-          // Note: tag associations not synced to backend in Phase 2
-        }),
+      setProjectTag: (projectId, tagId) => {
+        const prevProject = get().projects.find((p) => p.id === projectId);
+        if (!prevProject) return;
+
+        const prevTasks = get().tasks.filter((t) => t.projectId === projectId);
+        const ts = now();
+
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId ? { ...p, tagId, updatedAt: ts } : p
+          ),
+          tasks: s.tasks.map((t) =>
+            t.projectId === projectId ? { ...t, tagId, updatedAt: ts } : t
+          ),
+        }));
+
+        const { tags } = get();
+        const projectPatch = prevProject.backendId
+          ? api.patchProject(prevProject.backendId, {
+              tag_id: api.resolveTagBackendId(tagId, tags),
+            })
+          : Promise.resolve();
+
+        const taskPatches = prevTasks
+          .filter((t) => t.backendId)
+          .map((t) =>
+            api.patchTask(t.backendId!, {
+              tag_id: api.resolveTagBackendId(tagId, tags),
+            })
+          );
+
+        Promise.all([projectPatch, ...taskPatches]).catch((err) => {
+          console.error('[setProjectTag]', err);
+          set((s) => ({
+            projects: s.projects.map((p) => (p.id === projectId ? prevProject : p)),
+            tasks: s.tasks.map((t) => {
+              const prevTask = prevTasks.find((pt) => pt.id === t.id);
+              return prevTask ? prevTask : t;
+            }),
+          }));
+        });
+      },
 
       // ── Tags ───────────────────────────────────────────────────────────
 
@@ -736,8 +765,8 @@ export const usePlannerStore = create<PlannerStore>()(
         };
         set((s) => ({ tasks: [...s.tasks, newTask] }));
 
-        const { projects, recurrentTasks } = get();
-        api.createTask(newTask, projects, recurrentTasks)
+        const { projects, recurrentTasks, tags } = get();
+        api.createTask(newTask, projects, recurrentTasks, tags)
           .then(({ id: backendId }) => {
             set((s) => ({
               tasks: s.tasks.map((t) => (t.id === newTask.id ? { ...t, backendId } : t)),

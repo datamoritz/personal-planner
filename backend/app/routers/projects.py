@@ -15,6 +15,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 def _build_project(payload: schemas.ProjectCreate) -> models.Project:
     return models.Project(
         client_id=payload.client_id or uuid.uuid4(),
+        tag_id=payload.tag_id,
         title=payload.title,
         color=payload.color,
         is_finished=False,

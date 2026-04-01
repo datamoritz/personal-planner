@@ -159,13 +159,14 @@ function toTask(
   };
 }
 
-function toProject(b: BackendProject): Project {
+function toProject(b: BackendProject, tagIdMap: Map<number, string>): Project {
   return {
     id:          b.client_id ?? String(b.id),
     backendId:   b.id,
     title:       b.title,
     subtaskIds:  [],  // derived from tasks after full fetch
     status:      b.is_finished ? 'finished' : 'active',
+    tagId:       b.tag_id != null ? tagIdMap.get(b.tag_id) : undefined,
     createdAt:   b.created_at,
     updatedAt:   b.updated_at,
   };
@@ -280,8 +281,8 @@ export async function fetchAll(): Promise<BootData> {
     backendTags.map((t) => [t.id, t.client_id ?? String(t.id)]),
   );
 
-  const projects        = backendProjects.map(toProject);
   const tags            = backendTags.map(toTag);
+  const projects        = backendProjects.map((p) => toProject(p, tagIdMap));
   const recurrentTasks  = backendRecurrentTasks.map(toRecurrentTask);
   const calendarEntries = backendCalendarEntries.map(toCalendarEntry);
   const tasks           = backendTasks.map((t) => toTask(t, projectIdMap, recurrentTaskIdMap, tagIdMap));
@@ -343,6 +344,7 @@ export async function deleteTask(backendId: number): Promise<void> {
 export async function createProject(project: Project): Promise<{ id: number }> {
   return post<{ id: number }>('/projects', {
     client_id: project.id,
+    tag_id:    null,
     title:     project.title,
     color:     null,
   });

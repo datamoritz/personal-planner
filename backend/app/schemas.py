@@ -95,11 +95,13 @@ class CalendarEntryRead(CalendarEntryBase):
 
 class ProjectCreate(BaseModel):
     client_id: Optional[uuid.UUID] = None
+    tag_id: int | None = None
     title: str
     color: str | None = None
 
 
 class ProjectUpdate(BaseModel):
+    tag_id: int | None = None
     title: Optional[str] = None
     color: Optional[str] = None
     is_finished: Optional[bool] = None
@@ -109,6 +111,7 @@ class ProjectUpdate(BaseModel):
 class ProjectOut(BaseModel):
     id: int
     client_id: Optional[uuid.UUID] = None
+    tag_id: int | None
     title: str
     color: str | None
     is_finished: bool
