@@ -10,10 +10,8 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   usePlannerStore,
   selectMyDayTasks,
-  selectCalendarEntriesForDate,
   selectGoogleCalendarEntriesForDate,
   selectGoogleAllDayEventsForDate,
-  selectNextDayEarlyCalendarEntries,
   selectNextDayEarlyGoogleCalendarEntries,
   selectNextDayEarlyMyDayTasks,
 } from '@/store/usePlannerStore';
@@ -21,7 +19,6 @@ import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { TimedTaskBlock } from '@/components/ui/TimedTaskBlock';
 import { DroppableSection } from '@/components/dnd/DroppableSection';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
-import { CalendarEntryDetailPopover } from '@/components/ui/CalendarEntryDetailPopover';
 import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
 import { computeOverlapDepths } from '@/lib/overlapLayout';
 import {
@@ -107,7 +104,7 @@ function WeekTaskItem({
   const isDone = task.status === 'done';
   const tags   = usePlannerStore((s) => s.tags);
   const tag    = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
-  const tagBg  = (!isDone && tag) ? tag.color + 'CC' : undefined;
+  const tagBg  = (!isDone && tag) ? tag.colorDark + '24' : undefined;
   return (
     <div
       ref={setNodeRef}
@@ -115,11 +112,19 @@ function WeekTaskItem({
         transform:  CSS.Transform.toString(transform),
         transition,
         opacity:    isDragging ? 0.4 : isDone ? 0.5 : 1,
-        background: tagBg ?? (isDone ? 'var(--color-surface)' : 'var(--color-surface)'),
+        background: tagBg,
+        boxShadow: isDone ? 'none' : '0 1px 2px rgba(15, 23, 42, 0.025), 0 4px 10px rgba(15, 23, 42, 0.02)',
       }}
       {...attributes}
       {...listeners}
-      className="flex items-center gap-1 px-1.5 py-0.5 rounded-full cursor-grab select-none"
+      className={[
+        'flex items-center gap-1.5 px-1.5 py-1 rounded-[0.85rem] cursor-grab select-none transition-transform',
+        isDone
+          ? 'bg-[var(--color-task-pill)]'
+          : tag
+          ? ''
+          : 'bg-[var(--color-task-pill)]',
+      ].join(' ')}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(task.id, e.currentTarget); }}
     >
       <button
@@ -149,18 +154,31 @@ function WeekTaskItem({
 // ── Main component ────────────────────────────────────────────────────────────
 type Popover =
   | { type: 'task';  id: string; anchor: HTMLElement }
-  | { type: 'entry'; id: string; anchor: HTMLElement }
   | { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean }
   | null;
+
+function createClickAnchor(x: number, y: number): HTMLElement {
+  const anchor = document.createElement('div');
+  anchor.style.position = 'fixed';
+  anchor.style.left = `${x}px`;
+  anchor.style.top = `${y}px`;
+  anchor.style.width = '1px';
+  anchor.style.height = '1px';
+  anchor.style.pointerEvents = 'none';
+  anchor.style.opacity = '0';
+  anchor.dataset.popoverAnchor = 'temporary';
+  document.body.appendChild(anchor);
+  return anchor;
+}
 
 interface WeekViewColumnProps { sidebarVisible: boolean; onNKey: () => void; }
 
 export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) {
   const {
-    currentDate, tasks, calendarEntries, googleCalendarEntries, googleAllDayEvents,
+    currentDate, tasks, googleCalendarEntries, googleAllDayEvents,
     setCurrentDate, setViewMode,
-    toggleTask, addTask, addCalendarEntry,
-    updateCalendarEntry, updateTask, moveTask, setGoogleCalendarEntries,
+    toggleTask, addTask,
+    updateTask, moveTask, setGoogleCalendarEntries,
   } = usePlannerStore();
   const { refresh: refreshGoogle } = useGoogleCalendar();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -435,15 +453,12 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
             })();
             const isPastDay    = ds < todayStr && !isYesterday;
 
-            const dayEntries          = selectCalendarEntriesForDate(calendarEntries, ds);
             const dayGoogleEntries    = selectGoogleCalendarEntriesForDate(googleCalendarEntries, ds);
             const dayTimedTasks       = selectMyDayTasks(tasks, ds).filter((t) => t.startTime && t.endTime);
-            const dayOverflowEntries  = selectNextDayEarlyCalendarEntries(calendarEntries, ds);
             const dayOverflowGoogleEntries = selectNextDayEarlyGoogleCalendarEntries(googleCalendarEntries, ds);
             const dayOverflowTasks    = selectNextDayEarlyMyDayTasks(tasks, ds);
 
             const overlapItems = [
-              ...dayEntries.map((e) => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
               ...dayGoogleEntries.map((e) => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
               ...dayTimedTasks.map((t) => ({ id: t.id, startTime: t.startTime!, endTime: t.endTime! })),
             ];
@@ -454,8 +469,32 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
               const rect    = e.currentTarget.getBoundingClientRect();
               const y       = e.clientY - rect.top + (scrollRef.current?.scrollTop ?? 0);
               const snapped = snapTo15Min((y / SLOT_HEIGHT) * 60);
-              const start   = minutesToTime(Math.max(0, Math.min(snapped, END_HOUR * 60 - 60)));
-              addCalendarEntry({ title: 'New event', date: ds, startTime: start, endTime: minutesToTime(timeToMinutes(start) + 60) });
+              const startMinutes = Math.max(0, Math.min(snapped, END_HOUR * 60 - 60));
+              const endMinutes = startMinutes + 60;
+              const baseDate = new Date(`${ds}T00:00:00`);
+              const startDate = startMinutes >= 24 * 60 ? addDays(baseDate, 1) : baseDate;
+              const endDate = endMinutes >= 24 * 60 ? addDays(baseDate, 1) : baseDate;
+              const start = minutesToTime(startMinutes % (24 * 60));
+              const end = minutesToTime(endMinutes % (24 * 60));
+              api.createGoogleTimedEvent({
+                title: 'New event',
+                date: format(startDate, 'yyyy-MM-dd'),
+                endDate: format(endDate, 'yyyy-MM-dd'),
+                startTime: start,
+                endTime: end,
+                tz,
+              }).then((created) => {
+                setGoogleCalendarEntries([...googleCalendarEntries, created]);
+                setPopover({
+                  type: 'google-entry',
+                  id: created.id,
+                  anchor: createClickAnchor(e.clientX, e.clientY),
+                  isDraft: true,
+                });
+                refreshGoogle();
+              }).catch((err) => {
+                console.error('[createGoogleTimedEvent]', err);
+              });
             };
 
             return (
@@ -527,31 +566,6 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                   );
                 })}
 
-                {dayEntries.map((entry) => {
-                  const depth = depths.get(entry.id) ?? 0;
-                  return (
-                    <CalendarEntryBlock
-                      key={entry.id}
-                      compact
-                      entry={entry}
-                      style={{ top: minutesToOffset(timeToMinutes(entry.startTime)) + 1, height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 20), left: depth * WEEK_OVERLAP_SHIFT, right: 2, zIndex: 5 + depth }}
-                      onDoubleClick={(id, anchor) => setPopover({ type: 'entry', id, anchor })}
-                      onResizeEnd={(id, t) => updateCalendarEntry(id, { endTime: t })}
-                      onRepositionEnd={(id, s, en, pos) => {
-                        const targetDate = pos ? (dateFromClientX(pos.x) ?? entry.date) : entry.date;
-                        if (targetDate === entry.date) {
-                          updateCalendarEntry(id, { startTime: s, endTime: en });
-                        } else {
-                          // Move to new date — rebuild via delete+add since updateCalendarEntry doesn't support date
-                          const { deleteCalendarEntry, addCalendarEntry: addEntry } = usePlannerStore.getState();
-                          deleteCalendarEntry(id);
-                          addEntry({ title: entry.title, date: targetDate, startTime: s, endTime: en });
-                        }
-                      }}
-                    />
-                  );
-                })}
-
                 {dayTimedTasks.map((task) => {
                   const depth = depths.get(task.id) ?? 0;
                   return (
@@ -586,16 +600,6 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                 })}
 
                 {/* Overflow zone: next-day 00:00–01:59 items at 24:xx */}
-                {dayOverflowEntries.map((entry) => (
-                  <CalendarEntryBlock
-                    key={`overflow-${entry.id}`}
-                    entry={entry}
-                    compact
-                    readOnly
-                    style={{ top: minutesToOffset(24 * 60 + timeToMinutes(entry.startTime)) + 1, height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 20), left: 0, right: 2, zIndex: 4, opacity: 0.7 }}
-                  />
-                ))}
-
                 {dayOverflowGoogleEntries.map((entry) => (
                   <CalendarEntryBlock
                     key={`overflow-google-${entry.id}`}
@@ -656,7 +660,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                 <button
                   onClick={() => { setAddingDay(ds); setAddValue(''); }}
                   title={`Add task for ${format(day, 'EEE')}`}
-                  className="w-4 h-4 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+                  className="ui-icon-button !w-5 !h-5"
                 >
                   <Plus size={10} strokeWidth={2.5} />
                 </button>
@@ -665,7 +669,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
               <DroppableSection
                 containerId={cId}
                 itemIds={dayTasks.map((t) => t.id)}
-                className="flex-1 overflow-y-auto px-1 pb-1 flex flex-col gap-0.5 min-h-0"
+                className="flex-1 overflow-y-auto px-1 pb-1.5 flex flex-col gap-1 min-h-0"
               >
                 {dayTasks.map((task) => (
                   <WeekTaskItem
@@ -687,7 +691,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                     }}
                     onBlur={() => { const t = addValue.trim(); if (t) addTask({ title: t, location: 'today', date: ds }); setAddingDay(null); }}
                     placeholder="Task…"
-                    className="w-full px-1.5 py-0.5 rounded-full border border-dashed border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[11px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none"
+                    className="w-full px-2 py-1 rounded-[0.85rem] border border-dashed border-[var(--color-task-draft-border)] bg-[var(--color-task-draft)] text-[11px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none"
                   />
                 )}
               </DroppableSection>
@@ -698,9 +702,6 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
 
       {popover?.type === 'task' && (
         <TaskDetailPopover taskId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
-      )}
-      {popover?.type === 'entry' && (
-        <CalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
       )}
       {popover?.type === 'google-entry' && (
         <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} isDraft={popover.isDraft} />

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { addDays, format } from 'date-fns';
 import { Check, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
+import type { CalendarEntry } from '@/types';
 import { DetailPopover } from './DetailPopover';
 import { PopoverField, PopoverInput } from './PopoverField';
 import { DateTimePicker } from './DateTimePicker';
@@ -25,33 +26,43 @@ export function GoogleCalendarEntryDetailPopover({
   isDraft = false,
 }: GoogleCalendarEntryDetailPopoverProps) {
   const googleEntries = usePlannerStore((s) => s.googleCalendarEntries);
-  const setGoogleCalendarEntries = usePlannerStore((s) => s.setGoogleCalendarEntries);
   const entry = googleEntries.find((e) => e.id === entryId);
+  if (!entry) return null;
+
+  return (
+    <GoogleCalendarEntryDetailPopoverInner
+      key={`${entry.id}:${entry.updatedAt}:${isDraft ? 'draft' : 'saved'}`}
+      entry={entry}
+      anchor={anchor}
+      onClose={onClose}
+      isDraft={isDraft}
+    />
+  );
+}
+
+function GoogleCalendarEntryDetailPopoverInner({
+  entry,
+  anchor,
+  onClose,
+  isDraft,
+}: {
+  entry: CalendarEntry;
+  anchor: HTMLElement;
+  onClose: () => void;
+  isDraft: boolean;
+}) {
+  const googleEntries = usePlannerStore((s) => s.googleCalendarEntries);
+  const setGoogleCalendarEntries = usePlannerStore((s) => s.setGoogleCalendarEntries);
   const { refresh } = useGoogleCalendar();
 
-  const [title, setTitle] = useState(entry?.title ?? '');
-  const [date, setDate] = useState(entry?.date);
-  const [startTime, setStartTime] = useState(entry?.startTime ?? '');
-  const [endTime, setEndTime] = useState(entry?.endTime ?? '');
-  const [notes, setNotes] = useState(entry?.notes ?? '');
-
-  useEffect(() => {
-    if (!entry) return;
-    setTitle(entry.title);
-    setDate(entry.date);
-    setStartTime(entry.startTime);
-    setEndTime(entry.endTime);
-    setNotes(entry.notes ?? '');
-  }, [entry]);
-
-  const baseEventId = entry?.id.split('::')[0];
+  const [title, setTitle] = useState(entry.title);
+  const [date, setDate] = useState<string | undefined>(entry.date);
+  const [startTime, setStartTime] = useState(entry.startTime);
+  const [endTime, setEndTime] = useState(entry.endTime);
+  const [notes, setNotes] = useState(entry.notes ?? '');
+  const baseEventId = entry.id.split('::')[0];
 
   const handleClose = useCallback(() => {
-    if (!entry || !baseEventId) {
-      onClose();
-      return;
-    }
-
     const nextTitle = title.trim() || entry.title;
     const nextDate = date ?? entry.date;
     const nextStart = startTime || entry.startTime;
@@ -109,11 +120,6 @@ export function GoogleCalendarEntryDetailPopover({
   }, [handleClose]);
 
   const handleDelete = () => {
-    if (!baseEventId) {
-      onClose();
-      return;
-    }
-
     api.deleteGoogleTimedEvent(baseEventId).then(() => {
       setGoogleCalendarEntries(
         googleEntries.filter((e) => e.id.split('::')[0] !== baseEventId)
@@ -125,8 +131,6 @@ export function GoogleCalendarEntryDetailPopover({
       onClose();
     });
   };
-
-  if (!entry) return null;
 
   const nextTitle = title.trim() || entry.title;
   const nextDate = date ?? entry.date;
@@ -150,7 +154,7 @@ export function GoogleCalendarEntryDetailPopover({
           {showSaveAction && (
             <button
               onClick={handleClose}
-              className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-accent)] bg-[var(--color-accent-subtle)] hover:bg-[var(--color-accent)] hover:text-white transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+              className="ui-icon-button ui-icon-button--accent"
               aria-label={isDraft ? 'Create event' : 'Save event'}
               title={isDraft ? 'Create event' : 'Save event'}
             >
@@ -159,7 +163,7 @@ export function GoogleCalendarEntryDetailPopover({
           )}
           <button
             onClick={handleDelete}
-            className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            className="ui-icon-button ui-icon-button--danger"
             aria-label="Delete Google event"
           >
             <Trash2 size={12} strokeWidth={2.25} />

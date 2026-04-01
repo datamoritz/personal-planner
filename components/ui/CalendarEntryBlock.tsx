@@ -141,14 +141,14 @@ export function CalendarEntryBlock({
         e.stopPropagation();
         onDoubleClick?.(entry.id, e.currentTarget);
       }}
-      style={{ ...style, boxShadow: 'var(--shadow-card)' }}
+      style={{ ...style, boxShadow: 'none' }}
       className={[
         `absolute left-1 right-1 rounded-lg ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden transition-colors`,
         readOnly
-          ? `border border-[#10b981]/50 bg-[#10b981]/10 ${canReposition ? 'cursor-grab' : canOpen ? 'cursor-pointer' : 'cursor-default'}`
+          ? `bg-[var(--color-google-event)] ${canReposition ? 'cursor-grab' : canOpen ? 'cursor-pointer' : 'cursor-default'}`
           : [
-              'border border-[var(--color-accent)] bg-[var(--color-accent-subtle)]',
-              'hover:bg-[rgba(124,106,247,0.2)]',
+              'bg-[var(--color-accent-subtle)]',
+              'hover:bg-[color-mix(in_srgb,var(--color-accent-subtle)_88%,white_12%)]',
               canReposition ? 'cursor-grab' : 'cursor-pointer',
             ].join(' '),
         className,
@@ -156,13 +156,13 @@ export function CalendarEntryBlock({
     >
       <p className={[
         `${compact ? 'text-[10px]' : 'text-xs'} font-semibold leading-tight truncate`,
-        readOnly ? 'text-[#10b981]' : 'text-[var(--color-accent)]',
+        readOnly ? 'text-[var(--color-google-event-text)]' : 'text-[var(--color-accent)]',
       ].join(' ')}>
         {entry.title}
       </p>
       <p className={[
         `${compact ? 'text-[9px]' : 'text-[10px]'} mt-0.5`,
-        readOnly ? 'text-[#10b981]/70' : 'text-[var(--color-text-secondary)]',
+        readOnly ? 'text-[color-mix(in_srgb,var(--color-google-event-text)_72%,var(--color-text-secondary))]' : 'text-[var(--color-text-secondary)]',
       ].join(' ')}>
         {entry.startTime} – {entry.endTime}
       </p>
@@ -172,7 +172,7 @@ export function CalendarEntryBlock({
           onPointerDown={handleResizePointerDown}
           className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group"
         >
-          <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[#10b981]' : 'bg-[var(--color-accent)]'} opacity-40 group-hover:opacity-100 transition-opacity`} />
+          <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[var(--color-google-event-text)]' : 'bg-[var(--color-accent)]'} opacity-30 group-hover:opacity-70 transition-opacity`} />
         </div>
       )}
     </div>

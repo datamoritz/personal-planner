@@ -28,10 +28,8 @@ export function TaskPill({
   const isDone = task.status === 'done';
   const tags = usePlannerStore((s) => s.tags);
   const tag = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
-
   // Use colorDark at low opacity so the tint works on both dark and light backgrounds
-  const tagBg = (!isDone && !isOverdue && tag) ? tag.colorDark + '33' : undefined;
-
+  const tagBg = (!isDone && !isOverdue && tag) ? tag.colorDark + '24' : undefined;
   return (
     <div
       onDoubleClick={(e) => {
@@ -39,19 +37,20 @@ export function TaskPill({
         onDoubleClick?.(task.id, e.currentTarget);
       }}
       style={{
-        boxShadow: isDone ? 'none' : 'var(--shadow-card)',
+        boxShadow: isDone ? 'none' : '0 1px 2px rgba(15, 23, 42, 0.03), 0 10px 22px rgba(15, 23, 42, 0.038)',
         background: tagBg,
       }}
       className={[
-        `item-enter group flex items-center gap-2.5 px-3 ${topLabel ? 'py-1.5' : 'py-2.5'} rounded-full cursor-pointer select-none`,
+        `item-enter group flex items-center gap-2 px-2.5 ${topLabel ? 'py-1.5' : 'py-2'} rounded-[1rem] cursor-pointer select-none border`,
         'transition-all duration-150',
+        noHover ? '' : 'hover:-translate-y-px',
         isDone
-          ? 'bg-[var(--color-surface)] opacity-50'
+          ? 'bg-[var(--color-task-pill)] border-[var(--color-task-pill-border)] opacity-50'
           : isOverdue
-          ? 'bg-[var(--color-overdue-subtle)]'
+          ? 'bg-[var(--color-overdue-subtle)] border-transparent'
           : tag
-          ? ''
-          : 'bg-[var(--color-surface)]',
+          ? 'border-transparent'
+          : 'bg-[var(--color-task-pill)] border-[var(--color-task-pill-border)]',
         className,
       ].join(' ')}
     >
@@ -63,9 +62,9 @@ export function TaskPill({
           onToggle?.(task.id);
         }}
         className={[
-          'flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer',
+          'flex-shrink-0 w-[15px] h-[15px] rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer',
           isDone
-            ? 'bg-[var(--color-done)] border-[var(--color-done)]'
+            ? 'bg-[var(--color-done)] border-[var(--color-done)] opacity-80'
             : isOverdue
             ? 'border-[var(--color-overdue)]'
             : 'border-[var(--color-text-muted)]',
@@ -80,13 +79,13 @@ export function TaskPill({
 
       <span className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {topLabel && (
-          <span className="text-[9px] font-medium text-[var(--color-text-muted)] uppercase tracking-wide leading-none mb-0.5">
+          <span className="text-[9px] font-medium text-[var(--color-text-muted)] tracking-[0.03em] leading-none mb-0.5">
             {topLabel}
           </span>
         )}
         <span
           className={[
-            'text-sm leading-tight truncate',
+            'text-[14px] leading-tight truncate',
             isDone ? 'line-through text-[var(--color-text-muted)]' : 'text-[var(--color-text-primary)]',
           ].join(' ')}
         >

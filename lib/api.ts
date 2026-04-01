@@ -131,8 +131,6 @@ type BackendProject          = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BackendRecurrentTask    = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type BackendCalendarEntry    = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BackendTag              = any;
 
 function toTask(
@@ -183,20 +181,6 @@ function toRecurrentTask(b: BackendRecurrentTask): RecurrentTask {
     notes:       b.notes ?? undefined,
     createdAt:   b.created_at,
     updatedAt:   b.updated_at,
-  };
-}
-
-function toCalendarEntry(b: BackendCalendarEntry): CalendarEntry {
-  return {
-    id:        b.client_id ?? String(b.id),
-    backendId: b.id,
-    title:     b.title,
-    date:      b.entry_date,
-    startTime: fromApiTime(b.start_time)!,
-    endTime:   fromApiTime(b.end_time)!,
-    notes:     b.notes ?? undefined,
-    createdAt: b.created_at,
-    updatedAt: b.updated_at,
   };
 }
 
@@ -251,7 +235,6 @@ export interface BootData {
   tasks:           Task[];
   projects:        Project[];
   recurrentTasks:  RecurrentTask[];
-  calendarEntries: CalendarEntry[];
   tags:            Tag[];
 }
 
@@ -260,13 +243,11 @@ export async function fetchAll(): Promise<BootData> {
     backendProjects,
     backendTags,
     backendRecurrentTasks,
-    backendCalendarEntries,
     backendTasks,
   ] = await Promise.all([
     get<BackendProject[]>('/projects'),
     get<BackendTag[]>('/tags'),
     get<BackendRecurrentTask[]>('/recurrent-tasks'),
-    get<BackendCalendarEntry[]>('/calendar-entries'),
     get<BackendTask[]>('/tasks'),
   ]);
 
@@ -284,10 +265,9 @@ export async function fetchAll(): Promise<BootData> {
   const tags            = backendTags.map(toTag);
   const projects        = backendProjects.map((p) => toProject(p, tagIdMap));
   const recurrentTasks  = backendRecurrentTasks.map(toRecurrentTask);
-  const calendarEntries = backendCalendarEntries.map(toCalendarEntry);
   const tasks           = backendTasks.map((t) => toTask(t, projectIdMap, recurrentTaskIdMap, tagIdMap));
 
-  return { projects, tags, recurrentTasks, calendarEntries, tasks };
+  return { projects, tags, recurrentTasks, tasks };
 }
 
 // ─── Task mutations ─────────────────────────────────────────────────────────
@@ -379,19 +359,6 @@ export async function deleteRecurrentTask(backendId: number): Promise<void> {
   await del(`/recurrent-tasks/${backendId}`);
 }
 
-// ─── CalendarEntry mutations ────────────────────────────────────────────────
-
-export async function createCalendarEntry(entry: CalendarEntry): Promise<{ id: number }> {
-  return post<{ id: number }>('/calendar-entries', {
-    client_id:  entry.id,
-    title:      entry.title,
-    notes:      entry.notes ?? null,
-    entry_date: entry.date,
-    start_time: toApiTime(entry.startTime),
-    end_time:   toApiTime(entry.endTime),
-  });
-}
-
 export async function createGoogleTimedEvent(input: {
   title: string;
   date: string;
@@ -436,14 +403,6 @@ export async function deleteGoogleTimedEvent(eventId: string): Promise<void> {
   await del(`/google/events/${eventId}`);
 }
 
-export async function patchCalendarEntry(backendId: number, fields: Record<string, unknown>): Promise<void> {
-  await patch<unknown>(`/calendar-entries/${backendId}`, fields);
-}
-
-export async function deleteCalendarEntry(backendId: number): Promise<void> {
-  await del(`/calendar-entries/${backendId}`);
-}
-
 // ─── Tag mutations ──────────────────────────────────────────────────────────
 
 export async function createTag(tag: Tag): Promise<{ id: number }> {
@@ -461,93 +420,4 @@ export async function patchTag(backendId: number, fields: Record<string, unknown
 
 export async function deleteTag(backendId: number): Promise<void> {
   await del(`/tags/${backendId}`);
-}
-
-// ─── One-time localStorage import ───────────────────────────────────────────
-
-/** Shape of the old Zustand planner-v1 localStorage state (pre-Phase 2). */
-export interface LegacyPlannerData {
-  tasks?: Array<{
-    id: string; title: string; status: string; location: string;
-    date?: string; startTime?: string; endTime?: string;
-    projectId?: string; recurrentTaskId?: string;
-    notes?: string; createdAt?: string; updatedAt?: string;
-  }>;
-  projects?: Array<{
-    id: string; title: string; status?: string;
-    createdAt?: string; updatedAt?: string;
-  }>;
-  recurrentTasks?: Array<{
-    id: string; title: string; frequency: RecurrenceFrequency;
-    notes?: string; createdAt?: string; updatedAt?: string;
-  }>;
-  calendarEntries?: Array<{
-    id: string; title: string; date: string;
-    startTime: string; endTime: string;
-    notes?: string; createdAt?: string; updatedAt?: string;
-  }>;
-  tags?: Array<{
-    id: string; name: string; color: string;
-    createdAt?: string; updatedAt?: string;
-  }>;
-}
-
-export interface ImportResult {
-  inserted_tags:             number;
-  inserted_projects:         number;
-  inserted_recurrent_tasks:  number;
-  inserted_calendar_entries: number;
-  inserted_tasks:            number;
-}
-
-/** Transform legacy localStorage data and POST it to /import. */
-export async function importPlanner(legacy: LegacyPlannerData): Promise<ImportResult> {
-  return post<ImportResult>('/import', {
-    tags: (legacy.tags ?? []).map((t) => ({
-      client_id:  t.id,
-      name:       t.name,
-      color:      t.color,
-      created_at: t.createdAt ?? null,
-      updated_at: t.updatedAt ?? null,
-    })),
-    projects: (legacy.projects ?? []).map((p) => ({
-      client_id:   p.id,
-      title:       p.title,
-      is_finished: p.status === 'finished',
-      created_at:  p.createdAt ?? null,
-      updated_at:  p.updatedAt ?? null,
-    })),
-    recurrent_tasks: (legacy.recurrentTasks ?? []).map((r) => ({
-      client_id:       r.id,
-      title:           r.title,
-      recurrence_rule: frequencyToRule(r.frequency),
-      notes:           r.notes ?? null,
-      created_at:      r.createdAt ?? null,
-      updated_at:      r.updatedAt ?? null,
-    })),
-    calendar_entries: (legacy.calendarEntries ?? []).map((e) => ({
-      client_id:  e.id,
-      title:      e.title,
-      entry_date: e.date,
-      start_time: toApiTime(e.startTime),
-      end_time:   toApiTime(e.endTime),
-      notes:      e.notes ?? null,
-      created_at: e.createdAt ?? null,
-      updated_at: e.updatedAt ?? null,
-    })),
-    tasks: (legacy.tasks ?? []).map((t) => ({
-      client_id:                t.id,
-      title:                    t.title,
-      status:                   t.status,
-      location:                 t.location,
-      task_date:                t.date ?? null,
-      start_time:               toApiTime(t.startTime),
-      end_time:                 toApiTime(t.endTime),
-      project_client_id:        t.projectId ?? null,
-      recurrent_task_client_id: t.recurrentTaskId ?? null,
-      notes:                    t.notes ?? null,
-      created_at:               t.createdAt ?? null,
-      updated_at:               t.updatedAt ?? null,
-    })),
-  });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -14,17 +14,19 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import { addDays, format } from 'date-fns';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Moon, RefreshCw, Sun, Tag } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { usePlannerData } from '@/lib/usePlannerData';
 import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
-import { ImportBanner } from './ImportBanner';
 import { DayHeader } from './DayHeader';
 import { ProjectsColumn } from './columns/ProjectsColumn';
 import { MyDayColumn } from './columns/MyDayColumn';
 import { TasksTodayColumn } from './columns/TasksTodayColumn';
 import { SidebarColumn } from './columns/SidebarColumn';
 import { WeekViewColumn } from './columns/WeekViewColumn';
+import { ViewToggle } from './ui/ViewToggle';
+import { TagsDropdown } from './ui/TagsDropdown';
+import { DetailPopover } from './ui/DetailPopover';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import type { Task, RecurrentTask } from '@/types';
 
@@ -83,7 +85,7 @@ function CollapsedStrip({
   return (
     <div
       className={[
-        'flex flex-col items-center pt-3 h-full',
+        'flex flex-col items-center pt-4 h-full',
         direction === 'left'
           ? 'border-r border-[var(--color-border)]'
           : 'border-l border-[var(--color-border)]',
@@ -92,7 +94,7 @@ function CollapsedStrip({
       <button
         onClick={onExpand}
         title="Expand panel"
-        className="w-6 h-6 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+        className="ui-icon-button"
       >
         {direction === 'left'
           ? <ChevronRight size={14} strokeWidth={2} />
@@ -104,8 +106,13 @@ function CollapsedStrip({
 
 export function PlannerApp() {
   const theme = usePlannerStore((s) => s.theme);
-  const { isLoading, error, legacyData, refresh: refreshPlanner } = usePlannerData();
+  const toggleTheme = usePlannerStore((s) => s.toggleTheme);
   const viewMode = usePlannerStore((s) => s.viewMode);
+  const setViewMode = usePlannerStore((s) => s.setViewMode);
+  const googleNeedsReconnect = usePlannerStore((s) => s.googleNeedsReconnect);
+  const tags = usePlannerStore((s) => s.tags);
+  const activeTagFilter = usePlannerStore((s) => s.activeTagFilter);
+  const { isLoading, error, refresh: refreshPlanner } = usePlannerData();
   const { currentDate, tasks, recurrentTasks, reorderTask, moveTask, spawnRecurrentInstance } =
     usePlannerStore();
 
@@ -118,6 +125,20 @@ export function PlannerApp() {
   const [triggerBacklogAdd, setTriggerBacklogAdd] = useState(false);
   const [focusMode, setFocusMode]           = useState(false);
   const [notesActionsVisible, setNotesActionsVisible] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [tagsAnchor, setTagsAnchor] = useState<HTMLElement | null>(null);
+
+  const activeTag = tags.find((t) => t.id === activeTagFilter);
+  const activeTagStyle = activeTag ? {
+    backgroundColor: activeTag.color,
+    color: activeTag.colorDark,
+    borderColor: activeTag.colorDark,
+  } : {};
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.body.dataset.theme = theme;
+  }, [theme]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -202,12 +223,8 @@ export function PlannerApp() {
     );
   }
 
-  if (legacyData) {
-    return <ImportBanner legacyData={legacyData} theme={theme} />;
-  }
-
   return (
-    <div data-theme={theme} className="flex h-full p-7 bg-[var(--color-background)]">
+    <div data-theme={theme} className="flex h-full bg-[var(--color-background)] px-7 pb-7 pt-4 xl:px-9 xl:pb-9 xl:pt-5">
       <DndContext
         id="planner-dnd"
         sensors={sensors}
@@ -215,11 +232,77 @@ export function PlannerApp() {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        {/* Floating canvas */}
-        <div className="flex flex-col flex-1 rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-2xl min-w-0">
-          <DayHeader onRefresh={handleRefresh} />
+        <div className="flex flex-col flex-1 max-w-[1920px] mx-auto min-w-0">
+          <div className="flex items-center justify-between px-3 pb-2">
+            <div className="flex items-center gap-3.5">
+              <span className="text-sm font-semibold tracking-tight text-[var(--color-text-primary)] flex-shrink-0">
+                Planner
+              </span>
+              <ViewToggle value={viewMode} onChange={setViewMode} />
+            </div>
 
-          <div className="flex flex-1 min-h-0">
+            <div className="flex items-center gap-1.5">
+              <div className="relative inline-flex">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTagsAnchor(e.currentTarget);
+                      setTagsOpen((v) => !v);
+                    }}
+                  style={activeTagFilter !== null ? activeTagStyle : {}}
+                  title={activeTagFilter !== null ? activeTag?.name : 'Tags'}
+                  className={[
+                    'ui-icon-button',
+                    activeTagFilter === null
+                      ? 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10'
+                      : '',
+                  ].join(' ')}
+                >
+                  <Tag
+                    size={14}
+                    strokeWidth={2.25}
+                    color={activeTagFilter !== null ? activeTag?.colorDark : 'currentColor'}
+                  />
+                </button>
+                {tagsOpen && tagsAnchor && (
+                  <DetailPopover anchor={tagsAnchor} onClose={() => setTagsOpen(false)} className="w-[212px]" noPadding hideCloseButton>
+                    <TagsDropdown onClose={() => setTagsOpen(false)} />
+                  </DetailPopover>
+                )}
+              </div>
+              {googleNeedsReconnect ? (
+                <button
+                  onClick={() => window.open('https://planner-api.moritzknodler.com/auth/google/login', '_blank')}
+                  title="Reconnect Google Calendar"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-amber-700 bg-white/55 border border-amber-200/80 hover:bg-white/70 dark:bg-amber-900/18 dark:border-amber-700/35 dark:text-amber-300 transition-colors cursor-pointer"
+                >
+                  <RefreshCw size={11} strokeWidth={2.5} />
+                  Reconnect
+                </button>
+              ) : (
+                <button
+                  onClick={handleRefresh}
+                  title="Refresh"
+                  className="ui-icon-button text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10"
+                >
+                  <RefreshCw size={14} strokeWidth={2} />
+                </button>
+              )}
+              <button
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="ui-icon-button text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10"
+              >
+                {theme === 'dark' ? <Sun size={15} strokeWidth={2} /> : <Moon size={15} strokeWidth={2} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Floating canvas */}
+          <div className="flex flex-col flex-1 rounded-[2rem] overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] ui-raised-surface min-w-0">
+            <DayHeader />
+            <div className="flex flex-1 min-h-0">
             {/* ── Left panel — Projects ──────────────────────────── */}
             {!focusMode && (
               <div
@@ -266,7 +349,7 @@ export function PlannerApp() {
             {!focusMode && (
               <div
                 style={{ width: rightCollapsed ? COLLAPSED_W : '23%', flexShrink: 0 }}
-                className="h-full min-w-0"
+                className="h-full min-w-0 bg-[var(--color-canvas)]"
               >
                 {rightCollapsed
                   ? <CollapsedStrip direction="right" onExpand={() => setRightCollapsed(false)} />
@@ -278,6 +361,7 @@ export function PlannerApp() {
                 }
               </div>
             )}
+            </div>
           </div>
         </div>
 

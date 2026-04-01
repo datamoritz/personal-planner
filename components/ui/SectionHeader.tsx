@@ -18,13 +18,13 @@ export function SectionHeader({
   className = '',
 }: SectionHeaderProps) {
   return (
-    <div className={`flex items-center justify-between px-3 py-1.5 ${className}`}>
+    <div className={`flex items-center justify-between px-3 py-2 ${className}`}>
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
+        <span className="ui-section-label">
           {title}
         </span>
         {count !== undefined && count > 0 && (
-          <span className="text-[9px] font-semibold w-4 h-4 flex items-center justify-center rounded-full bg-[var(--color-surface-raised)] text-[var(--color-text-muted)]">
+          <span className="text-[9px] font-semibold w-4 h-4 flex items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-muted)]">
             {count}
           </span>
         )}
@@ -33,7 +33,7 @@ export function SectionHeader({
         <button
           onClick={onAdd}
           title={addLabel}
-          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+          className="ui-icon-button"
         >
           <Plus size={13} strokeWidth={2.5} />
         </button>

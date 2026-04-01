@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ChevronsRight } from 'lucide-react';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
@@ -53,24 +53,18 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
   const hasOverdue = overdue.length > 0;
 
   const [addingBacklog, setAddingBacklog]     = useState(false);
-
-  useEffect(() => {
-    if (triggerBacklogAdd) {
-      setAddingBacklog(true);
-      onBacklogAddHandled?.();
-    }
-  }, [triggerBacklogAdd]); // eslint-disable-line react-hooks/exhaustive-deps
   const [addingRecurrent, setAddingRecurrent] = useState(false);
   const [popover, setPopover]                 = useState<PopoverState>(null);
+  const backlogInputOpen = addingBacklog || !!triggerBacklogAdd;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {onCollapse && (
-        <div className="flex items-center justify-start px-2 py-1 border-b border-[var(--color-border)] flex-shrink-0">
+        <div className="flex h-[52px] items-center justify-start px-2 border-b border-[var(--color-border)] flex-shrink-0">
           <button
             onClick={onCollapse}
             title="Collapse Sidebar"
-            className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+            className="ui-icon-button"
           >
             <ChevronsRight size={12} strokeWidth={2.5} />
           </button>
@@ -92,7 +86,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                   <DroppableSection
                     containerId="overdue"
                     itemIds={overdue.map((t) => t.id)}
-                    className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-1.5 min-h-0"
+                    className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5 min-h-0"
                   >
                     {overdue.map((task) => (
                       <SortableTaskItem
@@ -124,9 +118,9 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
               <DroppableSection
                 containerId="backlog"
                 itemIds={backlog.map((t) => t.id)}
-                className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-1.5 min-h-0"
+                className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5 min-h-0"
               >
-                {backlog.length === 0 && !addingBacklog && (
+                {backlog.length === 0 && !backlogInputOpen && (
                   <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-4">Empty backlog</p>
                 )}
                 {backlog.map((task) => (
@@ -138,11 +132,18 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                     onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
                   />
                 ))}
-                {addingBacklog && (
+                {backlogInputOpen && (
                   <InlineTaskInput
                     placeholder="Backlog task…"
-                    onSubmit={(title) => { addTask({ title, location: 'backlog' }); setAddingBacklog(false); }}
-                    onCancel={() => setAddingBacklog(false)}
+                    onSubmit={(title) => {
+                      addTask({ title, location: 'backlog' });
+                      setAddingBacklog(false);
+                      onBacklogAddHandled?.();
+                    }}
+                    onCancel={() => {
+                      setAddingBacklog(false);
+                      onBacklogAddHandled?.();
+                    }}
                   />
                 )}
               </DroppableSection>
@@ -162,7 +163,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
               <DroppableSection
                 containerId="upcoming"
                 itemIds={upcoming.map((t) => t.id)}
-                className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-1.5 min-h-0"
+                className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5 min-h-0"
               >
                 {upcoming.length === 0 && (
                   <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-4">Nothing upcoming</p>
@@ -193,7 +194,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                 addLabel="Add recurrent task"
                 className="flex-shrink-0"
               />
-              <div className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-1.5 min-h-0">
+              <div className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5 min-h-0">
                 {recurrent.length === 0 && !addingRecurrent && (
                   <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-4">No recurrent tasks</p>
                 )}

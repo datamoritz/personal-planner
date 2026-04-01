@@ -126,7 +126,6 @@ export interface PlannerState {
   currentDate: string;
 
   tasks: Task[];
-  calendarEntries: CalendarEntry[];
   recurrentTasks: RecurrentTask[];
   projects: Project[];
   tags: Tag[];

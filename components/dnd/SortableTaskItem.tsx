@@ -49,10 +49,8 @@ return (
       }}
       /* Add dynamic classes here */
       className={[
-        "flex items-center gap-1 min-w-0 rounded-xl transition-colors",
-        !noHover 
-          ? "hover:bg-[var(--color-surface-raised)] cursor-pointer" 
-          : "cursor-default"
+        "flex items-center gap-1.5 min-w-0 rounded-[1rem]",
+        !noHover ? "cursor-pointer" : "cursor-default"
       ].join(' ')}
       {...attributes}
       {...listeners}

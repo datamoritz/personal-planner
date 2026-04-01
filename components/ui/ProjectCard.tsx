@@ -52,11 +52,11 @@ export function ProjectCard({
 
   return (
     <div
-      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] overflow-hidden"
+      className="ui-raised-surface rounded-[1rem] border border-[var(--color-border-subtle)] bg-[var(--color-canvas)] overflow-hidden"
       style={{
-        boxShadow: 'var(--shadow-card)',
         borderLeftWidth: projectTag ? '4px' : undefined,
         borderLeftColor: projectTag ? projectTag.colorDark : undefined,
+        boxShadow: 'var(--shadow-card)',
       }}
     >
       {/* Header */}
@@ -70,12 +70,12 @@ export function ProjectCard({
             : <ChevronRight size={14} strokeWidth={2.5} />}
         </button>
 
-        <span className="flex-1 text-sm font-semibold text-[var(--color-text-primary)] truncate">
+        <span className="flex-1 text-[14px] font-semibold text-[var(--color-text-primary)] truncate">
           {project.title}
         </span>
 
         {total > 0 && (
-          <span className="text-[10px] text-[var(--color-text-muted)] whitespace-nowrap">
+          <span className="text-[11px] text-[var(--color-text-muted)] whitespace-nowrap">
             {doneCount}/{total}
           </span>
         )}
@@ -85,7 +85,7 @@ export function ProjectCard({
           ref={tagBtnRef}
           onClick={openTagPicker}
           title="Set project color"
-          className="flex-shrink-0 w-3.5 h-3.5 rounded-full border-2 cursor-pointer transition-colors"
+          className="flex-shrink-0 w-4 h-4 rounded-full border-2 cursor-pointer transition-colors"
           style={{
             background: projectTag ? projectTag.color : 'transparent',
             borderColor: projectTag ? projectTag.colorDark : 'var(--color-border)',
@@ -95,7 +95,7 @@ export function ProjectCard({
         <button
           onClick={() => setAddingSubtask(true)}
           title="Add subtask"
-          className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+          className="ui-icon-button flex-shrink-0"
         >
           <Plus size={12} strokeWidth={2.5} />
         </button>
@@ -103,7 +103,7 @@ export function ProjectCard({
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(project.id); }}
             title="Delete project"
-            className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-red-500 hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+            className="ui-icon-button ui-icon-button--danger flex-shrink-0 opacity-0 group-hover:opacity-100"
           >
             <Trash2 size={11} strokeWidth={2} />
           </button>
@@ -112,7 +112,7 @@ export function ProjectCard({
 
       {/* Progress bar */}
       {total > 0 && (
-        <div className="mx-3 mb-2 h-0.5 rounded-full bg-[var(--color-border)]">
+        <div className="mx-3 mb-2 h-px rounded-full bg-[var(--color-border-subtle)]">
           <div
             className="h-full rounded-full bg-[var(--color-accent)] transition-all duration-300"
             style={{ width: `${progressPct}%` }}
@@ -125,7 +125,7 @@ export function ProjectCard({
         <DroppableSection
           containerId={`project-${project.id}`}
           itemIds={tasks.map((t) => t.id)}
-          className="px-2 pb-2 flex flex-col gap-1"
+          className="px-2.5 pb-3 flex flex-col gap-1.5"
         >
           {tasks.map((task) => (
             <SortableTaskItem
@@ -147,14 +147,14 @@ export function ProjectCard({
             />
           )}
           {tasks.length === 0 && !addingSubtask && (
-            <p className="px-1 py-1 text-xs text-[var(--color-text-muted)] italic">No subtasks yet</p>
+            <p className="px-1 py-2 text-xs text-[var(--color-text-muted)] italic">No subtasks yet</p>
           )}
         </DroppableSection>
       )}
 
       {/* Finish — only when all tasks are done */}
       {expanded && total > 0 && doneCount === total && (
-        <div className="px-3 pb-2.5">
+        <div className="px-3 pb-3">
           <button
             onClick={() => onFinish(project.id)}
             className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-done)] transition-colors cursor-pointer"
@@ -173,14 +173,14 @@ export function ProjectCard({
             onClick={() => setTagPickerOpen(false)}
           />
           <div
-            className="fixed z-50 flex flex-col gap-1 p-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-lg"
+            className="fixed z-50 ui-floating-surface flex flex-col gap-1 p-2.5 min-w-[180px]"
             style={{ top: pickerPos.top, left: pickerPos.left }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Clear option */}
             <button
               onClick={() => { onSetTag?.(project.id, undefined); setTagPickerOpen(false); }}
-              className="flex items-center gap-2 px-2 py-1 rounded-lg text-[11px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] cursor-pointer transition-colors"
+              className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-[12px] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] cursor-pointer transition-colors"
             >
               <span className="w-3 h-3 rounded-full border-2 border-[var(--color-border)] flex-shrink-0" />
               None
@@ -190,7 +190,7 @@ export function ProjectCard({
               <button
                 key={tag.id}
                 onClick={() => { onSetTag?.(project.id, tag.id); setTagPickerOpen(false); }}
-                className="flex items-center gap-2 px-2 py-1 rounded-lg text-[11px] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] cursor-pointer transition-colors"
+                className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-[12px] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] cursor-pointer transition-colors"
               >
                 <span
                   className="w-3 h-3 rounded-full flex-shrink-0 border"

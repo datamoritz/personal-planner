@@ -47,7 +47,8 @@ export function TimedTaskBlock({
   const isDone   = task.status === 'done';
   const tags     = usePlannerStore((s) => s.tags);
   const tag      = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
-  const tagBg    = (!isDone && tag) ? tag.color + 'CC' : undefined;
+  const tagBg    = (!isDone && tag) ? tag.colorDark + '24' : undefined;
+  const tagBorder = (!isDone && tag) ? `${tag.colorDark}30` : undefined;
   const blockRef = useRef<HTMLDivElement>(null);
   // Track whether current pointer-down originated on the grip (skip grid reposition)
   const gripActive = useRef(false);
@@ -151,13 +152,13 @@ export function TimedTaskBlock({
       ref={combinedRef}
       onPointerDown={handleDragPointerDown}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick?.(task.id, e.currentTarget); }}
-      style={{ ...style, opacity: isDraggingOut ? 0.35 : style?.opacity, boxShadow: isDone ? 'none' : 'var(--shadow-card)', background: tagBg }}
+      style={{ ...style, opacity: isDraggingOut ? 0.35 : style?.opacity, boxShadow: isDone ? 'none' : 'var(--shadow-card)', background: tagBg, borderColor: tagBorder }}
       className={[
-        `absolute left-1 right-1 rounded-2xl ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden group`,
+        `absolute left-1 right-1 rounded-[1rem] ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden group border`,
         'transition-colors',
         isDone
-          ? 'bg-[var(--color-surface)] opacity-50'
-          : tag ? '' : 'bg-[var(--color-surface)]',
+          ? 'bg-[var(--color-task-pill)] border-[var(--color-task-pill-border)] opacity-50'
+          : tag ? '' : 'bg-[var(--color-task-pill)] border-[var(--color-task-pill-border)]',
         onRepositionEnd && task.startTime ? 'cursor-grab' : 'cursor-pointer',
       ].join(' ')}
     >
@@ -202,7 +203,7 @@ export function TimedTaskBlock({
           )}
         </button>
         <span className={[
-          `flex-1 ${compact ? 'text-[10px]' : 'text-xs'} font-medium leading-tight truncate`,
+          `flex-1 ${compact ? 'text-[10px]' : 'text-xs'} font-medium leading-tight truncate pr-3`,
           isDone ? 'line-through text-[var(--color-text-muted)]' : 'text-[var(--color-text-primary)]',
         ].join(' ')}>
           {task.title}

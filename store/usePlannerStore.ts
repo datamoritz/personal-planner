@@ -28,6 +28,18 @@ function now(): string {
   return new Date().toISOString();
 }
 
+const DISPLAY_TAG_COLORS_BY_NAME: Record<string, Pick<Tag, 'color' | 'colorDark'>> = {
+  Finances: { color: '#d8f2f8', colorDark: '#0891b2' },
+  Home:     { color: '#fef3c7', colorDark: '#d97706' },
+  Study:    { color: '#e8defa', colorDark: '#7c3aed' },
+  Work:     { color: '#dbeafe', colorDark: '#2563eb' },
+};
+
+function normalizeDisplayTag(tag: Tag): Tag {
+  const mapped = DISPLAY_TAG_COLORS_BY_NAME[tag.name];
+  return mapped ? { ...tag, ...mapped } : tag;
+}
+
 // ─── Store interface ────────────────────────────────────────────────────────
 
 interface PlannerStore extends PlannerState {
@@ -49,10 +61,6 @@ interface PlannerStore extends PlannerState {
   addTask: (data: { title: string; location: Task['location']; date?: string; projectId?: string }) => void;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime'>>) => void;
   deleteTask: (id: string) => void;
-  // Calendar entries
-  addCalendarEntry: (data: { title: string; date: string; startTime: string; endTime: string }) => void;
-  updateCalendarEntry: (id: string, updates: Partial<Pick<CalendarEntry, 'title' | 'notes' | 'startTime' | 'endTime'>>) => void;
-  deleteCalendarEntry: (id: string) => void;
   // Recurrent tasks
   addRecurrentTask: (data: { title: string; frequency: RecurrenceFrequency }) => void;
   updateRecurrentTask: (id: string, updates: Partial<Pick<RecurrentTask, 'title' | 'notes' | 'frequency'>>) => void;
@@ -98,7 +106,6 @@ export const usePlannerStore = create<PlannerStore>()(
       activeTagFilter:            null,
       // Entities start empty — populated by usePlannerData on boot
       tasks:           [],
-      calendarEntries: [],
       recurrentTasks:  [],
       projects:        [],
       tags:            [],
@@ -145,8 +152,7 @@ export const usePlannerStore = create<PlannerStore>()(
           tasks:           data.tasks,
           projects,
           recurrentTasks:  data.recurrentTasks,
-          calendarEntries: data.calendarEntries,
-          tags:            data.tags,
+          tags:            data.tags.map(normalizeDisplayTag),
         });
       },
 
@@ -291,78 +297,6 @@ export const usePlannerStore = create<PlannerStore>()(
             console.error('[deleteTask]', err);
             if (task) {
               set((s) => ({ tasks: [...s.tasks, task] }));
-            }
-          });
-        }
-      },
-
-      // ── Calendar entries ───────────────────────────────────────────────
-
-      addCalendarEntry: (data) => {
-        const ts = now();
-        const entry: CalendarEntry = {
-          id:        uid(),
-          title:     data.title,
-          date:      data.date,
-          startTime: data.startTime,
-          endTime:   data.endTime,
-          createdAt: ts,
-          updatedAt: ts,
-        };
-        set((s) => ({ calendarEntries: [...s.calendarEntries, entry] }));
-
-        api.createCalendarEntry(entry)
-          .then(({ id: backendId }) => {
-            set((s) => ({
-              calendarEntries: s.calendarEntries.map((e) =>
-                e.id === entry.id ? { ...e, backendId } : e
-              ),
-            }));
-          })
-          .catch((err) => {
-            console.error('[addCalendarEntry]', err);
-            set((s) => ({
-              calendarEntries: s.calendarEntries.filter((e) => e.id !== entry.id),
-            }));
-          });
-      },
-
-      updateCalendarEntry: (id, updates) => {
-        const prevEntry = get().calendarEntries.find((e) => e.id === id);
-        set((s) => ({
-          calendarEntries: s.calendarEntries.map((e) =>
-            e.id === id ? { ...e, ...updates, updatedAt: now() } : e
-          ),
-        }));
-        const updated = get().calendarEntries.find((e) => e.id === id);
-        if (updated?.backendId) {
-          const apiFields: Record<string, unknown> = {};
-          if ('title' in updates)     apiFields.title      = updates.title;
-          if ('notes' in updates)     apiFields.notes      = updates.notes ?? null;
-          if ('startTime' in updates) apiFields.start_time = updates.startTime ? `${updates.startTime}:00` : null;
-          if ('endTime' in updates)   apiFields.end_time   = updates.endTime   ? `${updates.endTime}:00`   : null;
-
-          api.patchCalendarEntry(updated.backendId, apiFields).catch((err) => {
-            console.error('[updateCalendarEntry]', err);
-            if (prevEntry) {
-              set((s) => ({
-                calendarEntries: s.calendarEntries.map((e) => (e.id === id ? prevEntry : e)),
-              }));
-            }
-          });
-        }
-      },
-
-      deleteCalendarEntry: (id) => {
-        const entry = get().calendarEntries.find((e) => e.id === id);
-        set((s) => ({
-          calendarEntries: s.calendarEntries.filter((e) => e.id !== id),
-        }));
-        if (entry?.backendId) {
-          api.deleteCalendarEntry(entry.backendId).catch((err) => {
-            console.error('[deleteCalendarEntry]', err);
-            if (entry) {
-              set((s) => ({ calendarEntries: [...s.calendarEntries, entry] }));
             }
           });
         }
@@ -790,7 +724,7 @@ export const usePlannerStore = create<PlannerStore>()(
       setGoogleNeedsReconnect: (v) => set({ googleNeedsReconnect: v }),
     }),
     {
-      name: 'planner-v1',
+      name: 'planner-ui',
       storage: createJSONStorage(() => localStorage),
       // Only persist UI preferences — entities are owned by the backend now
       partialize: (s) => ({
@@ -824,10 +758,6 @@ export function selectTasksToday(tasks: Task[], date: string) {
 
 export function selectMyDayTasks(tasks: Task[], date: string) {
   return tasks.filter((t) => t.location === 'myday' && t.date === date);
-}
-
-export function selectCalendarEntriesForDate(entries: CalendarEntry[], date: string) {
-  return entries.filter((e) => e.date === date);
 }
 
 export function selectOverdueTasks(tasks: Task[]) {
@@ -873,14 +803,6 @@ export function selectGoogleCalendarEntriesForDate(entries: CalendarEntry[], dat
 
 export function selectGoogleAllDayEventsForDate(events: AllDayEvent[], date: string) {
   return events.filter((e) => e.date === date);
-}
-
-/** Returns timed calendar entries from the day AFTER `date` that start before 02:00 (overflow zone). */
-export function selectNextDayEarlyCalendarEntries(entries: CalendarEntry[], date: string): CalendarEntry[] {
-  const d = new Date(date + 'T00:00:00');
-  d.setDate(d.getDate() + 1);
-  const nextDate = format(d, 'yyyy-MM-dd');
-  return entries.filter((e) => e.date === nextDate && e.startTime < '02:00');
 }
 
 export function selectNextDayEarlyGoogleCalendarEntries(entries: CalendarEntry[], date: string): CalendarEntry[] {

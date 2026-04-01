@@ -29,9 +29,9 @@ export function InlineTaskInput({
   };
 
   return (
-    <div className="flex items-center gap-2.5 px-3 py-2 rounded-full border border-dashed border-[var(--color-accent)] bg-[var(--color-accent-subtle)]">
+    <div className="flex items-center gap-2 px-2.5 py-2 rounded-[1rem] border border-dashed bg-[var(--color-task-draft)] border-[var(--color-task-draft-border)]">
       {/* Placeholder circle */}
-      <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-[var(--color-accent)] opacity-50" />
+      <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-[var(--color-task-draft-border)] opacity-70" />
       <input
         ref={ref}
         value={value}
@@ -43,7 +43,7 @@ export function InlineTaskInput({
           else onCancel();
         }}
         placeholder={placeholder}
-        className="flex-1 bg-transparent text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none"
+        className="flex-1 bg-transparent text-[14px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none"
       />
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { X } from 'lucide-react';
@@ -24,7 +24,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
   const [startTime, setStartTime] = useState(task?.startTime ?? '');
   const [endTime,   setEndTime]   = useState(task?.endTime   ?? '');
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (!task) {
       onClose();
       return;
@@ -38,7 +38,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
     if (endTime      !== (task.endTime   ?? ''))   updates.endTime   = endTime   || undefined;
     if (Object.keys(updates).length) updateTask(taskId, updates);
     onClose();
-  };
+  }, [date, endTime, notes, onClose, startTime, task, taskId, title, updateTask]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -63,17 +63,18 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
     <DetailPopover
       anchor={anchor}
       onClose={handleClose}
+      className="w-[24rem]"
       headerActions={(
         <button
           onClick={() => { deleteTask(taskId); onClose(); }}
-          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer"
+          className="ui-icon-button ui-icon-button--danger"
           aria-label="Delete task"
         >
           <Trash2 size={12} strokeWidth={2.25} />
         </button>
       )}
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {/* Tag picker */}
         {tags.length > 0 && (
           <PopoverField label="Tag">
@@ -82,7 +83,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
                 <button
                   key={tag.id}
                   onClick={() => setTaskTag(taskId, task.tagId === tag.id ? undefined : tag.id)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-all cursor-pointer hover:opacity-90"
+                  className="ui-chip border cursor-pointer hover:opacity-90"
                   style={{
                     background: tag.color,
                     borderColor: task.tagId === tag.id ? tag.colorDark : 'transparent',

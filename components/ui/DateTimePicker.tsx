@@ -11,7 +11,7 @@ interface DateTimePickerProps {
 }
 
 const inputCls =
-  'w-full min-w-0 bg-[var(--color-surface)] border border-[var(--color-popover-border)] rounded-xl px-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] transition-colors';
+  'ui-input';
 
 export function DateTimePicker({
   date,
@@ -25,7 +25,7 @@ export function DateTimePicker({
   const hasTime = showTime || !!startTime;
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-3">
       {/* Date */}
       <div>
         <input
@@ -38,7 +38,7 @@ export function DateTimePicker({
 
       {/* Time */}
       {hasTime && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5">
           <input
             type="time"
             value={startTime ?? ''}

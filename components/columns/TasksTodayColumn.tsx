@@ -36,7 +36,7 @@ export function TasksTodayColumn() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden border-r border-[var(--color-border)]">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0">
+      <div className="flex h-[52px] items-center justify-between px-4 border-b border-[var(--color-border)] flex-shrink-0">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Tasks Today</h2>
         <div className="flex items-center gap-1.5">
           <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border border-[var(--color-border-subtle)] text-[var(--color-text-muted)] bg-[var(--color-surface)] select-none leading-none opacity-70">
@@ -45,7 +45,7 @@ export function TasksTodayColumn() {
           <button
             onClick={() => setAdding(true)}
             title="Add task (N)"
-            className="w-6 h-6 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+            className="ui-icon-button"
           >
             <Plus size={14} strokeWidth={2.5} />
           </button>

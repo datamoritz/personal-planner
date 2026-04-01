@@ -7,10 +7,8 @@ import { addDays, format } from 'date-fns';
 import {
   usePlannerStore,
   selectMyDayTasks,
-  selectCalendarEntriesForDate,
   selectGoogleCalendarEntriesForDate,
   selectGoogleAllDayEventsForDate,
-  selectNextDayEarlyCalendarEntries,
   selectNextDayEarlyGoogleCalendarEntries,
   selectNextDayEarlyMyDayTasks,
 } from '@/store/usePlannerStore';
@@ -18,10 +16,9 @@ import { AllDayStrip } from '@/components/ui/AllDayStrip';
 import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { DraggableTimedTaskBlock } from '@/components/dnd/DraggableTimedTaskBlock';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
-import { CalendarEntryDetailPopover } from '@/components/ui/CalendarEntryDetailPopover';
 import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
 import { UncertaintyNotepad } from '@/components/ui/UncertaintyNotepad';
-import { HelpCircle, Maximize2, Minimize2, Sparkles } from 'lucide-react';
+import { CalendarDays, Maximize2, Minimize2, Sparkles, StickyNote } from 'lucide-react';
 import {
   END_HOUR,
   SLOT_HEIGHT,
@@ -65,9 +62,8 @@ function formatHour(h: number) {
 }
 
 type TaskPopover  = { type: 'task';  id: string; anchor: HTMLElement };
-type EntryPopover = { type: 'entry'; id: string; anchor: HTMLElement };
 type GoogleEntryPopover = { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean };
-type PopoverState = TaskPopover | EntryPopover | GoogleEntryPopover | null;
+type PopoverState = TaskPopover | GoogleEntryPopover | null;
 
 function createClickAnchor(x: number, y: number): HTMLElement {
   const anchor = document.createElement('div');
@@ -85,9 +81,9 @@ function createClickAnchor(x: number, y: number): HTMLElement {
 
 export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (active: boolean) => void; onActionsMode?: (active: boolean) => void }) {
   const {
-    currentDate, tasks, calendarEntries, googleCalendarEntries, googleAllDayEvents,
+    currentDate, tasks, googleCalendarEntries, googleAllDayEvents,
     toggleTask,
-    updateCalendarEntry, updateTask, moveTask, setGoogleCalendarEntries,
+    updateTask, moveTask, setGoogleCalendarEntries, setViewMode,
   } = usePlannerStore();
   const { refresh: refreshGoogle } = useGoogleCalendar();
 
@@ -107,10 +103,8 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   };
 
   const timedTasks    = selectMyDayTasks(tasks, currentDate);
-  const entries       = selectCalendarEntriesForDate(calendarEntries, currentDate);
   const googleEntries = selectGoogleCalendarEntriesForDate(googleCalendarEntries, currentDate);
   const allDayEvents  = selectGoogleAllDayEventsForDate(googleAllDayEvents, currentDate);
-  const overflowEntries   = selectNextDayEarlyCalendarEntries(calendarEntries, currentDate);
   const overflowGoogleEntries = selectNextDayEarlyGoogleCalendarEntries(googleCalendarEntries, currentDate);
   const overflowTasks     = selectNextDayEarlyMyDayTasks(tasks, currentDate);
   const [today, setToday] = useState('');
@@ -279,7 +273,6 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   };
 
   const overlapItems: OverlapItem[] = [
-    ...entries.map(e => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
     ...googleEntries.map(e => ({ id: e.id, startTime: e.startTime, endTime: e.endTime })),
     ...timedTasks.filter(t => t.startTime && t.endTime).map(t => ({ id: t.id, startTime: t.startTime!, endTime: t.endTime! })),
   ];
@@ -299,21 +292,30 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       {/* Header */}
       <div
         className={[
-          'flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0 transition-colors',
-          notepadOpen ? 'bg-[#fef9c3]' : '',
+          'flex h-[52px] items-center justify-between px-4 border-b border-[var(--color-border)] flex-shrink-0 transition-colors',
+          notepadOpen ? 'bg-[#fff7c7]' : '',
         ].join(' ')}
       >
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
           {notepadOpen ? 'What is uncertain?' : 'My Day'}
         </h2>
         <div className="flex items-center gap-1">
+          {!notepadOpen && (
+            <button
+              onClick={() => setViewMode('week')}
+              title="Switch to week view"
+              className="ui-icon-button text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+            >
+              <CalendarDays size={14} strokeWidth={2} />
+            </button>
+          )}
           {notepadOpen && (
             <>
               <button
                 onClick={() => { const next = !actionsMode; setActionsMode(next); onActionsMode?.(next); }}
                 title={actionsMode ? 'Hide action tools' : 'Show action tools'}
                 className={[
-                  'w-6 h-6 flex items-center justify-center rounded transition-colors cursor-pointer',
+                  'w-7 h-7 flex items-center justify-center rounded-xl transition-colors cursor-pointer',
                   actionsMode
                     ? 'text-[var(--color-accent)] bg-[var(--color-accent-subtle)]'
                     : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]',
@@ -325,7 +327,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
                 onClick={toggleFocus}
                 title={focusMode ? 'Exit focus mode' : 'Focus mode'}
                 className={[
-                  'w-6 h-6 flex items-center justify-center rounded transition-colors cursor-pointer',
+                  'w-7 h-7 flex items-center justify-center rounded-xl transition-colors cursor-pointer',
                   focusMode
                     ? 'text-[var(--color-accent)] bg-[var(--color-accent-subtle)]'
                     : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]',
@@ -339,13 +341,13 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
             onClick={toggleNotepad}
             title={notepadOpen ? 'Back to My Day' : 'What is uncertain?'}
             className={[
-              'w-6 h-6 flex items-center justify-center rounded transition-colors cursor-pointer',
+              'w-7 h-7 flex items-center justify-center rounded-xl transition-colors cursor-pointer',
               notepadOpen
                 ? 'text-[var(--color-accent)] bg-[var(--color-accent-subtle)]'
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]',
             ].join(' ')}
           >
-            <HelpCircle size={14} strokeWidth={2} />
+            <StickyNote size={14} strokeWidth={2} />
           </button>
         </div>
       </div>
@@ -355,7 +357,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
 
       {/* Notepad mode */}
       {notepadOpen && (
-        <div className="flex-1 flex flex-col min-h-0 bg-[#fefce8]">
+        <div className="flex-1 flex flex-col min-h-0 bg-[#fffbe0]">
           <UncertaintyNotepad actionsVisible={actionsMode} />
         </div>
       )}
@@ -432,27 +434,6 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
               </div>
             )}
 
-            {entries.map((entry) => {
-              const depth = depths.get(entry.id) ?? 0;
-              return (
-                <CalendarEntryBlock
-                  key={entry.id}
-                  entry={entry}
-                  style={{
-                    top:    minutesToOffset(timeToMinutes(entry.startTime)) + 1,
-                    height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 24),
-                    left:   LEFT_BASE + depth * OVERLAP_SHIFT,
-                    right:  4,
-                    zIndex: 5 + depth,
-                  }}
-                  verticalOnly
-                  onDoubleClick={(id, anchor) => setPopover({ type: 'entry', id, anchor })}
-                  onResizeEnd={(id, t) => updateCalendarEntry(id, { endTime: t })}
-                  onRepositionEnd={(id, s, e) => updateCalendarEntry(id, { startTime: s, endTime: e })}
-                />
-              );
-            })}
-
             {googleEntries.map((entry) => {
               const depth = depths.get(entry.id) ?? 0;
               return (
@@ -500,23 +481,6 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
             })}
 
             {/* Overflow zone: next-day 00:00–01:59 items rendered at 24:xx–25:59 */}
-            {overflowEntries.map((entry) => (
-              <CalendarEntryBlock
-                key={`overflow-${entry.id}`}
-                entry={entry}
-                readOnly
-                style={{
-                  top:    overflowTop(entry.startTime),
-                  height: overflowHeight(entry.startTime, entry.endTime),
-                  left:   LEFT_BASE,
-                  right:  4,
-                  zIndex: 4,
-                  opacity: 0.7,
-                }}
-                verticalOnly
-              />
-            ))}
-
             {overflowGoogleEntries.map((entry) => (
               <CalendarEntryBlock
                 key={`overflow-google-${entry.id}`}
@@ -563,9 +527,6 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
 
       {popover?.type === 'task' && (
         <TaskDetailPopover taskId={popover.id} anchor={popover.anchor} onClose={closePopover} />
-      )}
-      {popover?.type === 'entry' && (
-        <CalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={closePopover} />
       )}
       {popover?.type === 'google-entry' && (
         <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={closePopover} isDraft={popover.isDraft} />
