@@ -66,8 +66,22 @@ function formatHour(h: number) {
 
 type TaskPopover  = { type: 'task';  id: string; anchor: HTMLElement };
 type EntryPopover = { type: 'entry'; id: string; anchor: HTMLElement };
-type GoogleEntryPopover = { type: 'google-entry'; id: string; anchor: HTMLElement };
+type GoogleEntryPopover = { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean };
 type PopoverState = TaskPopover | EntryPopover | GoogleEntryPopover | null;
+
+function createClickAnchor(x: number, y: number): HTMLElement {
+  const anchor = document.createElement('div');
+  anchor.style.position = 'fixed';
+  anchor.style.left = `${x}px`;
+  anchor.style.top = `${y}px`;
+  anchor.style.width = '1px';
+  anchor.style.height = '1px';
+  anchor.style.pointerEvents = 'none';
+  anchor.style.opacity = '0';
+  anchor.dataset.popoverAnchor = 'temporary';
+  document.body.appendChild(anchor);
+  return anchor;
+}
 
 export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (active: boolean) => void; onActionsMode?: (active: boolean) => void }) {
   const {
@@ -112,6 +126,15 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   const [timeLabel,  setTimeLabel]  = useState<string>(isToday ? getCurrentTimeLabel() : '');
   const [popover, setPopover]       = useState<PopoverState>(null);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const closePopover = useCallback(() => {
+    setPopover((current) => {
+      if (current?.anchor.dataset.popoverAnchor === 'temporary') {
+        current.anchor.remove();
+      }
+      return null;
+    });
+  }, []);
 
   const updateGoogleEntry = useCallback((entryId: string, updates: { date?: string; startTime?: string; endTime?: string; title?: string; notes?: string }) => {
     const prevEntries = usePlannerStore.getState().googleCalendarEntries;
@@ -225,7 +248,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
 
   const handleGridDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement) !== e.currentTarget) return;
-    const y       = e.clientY - e.currentTarget.getBoundingClientRect().top + (scrollRef.current?.scrollTop ?? 0);
+    const y       = e.clientY - e.currentTarget.getBoundingClientRect().top;
     const snapped = snapTo15Min((y / SLOT_HEIGHT) * 60);
     const startMinutes = Math.max(0, Math.min(snapped, END_HOUR * 60 - 60));
     const endMinutes = startMinutes + 60;
@@ -243,7 +266,12 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       tz,
     }).then((created) => {
       setGoogleCalendarEntries([...googleCalendarEntries, created]);
-      setPopover({ type: 'google-entry', id: created.id, anchor: e.currentTarget });
+      setPopover({
+        type: 'google-entry',
+        id: created.id,
+        anchor: createClickAnchor(e.clientX, e.clientY),
+        isDraft: true,
+      });
       refreshGoogle();
     }).catch((err) => {
       console.error('[createGoogleTimedEvent]', err);
@@ -534,13 +562,13 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       </div>}
 
       {popover?.type === 'task' && (
-        <TaskDetailPopover taskId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
+        <TaskDetailPopover taskId={popover.id} anchor={popover.anchor} onClose={closePopover} />
       )}
       {popover?.type === 'entry' && (
-        <CalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
+        <CalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={closePopover} />
       )}
       {popover?.type === 'google-entry' && (
-        <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
+        <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={closePopover} isDraft={popover.isDraft} />
       )}
     </div>
   );

@@ -150,7 +150,7 @@ function WeekTaskItem({
 type Popover =
   | { type: 'task';  id: string; anchor: HTMLElement }
   | { type: 'entry'; id: string; anchor: HTMLElement }
-  | { type: 'google-entry'; id: string; anchor: HTMLElement }
+  | { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean }
   | null;
 
 interface WeekViewColumnProps { sidebarVisible: boolean; onNKey: () => void; }
@@ -703,7 +703,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
         <CalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
       )}
       {popover?.type === 'google-entry' && (
-        <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
+        <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} isDraft={popover.isDraft} />
       )}
     </div>
   );

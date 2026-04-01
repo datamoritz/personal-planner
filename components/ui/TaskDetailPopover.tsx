@@ -15,7 +15,7 @@ interface TaskDetailPopoverProps {
 }
 
 export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopoverProps) {
-  const { tasks, tags, updateTask, toggleTask, deleteTask, setTaskTag } = usePlannerStore();
+  const { tasks, tags, updateTask, deleteTask, setTaskTag } = usePlannerStore();
   const task = tasks.find((t) => t.id === taskId);
 
   const [title,     setTitle]     = useState(task?.title     ?? '');
@@ -24,9 +24,12 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
   const [startTime, setStartTime] = useState(task?.startTime ?? '');
   const [endTime,   setEndTime]   = useState(task?.endTime   ?? '');
 
-  if (!task) return null;
-
   const handleClose = () => {
+    if (!task) {
+      onClose();
+      return;
+    }
+
     const updates: Parameters<typeof updateTask>[1] = {};
     if (title.trim() && title !== task.title)     updates.title     = title.trim();
     if (notes        !== task.notes)               updates.notes     = notes;
@@ -51,6 +54,8 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleClose]);
+
+  if (!task) return null;
 
   const showTime = task.location === 'myday' || !!task.startTime;
 
@@ -112,26 +117,6 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
         <PopoverField label="Notes">
           <PopoverInput value={notes} onChange={setNotes} placeholder="Add notes…" multiline />
         </PopoverField>
-
-        <div className="flex flex-wrap gap-2 text-xs text-[var(--color-text-muted)]">
-          {task.recurrentTaskId && (
-            <span className="px-2 py-1 rounded-md bg-[var(--color-accent-subtle)] text-[var(--color-accent)]">
-              Recurring
-            </span>
-          )}
-          <span className="px-2 py-1 rounded-md bg-[var(--color-surface-raised)] capitalize">
-            {task.location === 'myday' ? 'My Day' : task.location}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-start pt-1 border-t border-[var(--color-popover-border)]">
-          <button
-            onClick={() => { toggleTask(taskId); handleClose(); }}
-            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-[var(--color-accent-subtle)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white transition-colors cursor-pointer"
-          >
-            {task.status === 'done' ? 'Mark pending' : 'Mark done'}
-          </button>
-        </div>
       </div>
     </DetailPopover>
   );

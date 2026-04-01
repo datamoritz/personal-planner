@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { addDays, format } from 'date-fns';
-import { Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { DetailPopover } from './DetailPopover';
 import { PopoverField, PopoverInput } from './PopoverField';
@@ -15,12 +15,14 @@ interface GoogleCalendarEntryDetailPopoverProps {
   entryId: string;
   anchor: HTMLElement;
   onClose: () => void;
+  isDraft?: boolean;
 }
 
 export function GoogleCalendarEntryDetailPopover({
   entryId,
   anchor,
   onClose,
+  isDraft = false,
 }: GoogleCalendarEntryDetailPopoverProps) {
   const googleEntries = usePlannerStore((s) => s.googleCalendarEntries);
   const setGoogleCalendarEntries = usePlannerStore((s) => s.setGoogleCalendarEntries);
@@ -42,10 +44,14 @@ export function GoogleCalendarEntryDetailPopover({
     setNotes(entry.notes ?? '');
   }, [entry]);
 
-  if (!entry) return null;
-  const baseEventId = entry.id.split('::')[0];
+  const baseEventId = entry?.id.split('::')[0];
 
   const handleClose = useCallback(() => {
+    if (!entry || !baseEventId) {
+      onClose();
+      return;
+    }
+
     const nextTitle = title.trim() || entry.title;
     const nextDate = date ?? entry.date;
     const nextStart = startTime || entry.startTime;
@@ -103,6 +109,11 @@ export function GoogleCalendarEntryDetailPopover({
   }, [handleClose]);
 
   const handleDelete = () => {
+    if (!baseEventId) {
+      onClose();
+      return;
+    }
+
     api.deleteGoogleTimedEvent(baseEventId).then(() => {
       setGoogleCalendarEntries(
         googleEntries.filter((e) => e.id.split('::')[0] !== baseEventId)
@@ -115,19 +126,45 @@ export function GoogleCalendarEntryDetailPopover({
     });
   };
 
+  if (!entry) return null;
+
+  const nextTitle = title.trim() || entry.title;
+  const nextDate = date ?? entry.date;
+  const nextStart = startTime || entry.startTime;
+  const nextEnd = endTime || entry.endTime;
+  const hasChanges =
+    nextTitle !== entry.title ||
+    nextDate !== entry.date ||
+    nextStart !== entry.startTime ||
+    nextEnd !== entry.endTime ||
+    notes !== (entry.notes ?? '');
+  const showSaveAction = isDraft || hasChanges;
+
   return (
     <DetailPopover
       anchor={anchor}
       onClose={handleClose}
       className="w-[24rem]"
       headerActions={(
-        <button
-          onClick={handleDelete}
-          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-          aria-label="Delete Google event"
-        >
-          <Trash2 size={12} strokeWidth={2.25} />
-        </button>
+        <>
+          {showSaveAction && (
+            <button
+              onClick={handleClose}
+              className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-accent)] bg-[var(--color-accent-subtle)] hover:bg-[var(--color-accent)] hover:text-white transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+              aria-label={isDraft ? 'Create event' : 'Save event'}
+              title={isDraft ? 'Create event' : 'Save event'}
+            >
+              <Check size={12} strokeWidth={2.5} />
+            </button>
+          )}
+          <button
+            onClick={handleDelete}
+            className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            aria-label="Delete Google event"
+          >
+            <Trash2 size={12} strokeWidth={2.25} />
+          </button>
+        </>
       )}
     >
       <div className="flex flex-col gap-5">

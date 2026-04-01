@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { DetailPopover } from './DetailPopover';
 import { PopoverField, PopoverInput } from './PopoverField';
@@ -22,9 +22,12 @@ export function CalendarEntryDetailPopover({ entryId, anchor, onClose }: Calenda
   const [endTime,   setEndTime]   = useState(entry?.endTime   ?? '');
   const [notes,     setNotes]     = useState(entry?.notes     ?? '');
 
-  if (!entry) return null;
-
   const handleClose = useCallback(() => {
+    if (!entry) {
+      onClose();
+      return;
+    }
+
     updateCalendarEntry(entryId, {
       title:     title.trim() || entry.title,
       startTime: startTime    || entry.startTime,
@@ -49,19 +52,44 @@ export function CalendarEntryDetailPopover({ entryId, anchor, onClose }: Calenda
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleClose]);
 
+  if (!entry) return null;
+
+  const nextTitle = title.trim() || entry.title;
+  const nextStart = startTime || entry.startTime;
+  const nextEnd = endTime || entry.endTime;
+  const hasChanges =
+    nextTitle !== entry.title ||
+    nextStart !== entry.startTime ||
+    nextEnd !== entry.endTime ||
+    notes !== (entry.notes ?? '');
+  const isDraft = entry.title === 'New event' && !entry.notes;
+  const showSaveAction = isDraft || hasChanges;
+
   return (
     <DetailPopover
       anchor={anchor}
       onClose={handleClose}
       className="w-[24rem]"
       headerActions={(
-        <button
-          onClick={() => { deleteCalendarEntry(entryId); onClose(); }}
-          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-          aria-label="Delete event"
-        >
-          <Trash2 size={12} strokeWidth={2.25} />
-        </button>
+        <>
+          {showSaveAction && (
+            <button
+              onClick={handleClose}
+              className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-accent)] bg-[var(--color-accent-subtle)] hover:bg-[var(--color-accent)] hover:text-white transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+              aria-label={isDraft ? 'Create event' : 'Save event'}
+              title={isDraft ? 'Create event' : 'Save event'}
+            >
+              <Check size={12} strokeWidth={2.5} />
+            </button>
+          )}
+          <button
+            onClick={() => { deleteCalendarEntry(entryId); onClose(); }}
+            className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+            aria-label="Delete event"
+          >
+            <Trash2 size={12} strokeWidth={2.25} />
+          </button>
+        </>
       )}
     >
       <div className="flex flex-col gap-5">
