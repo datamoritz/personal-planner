@@ -153,6 +153,7 @@ interface WeekViewColumnProps { sidebarVisible: boolean; onNKey: () => void; }
 export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) {
   const {
     currentDate, tasks, calendarEntries, googleCalendarEntries, googleAllDayEvents,
+    setCurrentDate, setViewMode,
     toggleTask, addTask, addCalendarEntry,
     updateCalendarEntry, updateTask, moveTask,
   } = usePlannerStore();
@@ -314,26 +315,32 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
               <span className="text-[9px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
                 {format(day, 'EEE')}
               </span>
-              <div className={[
-                'w-6 h-6 flex items-center justify-center rounded-full text-[13px] font-semibold mt-0.5',
-                isToday ? 'bg-red-500 text-white' : 'text-[var(--color-text-primary)]',
-              ].join(' ')}>
+              <button
+                type="button"
+                onClick={() => { setCurrentDate(ds); setViewMode('day'); }}
+                title={`Open ${format(day, 'EEEE, MMMM d')}`}
+                className={[
+                  'w-6 h-6 flex items-center justify-center rounded-full text-[13px] font-semibold mt-0.5 transition-colors cursor-pointer',
+                  isToday
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]',
+                ].join(' ')}
+              >
                 {format(day, 'd')}
-              </div>
+              </button>
             </div>
           );
         })}
       </div>
 
-      {/* All-day events row — only rendered when at least one day has events */}
+      {/* All-day events row — keep events, hide the left-side label */}
       {weekDays.some((d) => selectGoogleAllDayEventsForDate(googleAllDayEvents, format(d, 'yyyy-MM-dd')).length > 0) && (
         <div className="flex flex-shrink-0 border-b border-[var(--color-border)]">
           <div
-            className="flex-shrink-0 flex items-start justify-end pt-1.5 pr-1 text-[8px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]"
+            className="flex-shrink-0"
             style={{ width: TIME_GUTTER_W }}
-          >
-            All day
-          </div>
+            aria-hidden="true"
+          />
           {weekDays.map((day) => {
             const ds     = format(day, 'yyyy-MM-dd');
             const events = selectGoogleAllDayEventsForDate(googleAllDayEvents, ds);
@@ -367,15 +374,6 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                 </span>
               </div>
             ))}
-            {/* Current time label */}
-            <div
-              className="absolute left-0 right-0 flex justify-end pr-1 pointer-events-none z-20 -translate-y-1/2"
-              style={{ top: timeOffset }}
-            >
-              <span className="text-[8px] font-bold leading-none text-red-500 select-none">
-                {timeLabel}
-              </span>
-            </div>
           </div>
 
           {/* 7 day columns */}
@@ -437,9 +435,14 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                     style={{ height: minutesToOffset(24 * 60 + now.getHours() * 60 + now.getMinutes()), background: 'var(--color-past-overlay)' }} />
                 )}
                 {isYesterday && (
-                  <div className="absolute left-0 right-0 flex items-center pointer-events-none z-20" style={{ top: minutesToOffset(24 * 60 + now.getHours() * 60 + now.getMinutes()) }}>
-                    <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 -ml-1 shadow-[0_0_0_2px_rgba(239,68,68,0.25)]" />
-                    <div className="flex-1 bg-red-500" style={{ height: '1.5px' }} />
+                  <div
+                    className="absolute left-0 right-0 flex items-center pointer-events-none z-50 -translate-y-1/2"
+                    style={{ top: minutesToOffset(24 * 60 + now.getHours() * 60 + now.getMinutes()) }}
+                  >
+                    <div className="bg-[#ff3b30] text-white text-[9px] font-bold px-1.5 h-4.5 flex items-center justify-center rounded-full shadow-sm z-50 select-none" style={{ marginLeft: '2px', minWidth: '34px' }}>
+                      {getCurrentTimeLabel()}
+                    </div>
+                    <div className="flex-1 h-[1px] bg-[#ff3b30]" />
                   </div>
                 )}
                 {isToday && (
@@ -447,9 +450,14 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
                     style={{ height: timeOffset, background: 'var(--color-past-overlay)' }} />
                 )}
                 {isToday && (
-                  <div className="absolute left-0 right-0 flex items-center pointer-events-none z-20" style={{ top: timeOffset }}>
-                    <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 -ml-1 shadow-[0_0_0_2px_rgba(239,68,68,0.25)]" />
-                    <div className="flex-1 bg-red-500" style={{ height: '1.5px' }} />
+                  <div
+                    className="absolute left-0 right-0 flex items-center pointer-events-none z-50 -translate-y-1/2"
+                    style={{ top: timeOffset }}
+                  >
+                    <div className="bg-[#ff3b30] text-white text-[9px] font-bold px-1.5 h-4.5 flex items-center justify-center rounded-full shadow-sm z-50 select-none" style={{ marginLeft: '2px', minWidth: '34px' }}>
+                      {timeLabel}
+                    </div>
+                    <div className="flex-1 h-[1px] bg-[#ff3b30]" />
                   </div>
                 )}
 

@@ -11,6 +11,7 @@ from googleapiclient.discovery import build
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app import schemas
 from app.config import settings
 from app.db import get_db
 
@@ -186,6 +187,11 @@ def _to_utc_iso(date_str: str, wall_time: time, tz_name: str) -> str:
     return local_dt.astimezone(ZoneInfo("UTC")).isoformat().replace("+00:00", "Z")
 
 
+def _to_local_iso(date_value, wall_time: time, tz_name: str) -> str:
+    local_dt = datetime.combine(date_value, wall_time, tzinfo=ZoneInfo(tz_name))
+    return local_dt.isoformat()
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -227,6 +233,35 @@ def google_events(start: str, end: str, tz: str = "America/Denver", db: Session 
         orderBy="startTime",
     ).execute()
     return result.get("items", [])
+
+
+@router.post("/google/events", response_model=schemas.GoogleTimedEventOut, status_code=201)
+def create_google_event(payload: schemas.GoogleTimedEventCreate, db: Session = Depends(get_db)):
+    end_date = payload.end_date or payload.date
+    if end_date < payload.date:
+        raise HTTPException(status_code=400, detail="end_date cannot be before date")
+    if end_date == payload.date and payload.end_time <= payload.start_time:
+        raise HTTPException(status_code=400, detail="end_time must be after start_time when end_date matches date")
+
+    service = get_google_service(db)
+    body = {
+        "summary": payload.title,
+        "description": payload.notes,
+        "start": {
+            "dateTime": _to_local_iso(payload.date, payload.start_time, payload.tz),
+            "timeZone": payload.tz,
+        },
+        "end": {
+            "dateTime": _to_local_iso(end_date, payload.end_time, payload.tz),
+            "timeZone": payload.tz,
+        },
+    }
+
+    created = service.events().insert(calendarId="primary", body=body).execute()
+    normalized = _normalize_timed_event(created, tz_name=payload.tz)
+    if not normalized:
+        raise HTTPException(status_code=500, detail="Google event was created but could not be normalized")
+    return normalized[0]
 
 
 @router.get("/google/calendar-entries")

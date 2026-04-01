@@ -392,6 +392,26 @@ export async function createCalendarEntry(entry: CalendarEntry): Promise<{ id: n
   });
 }
 
+export async function createGoogleTimedEvent(input: {
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  notes?: string;
+  tz: string;
+  endDate?: string;
+}): Promise<CalendarEntry> {
+  return post<CalendarEntry>('/google/events', {
+    title: input.title,
+    date: input.date,
+    end_date: input.endDate ?? null,
+    start_time: toApiTime(input.startTime),
+    end_time: toApiTime(input.endTime),
+    notes: input.notes ?? null,
+    tz: input.tz,
+  });
+}
+
 export async function patchCalendarEntry(backendId: number, fields: Record<string, unknown>): Promise<void> {
   await patch<unknown>(`/calendar-entries/${backendId}`, fields);
 }

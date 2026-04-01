@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDndMonitor } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import {
   usePlannerStore,
   selectMyDayTasks,
@@ -32,6 +32,8 @@ import {
 } from '@/lib/timeGrid';
 import { computeOverlapDepths } from '@/lib/overlapLayout';
 import type { OverlapItem } from '@/lib/overlapLayout';
+import * as api from '@/lib/api';
+import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
 
 const TOTAL_HOURS      = END_HOUR;
 const GRID_HEIGHT      = TOTAL_HOURS * SLOT_HEIGHT;
@@ -67,9 +69,10 @@ type PopoverState = TaskPopover | EntryPopover | null;
 export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (active: boolean) => void; onActionsMode?: (active: boolean) => void }) {
   const {
     currentDate, tasks, calendarEntries, googleCalendarEntries, googleAllDayEvents,
-    toggleTask, addCalendarEntry,
+    toggleTask,
     updateCalendarEntry, updateTask, moveTask,
   } = usePlannerStore();
+  const { refresh: refreshGoogle } = useGoogleCalendar();
 
   const [notepadOpen, setNotepadOpen]     = useState(false);
   const [actionsMode, setActionsMode]     = useState(false);
@@ -180,8 +183,27 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     if ((e.target as HTMLElement) !== e.currentTarget) return;
     const y       = e.clientY - e.currentTarget.getBoundingClientRect().top + (scrollRef.current?.scrollTop ?? 0);
     const snapped = snapTo15Min((y / SLOT_HEIGHT) * 60);
-    const start   = minutesToTime(Math.max(0, Math.min(snapped, END_HOUR * 60 - 60)));
-    addCalendarEntry({ title: 'New event', date: currentDate, startTime: start, endTime: minutesToTime(timeToMinutes(start) + 60) });
+    const startMinutes = Math.max(0, Math.min(snapped, END_HOUR * 60 - 60));
+    const endMinutes = startMinutes + 60;
+    const baseDate = new Date(`${currentDate}T00:00:00`);
+    const startDate = startMinutes >= 24 * 60 ? addDays(baseDate, 1) : baseDate;
+    const endDate = endMinutes >= 24 * 60 ? addDays(baseDate, 1) : baseDate;
+    const start = minutesToTime(startMinutes % (24 * 60));
+    const end = minutesToTime(endMinutes % (24 * 60));
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    api.createGoogleTimedEvent({
+      title: 'New event',
+      date: format(startDate, 'yyyy-MM-dd'),
+      endDate: format(endDate, 'yyyy-MM-dd'),
+      startTime: start,
+      endTime: end,
+      tz,
+    }).then(() => {
+      refreshGoogle();
+    }).catch((err) => {
+      console.error('[createGoogleTimedEvent]', err);
+    });
   };
 
   const overlapItems: OverlapItem[] = [

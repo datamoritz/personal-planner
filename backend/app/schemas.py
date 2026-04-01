@@ -90,6 +90,31 @@ class CalendarEntryRead(CalendarEntryBase):
 
 
 # ---------------------------------------------------------------------------
+# Google Calendar events
+# ---------------------------------------------------------------------------
+
+class GoogleTimedEventCreate(BaseModel):
+    title: str
+    date: date
+    end_date: Optional[date] = None
+    start_time: time
+    end_time: time
+    notes: Optional[str] = None
+    tz: str = "America/Denver"
+
+
+class GoogleTimedEventOut(BaseModel):
+    id: str
+    title: str
+    date: str
+    startTime: str
+    endTime: str
+    notes: Optional[str] = None
+    createdAt: str
+    updatedAt: str
+
+
+# ---------------------------------------------------------------------------
 # Projects
 # ---------------------------------------------------------------------------
 
