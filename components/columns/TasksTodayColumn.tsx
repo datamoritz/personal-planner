@@ -56,6 +56,10 @@ export function TasksTodayColumn() {
         containerId="today"
         itemIds={todayTasks.map((t) => t.id)}
         className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-1.5 min-h-0"
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement) !== e.currentTarget) return;
+          setAdding(true);
+        }}
       >
         {todayTasks.length === 0 && !adding && (
           <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-8">

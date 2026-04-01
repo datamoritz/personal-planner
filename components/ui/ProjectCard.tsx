@@ -2,6 +2,7 @@
 
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Project, Tag, Task } from '@/types';
 import { SortableTaskItem } from '@/components/dnd/SortableTaskItem';
 import { DroppableSection } from '@/components/dnd/DroppableSection';
@@ -17,6 +18,8 @@ interface ProjectCardProps {
   onFinish: (projectId: string) => void;
   onDelete: (projectId: string) => void;
   onSetTag?: (projectId: string, tagId: string | undefined) => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
 }
 
 export function ProjectCard({
@@ -29,8 +32,9 @@ export function ProjectCard({
   onFinish,
   onDelete,
   onSetTag,
+  expanded,
+  onToggleExpanded,
 }: ProjectCardProps) {
-  const [expanded, setExpanded] = useState(true);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const tagBtnRef = useRef<HTMLButtonElement>(null);
@@ -62,7 +66,7 @@ export function ProjectCard({
       {/* Header */}
       <div className="group flex items-center gap-2 px-3 py-2.5">
         <button
-          onClick={() => setExpanded((v) => !v)}
+          onClick={onToggleExpanded}
           className="flex-shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
         >
           {expanded
@@ -122,34 +126,36 @@ export function ProjectCard({
 
       {/* Subtasks */}
       {expanded && (
-        <DroppableSection
-          containerId={`project-${project.id}`}
-          itemIds={tasks.map((t) => t.id)}
-          className="px-2.5 pb-3 flex flex-col gap-1.5"
-        >
-          {tasks.map((task) => (
-            <SortableTaskItem
-              key={task.id}
-              task={task}
-              containerId={`project-${project.id}`}
-              onToggle={onToggleTask}
-              onDoubleClick={onDoubleClickTask}
-            />
-          ))}
-          {addingSubtask && (
-            <InlineTaskInput
-              placeholder="Subtask name…"
-              onSubmit={(title) => {
-                onAddSubtask(project.id, title);
-                setAddingSubtask(false);
-              }}
-              onCancel={() => setAddingSubtask(false)}
-            />
-          )}
-          {tasks.length === 0 && !addingSubtask && (
-            <p className="px-1 py-2 text-xs text-[var(--color-text-muted)] italic">No subtasks yet</p>
-          )}
-        </DroppableSection>
+        <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          <DroppableSection
+            containerId={`project-${project.id}`}
+            itemIds={tasks.map((t) => t.id)}
+            className="px-2.5 pb-3 flex flex-col gap-1.5"
+          >
+            {tasks.map((task) => (
+              <SortableTaskItem
+                key={task.id}
+                task={task}
+                containerId={`project-${project.id}`}
+                onToggle={onToggleTask}
+                onDoubleClick={onDoubleClickTask}
+              />
+            ))}
+            {addingSubtask && (
+              <InlineTaskInput
+                placeholder="Subtask name…"
+                onSubmit={(title) => {
+                  onAddSubtask(project.id, title);
+                  setAddingSubtask(false);
+                }}
+                onCancel={() => setAddingSubtask(false)}
+              />
+            )}
+            {tasks.length === 0 && !addingSubtask && (
+              <p className="px-1 py-2 text-xs text-[var(--color-text-muted)] italic">No subtasks yet</p>
+            )}
+          </DroppableSection>
+        </SortableContext>
       )}
 
       {/* Finish — only when all tasks are done */}

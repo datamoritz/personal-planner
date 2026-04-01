@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronsRight } from 'lucide-react';
+import { ChevronsRight, Trash2 } from 'lucide-react';
+import { useDroppable } from '@dnd-kit/core';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import {
@@ -36,6 +37,29 @@ interface SidebarColumnProps {
   onBacklogAddHandled?: () => void;
 }
 
+function TrashDropTarget() {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'drop-trash',
+    data: { type: 'container', containerId: 'trash' },
+  });
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      title="Drag a task here to delete"
+      className={[
+        'ui-icon-button transition-colors',
+        isOver
+          ? 'text-red-600 bg-red-50 dark:bg-red-950/30 dark:text-red-300'
+          : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]',
+      ].join(' ')}
+    >
+      <Trash2 size={13} strokeWidth={2.2} />
+    </button>
+  );
+}
+
 export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandled }: SidebarColumnProps) {
   const { currentDate, tasks, recurrentTasks, addTask, toggleTask, addRecurrentTask, activeTagFilter } = usePlannerStore();
 
@@ -60,7 +84,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {onCollapse && (
-        <div className="flex h-[52px] items-center justify-start px-2 border-b border-[var(--color-border)] flex-shrink-0">
+        <div className="flex h-[52px] items-center justify-between px-2 border-b border-[var(--color-border)] flex-shrink-0">
           <button
             onClick={onCollapse}
             title="Collapse Sidebar"
@@ -68,6 +92,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
           >
             <ChevronsRight size={12} strokeWidth={2.5} />
           </button>
+          <TrashDropTarget />
         </div>
       )}
       <div className="flex-1 min-h-0">
@@ -119,6 +144,10 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                 containerId="backlog"
                 itemIds={backlog.map((t) => t.id)}
                 className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5 min-h-0"
+                onDoubleClick={(e) => {
+                  if ((e.target as HTMLElement) !== e.currentTarget) return;
+                  setAddingBacklog(true);
+                }}
               >
                 {backlog.length === 0 && !backlogInputOpen && (
                   <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-4">Empty backlog</p>
@@ -194,7 +223,13 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                 addLabel="Add recurrent task"
                 className="flex-shrink-0"
               />
-              <div className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5 min-h-0">
+              <div
+                className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-1.5 min-h-0"
+                onDoubleClick={(e) => {
+                  if ((e.target as HTMLElement) !== e.currentTarget) return;
+                  setAddingRecurrent(true);
+                }}
+              >
                 {recurrent.length === 0 && !addingRecurrent && (
                   <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-4">No recurrent tasks</p>
                 )}

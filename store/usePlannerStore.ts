@@ -46,7 +46,9 @@ interface PlannerStore extends PlannerState {
   theme: 'dark' | 'light';
   viewMode: 'day' | 'week';
   uncertaintyNotes: string;
+  expandedProjectIds: string[];
   setUncertaintyNotes: (text: string) => void;
+  toggleProjectExpanded: (projectId: string) => void;
   selectedProjectIdForNotes: string | null;
   setSelectedProjectIdForNotes: (id: string | null) => void;
   toggleTheme: () => void;
@@ -102,6 +104,7 @@ export const usePlannerStore = create<PlannerStore>()(
       theme:                      'light',
       viewMode:                   'day' as 'day' | 'week',
       uncertaintyNotes:           '',
+      expandedProjectIds:         [],
       selectedProjectIdForNotes:  null,
       activeTagFilter:            null,
       // Entities start empty — populated by usePlannerData on boot
@@ -111,6 +114,12 @@ export const usePlannerStore = create<PlannerStore>()(
       tags:            [],
 
       setUncertaintyNotes: (text) => set({ uncertaintyNotes: text }),
+      toggleProjectExpanded: (projectId) =>
+        set((s) => ({
+          expandedProjectIds: s.expandedProjectIds.includes(projectId)
+            ? s.expandedProjectIds.filter((id) => id !== projectId)
+            : [...s.expandedProjectIds, projectId],
+        })),
       setSelectedProjectIdForNotes: (id) => set({ selectedProjectIdForNotes: id }),
 
       toggleTheme: () =>
@@ -731,6 +740,7 @@ export const usePlannerStore = create<PlannerStore>()(
         theme:            s.theme,
         viewMode:         s.viewMode,
         uncertaintyNotes: s.uncertaintyNotes,
+        expandedProjectIds: s.expandedProjectIds,
       }),
     }
   )
@@ -776,8 +786,15 @@ export function selectBacklogTasks(tasks: Task[]) {
 }
 
 export function selectUpcomingTasks(tasks: Task[], currentDate: string) {
+  const maxUpcomingDate = format(addDays(new Date(currentDate + 'T00:00:00'), 3), 'yyyy-MM-dd');
   return tasks
-    .filter((t) => t.location === 'upcoming' && t.date !== undefined && t.date > currentDate)
+    .filter(
+      (t) =>
+        t.date !== undefined &&
+        t.date > currentDate &&
+        t.date <= maxUpcomingDate &&
+        (t.location === 'upcoming' || t.location === 'today')
+    )
     .sort((a, b) => (a.date! > b.date! ? 1 : -1));
 }
 

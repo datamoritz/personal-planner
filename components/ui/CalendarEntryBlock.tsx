@@ -62,7 +62,11 @@ export function CalendarEntryBlock({
       if (!hasMoved) return;
       currentTop = Math.max(0, initialTop + dy);
       if (blockRef.current) {
-        blockRef.current.style.top     = `${currentTop}px`;
+        if (verticalOnly) {
+          blockRef.current.style.top = `${currentTop}px`;
+        } else {
+          blockRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+        }
         blockRef.current.style.zIndex  = '30';
         blockRef.current.style.opacity = '0.85';
         blockRef.current.style.cursor  = 'grabbing';
@@ -77,6 +81,7 @@ export function CalendarEntryBlock({
       if (hasMoved) {
         if (blockRef.current) {
           blockRef.current.style.top     = '';
+          blockRef.current.style.transform = '';
           blockRef.current.style.zIndex  = '';
           blockRef.current.style.opacity = '';
           blockRef.current.style.cursor  = '';

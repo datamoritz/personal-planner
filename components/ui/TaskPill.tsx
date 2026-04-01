@@ -64,7 +64,7 @@ export function TaskPill({
         className={[
           'flex-shrink-0 w-[15px] h-[15px] rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer',
           isDone
-            ? 'bg-[var(--color-done)] border-[var(--color-done)] opacity-80'
+            ? 'bg-[var(--color-done)] border-[var(--color-done)] opacity-65'
             : isOverdue
             ? 'border-[var(--color-overdue)]'
             : 'border-[var(--color-text-muted)]',
