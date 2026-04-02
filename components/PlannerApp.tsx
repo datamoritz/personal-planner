@@ -65,6 +65,7 @@ export function PlannerApp() {
   const theme = usePlannerStore((s) => s.theme);
   const toggleTheme = usePlannerStore((s) => s.toggleTheme);
   const viewMode = usePlannerStore((s) => s.viewMode);
+  const monthViewMode = usePlannerStore((s) => s.monthViewMode);
   const setViewMode = usePlannerStore((s) => s.setViewMode);
   const googleNeedsReconnect = usePlannerStore((s) => s.googleNeedsReconnect);
   const tags = usePlannerStore((s) => s.tags);
@@ -153,7 +154,8 @@ export function PlannerApp() {
       const canReorder =
         REORDERABLE_CONTAINERS.has(sourceContainer) ||
         sourceContainer.startsWith('project-') ||
-        sourceContainer.startsWith('week-today-');
+        sourceContainer.startsWith('week-today-') ||
+        sourceContainer.startsWith('month-day-');
       if (canReorder && activeId !== overId) reorderTask(activeId, overId);
       return;
     }
@@ -180,6 +182,9 @@ export function PlannerApp() {
     } else if (destContainer.startsWith('week-today-')) {
       const date = destContainer.replace('week-today-', '');
       moveTask(activeId, { location: 'today', date });
+    } else if (destContainer.startsWith('month-day-')) {
+      const date = destContainer.replace('month-day-', '');
+      moveTask(activeId, { location: 'today', date });
     }
   }
 
@@ -198,6 +203,7 @@ export function PlannerApp() {
     <PlannerAppView
       theme={theme}
       viewMode={viewMode}
+      monthViewMode={monthViewMode}
       setViewMode={setViewMode}
       googleNeedsReconnect={googleNeedsReconnect}
       handleRefresh={handleRefresh}

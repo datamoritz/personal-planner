@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Sparkles, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { X } from 'lucide-react';
 import { DetailPopover } from './DetailPopover';
 import { PopoverField, PopoverInput } from './PopoverField';
 import { DateTimePicker } from './DateTimePicker';
+import * as api from '@/lib/api';
 
 interface TaskDetailPopoverProps {
   taskId: string;
@@ -23,6 +24,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
   const [date,      setDate]      = useState(task?.date);
   const [startTime, setStartTime] = useState(task?.startTime ?? '');
   const [endTime,   setEndTime]   = useState(task?.endTime   ?? '');
+  const [emojiLoading, setEmojiLoading] = useState(false);
 
   const handleClose = useCallback(() => {
     if (!task) {
@@ -58,6 +60,20 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
   if (!task) return null;
 
   const showTime = task.location === 'myday' || !!task.startTime;
+  const handleSuggestEmoji = async () => {
+    const baseTitle = title.trim();
+    if (!baseTitle || emojiLoading) return;
+
+    setEmojiLoading(true);
+    try {
+      const emoji = await api.suggestEmoji(baseTitle);
+      setTitle((current) => current.startsWith(`${emoji} `) ? current : `${emoji} ${current.trim()}`);
+    } catch (err) {
+      console.error('[suggestEmoji]', err);
+    } finally {
+      setEmojiLoading(false);
+    }
+  };
 
   return (
     <DetailPopover
@@ -100,7 +116,21 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
         )}
 
         <PopoverField label="Title">
-          <PopoverInput value={title} onChange={setTitle} placeholder="Task title" />
+          <div className="flex flex-col gap-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleSuggestEmoji}
+                disabled={!title.trim() || emojiLoading}
+                className="ui-icon-button text-[var(--color-text-muted)] disabled:opacity-40"
+                aria-label="Suggest emoji"
+                title="Suggest emoji"
+              >
+                <Sparkles size={12} strokeWidth={2.2} />
+              </button>
+            </div>
+            <PopoverInput value={title} onChange={setTitle} placeholder="Task title" />
+          </div>
         </PopoverField>
 
         <PopoverField label="Schedule">

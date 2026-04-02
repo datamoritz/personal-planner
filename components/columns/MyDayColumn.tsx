@@ -8,6 +8,7 @@ import {
   usePlannerStore,
   selectMyDayTasks,
   selectGoogleCalendarEntriesForDate,
+  selectMergedGoogleCalendarEntryById,
   selectGoogleAllDayEventsForDate,
   selectNextDayEarlyGoogleCalendarEntries,
   selectNextDayEarlyMyDayTasks,
@@ -64,7 +65,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   const {
     currentDate, tasks, googleCalendarEntries, googleAllDayEvents,
     toggleTask,
-    updateTask, moveTask, setGoogleCalendarEntries, setViewMode,
+    updateTask, moveTask, applyOptimisticGoogleEntry, clearPendingGoogleMutation, setGoogleCalendarEntries, setViewMode,
   } = usePlannerStore();
   const { refresh: refreshGoogle } = useGoogleCalendar();
 
@@ -113,10 +114,10 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
 
   const updateGoogleEntry = useCallback((entryId: string, updates: { date?: string; startTime?: string; endTime?: string; title?: string; notes?: string }) => {
     const prevEntries = usePlannerStore.getState().googleCalendarEntries;
-    const entry = prevEntries.find((e) => e.id === entryId);
+    const entry = selectMergedGoogleCalendarEntryById(prevEntries, entryId);
     if (!entry) return;
 
-    const nextDate = updates.date ?? entry.date;
+    const nextDate = updates.date ?? entry.startDate ?? entry.date;
     const nextStart = updates.startTime ?? entry.startTime;
     const nextEnd = updates.endTime ?? entry.endTime;
     const nextTitle = updates.title ?? entry.title;
@@ -125,15 +126,15 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     const optimisticEntry = {
       ...entry,
       title: nextTitle,
-      date: nextDate,
-      startTime: nextStart,
-      endTime: nextEnd,
+      startDate: normalizedRange.startDate,
+      endDate: normalizedRange.endDate,
+      date: normalizedRange.startDate,
+      startTime: normalizedRange.startTime,
+      endTime: normalizedRange.endTime,
       notes: nextNotes,
     };
 
-    setGoogleCalendarEntries(
-      prevEntries.map((e) => (e.id === entryId ? optimisticEntry : e))
-    );
+    applyOptimisticGoogleEntry(optimisticEntry);
 
     api.patchGoogleTimedEvent(entry.id.split('::')[0], {
       title: nextTitle,
@@ -148,8 +149,9 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     }).catch((err) => {
       console.error('[patchGoogleTimedEvent]', err);
       setGoogleCalendarEntries(prevEntries);
+      clearPendingGoogleMutation(entry.id);
     });
-  }, [refreshGoogle, setGoogleCalendarEntries, tz]);
+  }, [applyOptimisticGoogleEntry, clearPendingGoogleMutation, refreshGoogle, setGoogleCalendarEntries, tz]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const setRef = useCallback((el: HTMLDivElement | null) => {
@@ -240,7 +242,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       endTime: end,
       tz,
     }).then((created) => {
-      setGoogleCalendarEntries([...googleCalendarEntries, created]);
+      applyOptimisticGoogleEntry(created);
       setPopover({
         type: 'google-entry',
         id: created.id,

@@ -22,6 +22,23 @@ interface CalendarEntryBlockProps {
   className?: string;
 }
 
+function formatDisplayTime(time: string): string {
+  const minutes = timeToMinutes(time);
+  if (minutes < 24 * 60) return time;
+  return minutesToTime(minutes % (24 * 60));
+}
+
+function getDurationMinutes(startTime: string, endTime: string): number {
+  const startMinutes = timeToMinutes(startTime);
+  let endMinutes = timeToMinutes(endTime);
+
+  if (endMinutes <= startMinutes) {
+    endMinutes += 24 * 60;
+  }
+
+  return endMinutes - startMinutes;
+}
+
 export function CalendarEntryBlock({
   entry,
   style,
@@ -50,8 +67,10 @@ export function CalendarEntryBlock({
 
     const startY     = e.clientY;
     const startX     = e.clientX;
-    const initialTop = blockRef.current!.offsetTop;
-    const duration   = timeToMinutes(entry.endTime) - timeToMinutes(entry.startTime);
+    const initialTop = blockRef.current
+      ? parseFloat(window.getComputedStyle(blockRef.current).top) || blockRef.current.offsetTop
+      : 0;
+    const duration   = getDurationMinutes(entry.startTime, entry.endTime);
     let currentTop   = initialTop; // track in closure — avoids DOM read on pointerup
     let hasMoved     = false;
 
@@ -108,8 +127,11 @@ export function CalendarEntryBlock({
     captureTarget.setPointerCapture(e.pointerId);
 
     const startY         = e.clientY;
-    const initialEndMins = timeToMinutes(entry.endTime);
-    const startMins      = timeToMinutes(entry.startTime);
+    let initialEndMins = timeToMinutes(entry.endTime);
+    const startMins    = timeToMinutes(entry.startTime);
+    if (initialEndMins <= startMins) {
+      initialEndMins += 24 * 60;
+    }
     const initialHeight  = blockRef.current?.getBoundingClientRect().height ?? 0;
     let liveHeight       = initialHeight;
 
@@ -169,7 +191,7 @@ export function CalendarEntryBlock({
         `${compact ? 'text-[9px]' : 'text-[10px]'} mt-0.5`,
         readOnly ? 'text-[color-mix(in_srgb,var(--color-google-event-text)_72%,var(--color-text-secondary))]' : 'text-[var(--color-text-secondary)]',
       ].join(' ')}>
-        {entry.startTime} – {entry.endTime}
+        {formatDisplayTime(entry.startTime)} – {formatDisplayTime(entry.endTime)}
       </p>
 
       {canResize && (

@@ -15,11 +15,12 @@ import { MyDayColumn } from './columns/MyDayColumn';
 import { TasksTodayColumn } from './columns/TasksTodayColumn';
 import { SidebarColumn } from './columns/SidebarColumn';
 import { WeekViewColumn } from './columns/WeekViewColumn';
+import { MonthViewColumn } from './columns/MonthViewColumn';
 import { ViewToggle } from './ui/ViewToggle';
 import { TagsDropdown } from './ui/TagsDropdown';
 import { DetailPopover } from './ui/DetailPopover';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
-import type { RecurrentTask, Task } from '@/types';
+import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
 
 type ActiveDrag =
   | { type: 'task'; item: Task; compact?: boolean }
@@ -55,8 +56,9 @@ function CollapsedStrip({
 
 interface PlannerAppViewProps {
   theme: 'light' | 'dark';
-  viewMode: 'day' | 'week' | 'month' | 'year';
-  setViewMode: (view: 'day' | 'week' | 'month' | 'year') => void;
+  viewMode: PlannerViewMode;
+  monthViewMode: MonthViewMode;
+  setViewMode: (view: PlannerViewMode) => void;
   googleNeedsReconnect: boolean;
   handleRefresh: () => void;
   toggleTheme: () => void;
@@ -90,6 +92,7 @@ interface PlannerAppViewProps {
 export function PlannerAppView({
   theme,
   viewMode,
+  monthViewMode,
   setViewMode,
   googleNeedsReconnect,
   handleRefresh,
@@ -120,7 +123,8 @@ export function PlannerAppView({
   handleDragStart,
   handleDragEnd,
 }: PlannerAppViewProps) {
-  const showLeftPanel = viewMode === 'week' ? weekProjectsVisible : !leftCollapsed;
+  const showLeftPanel = viewMode === 'week' || viewMode === 'month' ? weekProjectsVisible : !leftCollapsed;
+  const showMonthEventTimes = !(viewMode === 'month' && showLeftPanel && !rightCollapsed);
 
   return (
     <div data-theme={theme} className="flex h-full bg-[var(--color-background)] px-7 pb-7 pt-4 xl:px-9 xl:pb-9 xl:pt-5">
@@ -207,7 +211,7 @@ export function PlannerAppView({
                     ? (
                       <ProjectsColumn
                         onCollapse={() => {
-                          if (viewMode === 'week') setWeekProjectsVisible(false);
+                          if (viewMode === 'week' || viewMode === 'month') setWeekProjectsVisible(false);
                           else setLeftCollapsed(true);
                         }}
                         highlightSelection={notesActionsVisible}
@@ -217,7 +221,7 @@ export function PlannerAppView({
                       <CollapsedStrip
                         direction="left"
                         onExpand={() => {
-                          if (viewMode === 'week') setWeekProjectsVisible(true);
+                          if (viewMode === 'week' || viewMode === 'month') setWeekProjectsVisible(true);
                           else setLeftCollapsed(false);
                         }}
                       />
@@ -231,6 +235,10 @@ export function PlannerAppView({
                     sidebarVisible={!rightCollapsed}
                     onNKey={() => setTriggerBacklogAdd(true)}
                   />
+                </div>
+              ) : viewMode === 'month' ? (
+                <div className="flex-1 min-w-0 min-h-0">
+                  <MonthViewColumn monthViewMode={monthViewMode} showEventTimes={showMonthEventTimes} />
                 </div>
               ) : (
                 <>
@@ -256,7 +264,7 @@ export function PlannerAppView({
                   style={{ width: rightCollapsed ? COLLAPSED_W : '23%', flexShrink: 0 }}
                   className={[
                     'h-full min-w-0 bg-[var(--color-canvas)]',
-                    viewMode === 'week' ? 'border-l border-[var(--color-border)]' : '',
+                    viewMode === 'week' || viewMode === 'month' ? 'border-l border-[var(--color-border)]' : '',
                   ].join(' ')}
                 >
                   {rightCollapsed

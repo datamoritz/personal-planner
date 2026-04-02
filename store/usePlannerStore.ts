@@ -2,8 +2,9 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { addDays, format, subDays } from 'date-fns';
+import { addDays, addMonths, format, subDays, subMonths } from 'date-fns';
 import * as api from '@/lib/api';
+import { minutesToTime, timeToMinutes } from '@/lib/timeGrid';
 import type {
   Task,
   CalendarEntry,
@@ -13,6 +14,9 @@ import type {
   Project,
   Tag,
   PlannerState,
+  PlannerViewMode,
+  MonthViewMode,
+  MonthTaskLayout,
 } from '@/types';
 import type { BootData } from '@/lib/api';
 
@@ -40,11 +44,89 @@ function normalizeDisplayTag(tag: Tag): Tag {
   return mapped ? { ...tag, ...mapped } : tag;
 }
 
+type PendingGoogleMutation =
+  | { type: 'upsert'; entry: CalendarEntry }
+  | { type: 'delete' };
+
+function googleBaseId(id: string): string {
+  return id.split('::')[0];
+}
+
+function googleEntryStartKey(entry: CalendarEntry): string {
+  return `${entry.startDate ?? entry.date}T${entry.startTime}`;
+}
+
+function mergeGoogleEntryGroup(entries: CalendarEntry[]): CalendarEntry {
+  const sorted = [...entries].sort((a, b) =>
+    googleEntryStartKey(a).localeCompare(googleEntryStartKey(b))
+  );
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+
+  return {
+    ...first,
+    id: googleBaseId(first.id),
+    date: first.startDate ?? first.date,
+    startDate: first.startDate ?? first.date,
+    endDate: last.endDate ?? last.date,
+    endTime: last.endTime,
+  };
+}
+
+function sameGoogleEventShape(a: CalendarEntry, b: CalendarEntry): boolean {
+  return (
+    a.title === b.title &&
+    (a.startDate ?? a.date) === (b.startDate ?? b.date) &&
+    (a.endDate ?? a.date) === (b.endDate ?? b.date) &&
+    a.startTime === b.startTime &&
+    a.endTime === b.endTime &&
+    (a.notes ?? '') === (b.notes ?? '')
+  );
+}
+
+function reconcileFetchedGoogleEntries(
+  incoming: CalendarEntry[],
+  pending: Record<string, PendingGoogleMutation>,
+): {
+  entries: CalendarEntry[];
+  pending: Record<string, PendingGoogleMutation>;
+} {
+  let nextEntries = [...incoming];
+  const nextPending = { ...pending };
+
+  for (const [baseId, mutation] of Object.entries(pending)) {
+    const incomingGroup = incoming.filter((entry) => googleBaseId(entry.id) === baseId);
+
+    if (mutation.type === 'delete') {
+      nextEntries = nextEntries.filter((entry) => googleBaseId(entry.id) !== baseId);
+      if (incomingGroup.length === 0) {
+        delete nextPending[baseId];
+      }
+      continue;
+    }
+
+    if (incomingGroup.length > 0) {
+      const mergedIncoming = mergeGoogleEntryGroup(incomingGroup);
+      if (sameGoogleEventShape(mergedIncoming, mutation.entry)) {
+        delete nextPending[baseId];
+        continue;
+      }
+    }
+
+    nextEntries = nextEntries.filter((entry) => googleBaseId(entry.id) !== baseId);
+    nextEntries.push(mutation.entry);
+  }
+
+  return { entries: nextEntries, pending: nextPending };
+}
+
 // ─── Store interface ────────────────────────────────────────────────────────
 
 interface PlannerStore extends PlannerState {
   theme: 'dark' | 'light';
-  viewMode: 'day' | 'week';
+  viewMode: PlannerViewMode;
+  monthViewMode: MonthViewMode;
+  monthTaskLayout: MonthTaskLayout;
   uncertaintyNotes: string;
   expandedProjectIds: string[];
   setUncertaintyNotes: (text: string) => void;
@@ -55,7 +137,10 @@ interface PlannerStore extends PlannerState {
   setCurrentDate: (date: string) => void;
   navigateDay: (direction: 'prev' | 'next') => void;
   navigateWeek: (direction: 'prev' | 'next') => void;
-  setViewMode: (mode: 'day' | 'week') => void;
+  navigateMonth: (direction: 'prev' | 'next') => void;
+  setViewMode: (mode: PlannerViewMode) => void;
+  setMonthViewMode: (mode: MonthViewMode) => void;
+  setMonthTaskLayout: (mode: MonthTaskLayout) => void;
   /** Hydrate the store with data fetched from the backend on boot. */
   hydrateFromBackend: (data: BootData) => void;
   // Tasks
@@ -84,7 +169,12 @@ interface PlannerStore extends PlannerState {
   setActiveTagFilter: (id: string | null) => void;
   // Google Calendar (fetched at runtime, never persisted)
   googleCalendarEntries: CalendarEntry[];
+  pendingGoogleMutations: Record<string, PendingGoogleMutation>;
   setGoogleCalendarEntries: (entries: CalendarEntry[]) => void;
+  reconcileGoogleCalendarEntries: (entries: CalendarEntry[]) => void;
+  applyOptimisticGoogleEntry: (entry: CalendarEntry) => void;
+  applyOptimisticGoogleDelete: (entryId: string) => void;
+  clearPendingGoogleMutation: (entryId: string) => void;
   googleAllDayEvents: AllDayEvent[];
   setGoogleAllDayEvents: (events: AllDayEvent[]) => void;
   googleNeedsReconnect: boolean;
@@ -102,7 +192,9 @@ export const usePlannerStore = create<PlannerStore>()(
     (set, get) => ({
       currentDate:                today,
       theme:                      'light',
-      viewMode:                   'day' as 'day' | 'week',
+      viewMode:                   'day' as PlannerViewMode,
+      monthViewMode:              'events' as MonthViewMode,
+      monthTaskLayout:            'expanded' as MonthTaskLayout,
       uncertaintyNotes:           '',
       expandedProjectIds:         [],
       selectedProjectIdForNotes:  null,
@@ -141,7 +233,16 @@ export const usePlannerStore = create<PlannerStore>()(
         set({ currentDate: format(next, 'yyyy-MM-dd') });
       },
 
+      navigateMonth: (direction) => {
+        const { currentDate } = get();
+        const current = new Date(currentDate + 'T00:00:00');
+        const next = direction === 'next' ? addMonths(current, 1) : subMonths(current, 1);
+        set({ currentDate: format(next, 'yyyy-MM-dd') });
+      },
+
       setViewMode: (mode) => set({ viewMode: mode }),
+      setMonthViewMode: (mode) => set({ monthViewMode: mode }),
+      setMonthTaskLayout: (mode) => set({ monthTaskLayout: mode }),
 
       hydrateFromBackend: (data) => {
         // Derive subtaskIds from tasks (backend stores FK on task, not on project)
@@ -727,6 +828,51 @@ export const usePlannerStore = create<PlannerStore>()(
       // ── Google Calendar ────────────────────────────────────────────────
       googleCalendarEntries:  [],
       setGoogleCalendarEntries: (entries) => set({ googleCalendarEntries: entries }),
+      reconcileGoogleCalendarEntries: (entries) =>
+        set((s) => {
+          const reconciled = reconcileFetchedGoogleEntries(entries, s.pendingGoogleMutations);
+          return {
+            googleCalendarEntries: reconciled.entries,
+            pendingGoogleMutations: reconciled.pending,
+          };
+        }),
+      applyOptimisticGoogleEntry: (entry) =>
+        set((s) => {
+          const baseId = googleBaseId(entry.id);
+          const optimisticEntry = { ...entry, syncState: 'pending' as const };
+          return {
+            googleCalendarEntries: [
+              ...s.googleCalendarEntries.filter((existing) => googleBaseId(existing.id) !== baseId),
+              optimisticEntry,
+            ],
+            pendingGoogleMutations: {
+              ...s.pendingGoogleMutations,
+              [baseId]: { type: 'upsert', entry: optimisticEntry },
+            },
+          };
+        }),
+      applyOptimisticGoogleDelete: (entryId) =>
+        set((s) => {
+          const baseId = googleBaseId(entryId);
+          return {
+            googleCalendarEntries: s.googleCalendarEntries.filter(
+              (entry) => googleBaseId(entry.id) !== baseId
+            ),
+            pendingGoogleMutations: {
+              ...s.pendingGoogleMutations,
+              [baseId]: { type: 'delete' },
+            },
+          };
+        }),
+      clearPendingGoogleMutation: (entryId) =>
+        set((s) => {
+          const baseId = googleBaseId(entryId);
+          if (!(baseId in s.pendingGoogleMutations)) return {};
+          const nextPending = { ...s.pendingGoogleMutations };
+          delete nextPending[baseId];
+          return { pendingGoogleMutations: nextPending };
+        }),
+      pendingGoogleMutations: {},
       googleAllDayEvents:     [],
       setGoogleAllDayEvents:  (events)  => set({ googleAllDayEvents: events }),
       googleNeedsReconnect:   false,
@@ -739,6 +885,8 @@ export const usePlannerStore = create<PlannerStore>()(
       partialize: (s) => ({
         theme:            s.theme,
         viewMode:         s.viewMode,
+        monthViewMode:    s.monthViewMode,
+        monthTaskLayout:  s.monthTaskLayout,
         uncertaintyNotes: s.uncertaintyNotes,
         expandedProjectIds: s.expandedProjectIds,
       }),
@@ -815,7 +963,108 @@ export function selectRecurrentTasksSorted(recurrentTasks: RecurrentTask[]) {
 }
 
 export function selectGoogleCalendarEntriesForDate(entries: CalendarEntry[], date: string) {
-  return entries.filter((e) => e.date === date);
+  const [year, month, day] = date.split('-').map(Number);
+  const windowStart = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const windowEnd = new Date(year, month - 1, day, 26, 0, 0, 0);
+
+  const mergedEntries = Array.from(
+    entries.reduce((groups, entry) => {
+      const baseId = entry.id.split('::')[0];
+      const existing = groups.get(baseId);
+      if (existing) {
+        existing.push(entry);
+      } else {
+        groups.set(baseId, [entry]);
+      }
+      return groups;
+    }, new Map<string, CalendarEntry[]>()).entries()
+  ).map(([baseId, segments]) => {
+    if (segments.some((segment) => segment.startDate || segment.endDate)) {
+      const primary = segments.find((segment) => segment.id === baseId) ?? segments[0];
+      return {
+        ...primary,
+        id: baseId,
+        startDate: primary.startDate ?? primary.date,
+        endDate: primary.endDate ?? primary.startDate ?? primary.date,
+      };
+    }
+
+    const sortedSegments = [...segments].sort((a, b) => {
+      if (a.date === b.date) return a.startTime > b.startTime ? 1 : -1;
+      return a.date > b.date ? 1 : -1;
+    });
+    const firstSegment = sortedSegments[0];
+    const lastSegment = sortedSegments[sortedSegments.length - 1];
+
+    return {
+      ...firstSegment,
+      id: baseId,
+      startDate: firstSegment.date,
+      endDate: lastSegment.date,
+      date: firstSegment.date,
+      startTime: firstSegment.startTime,
+      endTime: lastSegment.endTime,
+    };
+  });
+
+  return mergedEntries
+    .flatMap((entry) => {
+      const startDate = entry.startDate ?? entry.date;
+      const endDate = entry.endDate ?? startDate;
+      const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+      const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+
+      const entryStart = new Date(startYear, startMonth - 1, startDay, 0, timeToMinutes(entry.startTime), 0, 0);
+      const entryEnd = new Date(endYear, endMonth - 1, endDay, 0, timeToMinutes(entry.endTime), 0, 0);
+
+      if (entryEnd <= windowStart || entryStart >= windowEnd) return [];
+
+      const visibleStart = entryStart > windowStart ? entryStart : windowStart;
+      const visibleEnd = entryEnd < windowEnd ? entryEnd : windowEnd;
+      const startMinutes = Math.round((visibleStart.getTime() - windowStart.getTime()) / 60000);
+      const endMinutes = Math.round((visibleEnd.getTime() - windowStart.getTime()) / 60000);
+
+      return [{
+        ...entry,
+        date,
+        startTime: minutesToTime(startMinutes),
+        endTime: minutesToTime(endMinutes),
+      }];
+    })
+    .sort((a, b) => (a.startTime > b.startTime ? 1 : -1));
+}
+
+export function selectMergedGoogleCalendarEntryById(entries: CalendarEntry[], entryId: string): CalendarEntry | undefined {
+  const baseId = entryId.split('::')[0];
+  const grouped = entries.filter((entry) => entry.id.split('::')[0] === baseId);
+  if (grouped.length === 0) return undefined;
+
+  if (grouped.some((segment) => segment.startDate || segment.endDate)) {
+    const primary = grouped.find((segment) => segment.id === baseId) ?? grouped[0];
+    return {
+      ...primary,
+      id: baseId,
+      startDate: primary.startDate ?? primary.date,
+      endDate: primary.endDate ?? primary.startDate ?? primary.date,
+    };
+  }
+
+  const sortedSegments = [...grouped].sort((a, b) => {
+    if (a.date === b.date) return a.startTime > b.startTime ? 1 : -1;
+    return a.date > b.date ? 1 : -1;
+  });
+  const firstSegment = sortedSegments[0];
+  const lastSegment = sortedSegments[sortedSegments.length - 1];
+
+  return {
+    ...firstSegment,
+    id: baseId,
+    startDate: firstSegment.date,
+    endDate: lastSegment.date,
+    date: firstSegment.date,
+    startTime: firstSegment.startTime,
+    endTime: lastSegment.endTime,
+  };
 }
 
 export function selectGoogleAllDayEventsForDate(events: AllDayEvent[], date: string) {
@@ -823,10 +1072,9 @@ export function selectGoogleAllDayEventsForDate(events: AllDayEvent[], date: str
 }
 
 export function selectNextDayEarlyGoogleCalendarEntries(entries: CalendarEntry[], date: string): CalendarEntry[] {
-  const d = new Date(date + 'T00:00:00');
-  d.setDate(d.getDate() + 1);
-  const nextDate = format(d, 'yyyy-MM-dd');
-  return entries.filter((e) => e.date === nextDate && e.startTime < '02:00');
+  void entries;
+  void date;
+  return [];
 }
 
 /** Returns myday tasks from the day AFTER `date` that start before 02:00 (overflow zone). */

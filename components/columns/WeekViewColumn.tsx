@@ -8,6 +8,7 @@ import {
   usePlannerStore,
   selectMyDayTasks,
   selectGoogleCalendarEntriesForDate,
+  selectMergedGoogleCalendarEntryById,
   selectNextDayEarlyGoogleCalendarEntries,
   selectNextDayEarlyMyDayTasks,
 } from '@/store/usePlannerStore';
@@ -66,7 +67,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
     currentDate, tasks, googleCalendarEntries, googleAllDayEvents,
     setCurrentDate, setViewMode,
     toggleTask, addTask,
-    updateTask, moveTask, setGoogleCalendarEntries,
+    updateTask, moveTask, applyOptimisticGoogleEntry, clearPendingGoogleMutation, setGoogleCalendarEntries,
   } = usePlannerStore();
   const { refresh: refreshGoogle } = useGoogleCalendar();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -89,10 +90,10 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
 
   const updateGoogleEntry = useCallback((entryId: string, updates: { date?: string; startTime?: string; endTime?: string; title?: string; notes?: string }) => {
     const prevEntries = usePlannerStore.getState().googleCalendarEntries;
-    const entry = prevEntries.find((e) => e.id === entryId);
+    const entry = selectMergedGoogleCalendarEntryById(prevEntries, entryId);
     if (!entry) return;
 
-    const nextDate = updates.date ?? entry.date;
+    const nextDate = updates.date ?? entry.startDate ?? entry.date;
     const nextStart = updates.startTime ?? entry.startTime;
     const nextEnd = updates.endTime ?? entry.endTime;
     const nextTitle = updates.title ?? entry.title;
@@ -101,15 +102,15 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
     const optimisticEntry = {
       ...entry,
       title: nextTitle,
-      date: nextDate,
-      startTime: nextStart,
-      endTime: nextEnd,
+      startDate: normalizedRange.startDate,
+      endDate: normalizedRange.endDate,
+      date: normalizedRange.startDate,
+      startTime: normalizedRange.startTime,
+      endTime: normalizedRange.endTime,
       notes: nextNotes,
     };
 
-    setGoogleCalendarEntries(
-      prevEntries.map((e) => (e.id === entryId ? optimisticEntry : e))
-    );
+    applyOptimisticGoogleEntry(optimisticEntry);
 
     api.patchGoogleTimedEvent(entry.id.split('::')[0], {
       title: nextTitle,
@@ -124,8 +125,9 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
     }).catch((err) => {
       console.error('[patchGoogleTimedEvent]', err);
       setGoogleCalendarEntries(prevEntries);
+      clearPendingGoogleMutation(entry.id);
     });
-  }, [refreshGoogle, setGoogleCalendarEntries, tz]);
+  }, [applyOptimisticGoogleEntry, clearPendingGoogleMutation, refreshGoogle, setGoogleCalendarEntries, tz]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = DEFAULT_SCROLL_H * SLOT_HEIGHT;
@@ -283,7 +285,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
         endTime: end,
         tz,
       }).then((created) => {
-        setGoogleCalendarEntries([...googleCalendarEntries, created]);
+        applyOptimisticGoogleEntry(created);
         setPopover({
           type: 'google-entry',
           id: created.id,

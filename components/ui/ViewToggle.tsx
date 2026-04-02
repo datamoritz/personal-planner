@@ -1,14 +1,16 @@
 'use client';
 
+import type { PlannerViewMode } from '@/types';
+
 interface ViewToggleProps {
-  value: 'day' | 'week';
-  onChange: (v: 'day' | 'week') => void;
+  value: PlannerViewMode;
+  onChange: (v: PlannerViewMode) => void;
 }
 
 const OPTIONS = [
   { label: 'Day',   value: 'day'   as const, enabled: true  },
   { label: 'Week',  value: 'week'  as const, enabled: true  },
-  { label: 'Month', value: null,              enabled: false },
+  { label: 'Month', value: 'month' as const, enabled: true  },
   { label: 'Year',  value: null,              enabled: false },
 ] as const;
 

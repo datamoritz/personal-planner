@@ -106,6 +106,8 @@ class GoogleTimedEventCreate(BaseModel):
 class GoogleTimedEventOut(BaseModel):
     id: str
     title: str
+    startDate: str
+    endDate: str
     date: str
     startTime: str
     endTime: str
@@ -122,6 +124,18 @@ class GoogleTimedEventUpdate(BaseModel):
     end_time: time
     notes: Optional[str] = None
     tz: str = "America/Denver"
+
+
+# ---------------------------------------------------------------------------
+# AI helpers
+# ---------------------------------------------------------------------------
+
+class EmojiSuggestionRequest(BaseModel):
+    title: str
+
+
+class EmojiSuggestionResponse(BaseModel):
+    emoji: str
 
 
 # ---------------------------------------------------------------------------

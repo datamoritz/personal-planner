@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { addDays, format, startOfWeek, endOfWeek } from 'date-fns';
+import { addDays, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from 'date-fns';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { AllDayEvent, CalendarEntry } from '@/types';
 
@@ -10,7 +10,7 @@ const API_BASE = 'https://planner-api.moritzknodler.com';
 export function useGoogleCalendar(): { refresh: () => void } {
   const currentDate               = usePlannerStore((s) => s.currentDate);
   const viewMode                  = usePlannerStore((s) => s.viewMode);
-  const setGoogleCalendarEntries  = usePlannerStore((s) => s.setGoogleCalendarEntries);
+  const reconcileGoogleCalendarEntries = usePlannerStore((s) => s.reconcileGoogleCalendarEntries);
   const setGoogleAllDayEvents     = usePlannerStore((s) => s.setGoogleAllDayEvents);
   const setGoogleNeedsReconnect   = usePlannerStore((s) => s.setGoogleNeedsReconnect);
 
@@ -26,6 +26,10 @@ export function useGoogleCalendar(): { refresh: () => void } {
       const base  = new Date(currentDate + 'T00:00:00');
       start = format(startOfWeek(base, { weekStartsOn: 1 }), 'yyyy-MM-dd');
       end   = format(addDays(endOfWeek(base, { weekStartsOn: 1 }), 1), 'yyyy-MM-dd');
+    } else if (viewMode === 'month') {
+      const base = new Date(currentDate + 'T00:00:00');
+      start = format(startOfWeek(startOfMonth(base), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      end = format(addDays(endOfWeek(endOfMonth(base), { weekStartsOn: 1 }), 1), 'yyyy-MM-dd');
     } else {
       start = currentDate;
       end   = format(addDays(new Date(currentDate + 'T00:00:00'), 1), 'yyyy-MM-dd');
@@ -44,14 +48,14 @@ export function useGoogleCalendar(): { refresh: () => void } {
       }
       const data: { timed: CalendarEntry[]; allDay: AllDayEvent[] } = await res.json();
       setGoogleNeedsReconnect(false);
-      setGoogleCalendarEntries(data.timed ?? []);
+      reconcileGoogleCalendarEntries(data.timed ?? []);
       setGoogleAllDayEvents(data.allDay ?? []);
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       console.error('[Google Calendar] fetch failed:', err);
       setGoogleNeedsReconnect(true);
     }
-  }, [currentDate, viewMode, setGoogleCalendarEntries, setGoogleAllDayEvents, setGoogleNeedsReconnect]);
+  }, [currentDate, viewMode, reconcileGoogleCalendarEntries, setGoogleAllDayEvents, setGoogleNeedsReconnect]);
 
   useEffect(() => {
     fetchEntries();

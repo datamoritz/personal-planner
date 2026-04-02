@@ -213,3 +213,12 @@ html, body {
 ::-webkit-scrollbar-track  { background: transparent; }
 ::-webkit-scrollbar-thumb  { background: var(--color-border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+.month-cell-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.month-cell-scroll::-webkit-scrollbar {
+  display: none;
+}

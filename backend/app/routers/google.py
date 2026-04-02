@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -115,58 +115,34 @@ def _event_part_to_local_dt(event_part: dict, fallback_tz: str) -> datetime | No
     return parsed.astimezone(ZoneInfo(fallback_tz))
 
 
-def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> list[dict]:
-    """Normalize a Google Calendar timed event into one or more frontend CalendarEntry day segments."""
+def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
+    """Normalize a Google Calendar timed event into one span-aware frontend event."""
     if event.get("status") == "cancelled":
-        return []
+        return None
 
     # Skip all-day events (no dateTime field, only date)
     if not event.get("start", {}).get("dateTime") or not event.get("end", {}).get("dateTime"):
-        return []
+        return None
 
     start_dt = _event_part_to_local_dt(event.get("start", {}), tz_name)
     end_dt = _event_part_to_local_dt(event.get("end", {}), tz_name)
     if start_dt is None or end_dt is None:
-        return []
+        return None
     if end_dt <= start_dt:
-        return []
+        return None
 
-    segments: list[dict] = []
-    segment_start = start_dt
-    segment_index = 0
-
-    while segment_start.date() < end_dt.date():
-        segment_id = event["id"] if segment_index == 0 and start_dt.date() == end_dt.date() else f'{event["id"]}::{segment_start.strftime("%Y-%m-%d")}'
-        segments.append({
-            "id": segment_id,
-            "title": event.get("summary", "(No title)"),
-            "date": segment_start.strftime("%Y-%m-%d"),
-            "startTime": segment_start.strftime("%H:%M"),
-            "endTime": "24:00",
-            "notes": event.get("description"),
-            "createdAt": event.get("created", start_dt.isoformat()),
-            "updatedAt": event.get("updated", end_dt.isoformat()),
-        })
-        segment_start = datetime.combine(
-            segment_start.date(),
-            time.min,
-            tzinfo=segment_start.tzinfo,
-        ).replace(day=segment_start.day) + timedelta(days=1)
-        segment_index += 1
-
-    segment_id = event["id"] if segment_index == 0 else f'{event["id"]}::{segment_start.strftime("%Y-%m-%d")}'
-    segments.append({
-        "id": segment_id,
+    return {
+        "id": event["id"],
         "title": event.get("summary", "(No title)"),
-        "date": segment_start.strftime("%Y-%m-%d"),
-        "startTime": segment_start.strftime("%H:%M"),
+        "startDate": start_dt.strftime("%Y-%m-%d"),
+        "endDate": end_dt.strftime("%Y-%m-%d"),
+        "date": start_dt.strftime("%Y-%m-%d"),
+        "startTime": start_dt.strftime("%H:%M"),
         "endTime": end_dt.strftime("%H:%M"),
         "notes": event.get("description"),
         "createdAt": event.get("created", start_dt.isoformat()),
         "updatedAt": event.get("updated", end_dt.isoformat()),
-    })
-
-    return segments
+    }
 
 
 def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
@@ -270,9 +246,9 @@ def create_google_event(payload: schemas.GoogleTimedEventCreate, db: Session = D
 
     created = service.events().insert(calendarId="primary", body=body).execute()
     normalized = _normalize_timed_event(created, tz_name=payload.tz)
-    if not normalized:
+    if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was created but could not be normalized")
-    return normalized[0]
+    return normalized
 
 
 @router.patch("/google/events/{event_id}", response_model=schemas.GoogleTimedEventOut)
@@ -299,9 +275,9 @@ def update_google_event(event_id: str, payload: schemas.GoogleTimedEventUpdate, 
 
     updated = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
     normalized = _normalize_timed_event(updated, tz_name=payload.tz)
-    if not normalized:
+    if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was updated but could not be normalized")
-    return normalized[0]
+    return normalized
 
 
 @router.delete("/google/events/{event_id}", status_code=204)
@@ -322,7 +298,7 @@ def google_calendar_entries(start: str, end: str, tz: str = "America/Denver", db
     ).execute()
 
     items = result.get("items", [])
-    timed = [segment for event in items for segment in _normalize_timed_event(event, tz_name=tz)]
+    timed = [e for event in items if (e := _normalize_timed_event(event, tz_name=tz)) is not None]
     all_day = [e for event in items if (e := _normalize_allday_event(event, tz_name=tz)) is not None]
 
     return {"timed": timed, "allDay": all_day}

@@ -319,6 +319,11 @@ export async function deleteTask(backendId: number): Promise<void> {
   await del(`/tasks/${backendId}`);
 }
 
+export async function suggestEmoji(title: string): Promise<string> {
+  const res = await post<{ emoji: string }>('/ai/emoji-suggestion', { title });
+  return res.emoji;
+}
+
 // ─── Project mutations ──────────────────────────────────────────────────────
 
 export async function createProject(project: Project): Promise<{ id: number }> {
