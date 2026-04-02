@@ -17,7 +17,7 @@ function FrequencyEditor({
   onChange: (f: RecurrenceFrequency) => void;
 }) {
   const select =
-    'w-full bg-[var(--color-surface)] border border-[var(--color-popover-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] transition-colors cursor-pointer';
+    'ui-input cursor-pointer';
 
   return (
     <div className="flex flex-col gap-2">
@@ -58,7 +58,7 @@ function FrequencyEditor({
           value={value.dayOfMonth}
           onChange={(e) => onChange({ type: 'monthly', dayOfMonth: Number(e.target.value) })}
           placeholder="Day of month (1–31)"
-          className="w-full bg-[var(--color-surface)] border border-[var(--color-popover-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] transition-colors"
+          className="ui-input"
         />
       )}
 
@@ -70,7 +70,7 @@ function FrequencyEditor({
             min={1}
             value={value.intervalDays}
             onChange={(e) => onChange({ type: 'custom', intervalDays: Number(e.target.value) })}
-            className="w-16 bg-[var(--color-surface)] border border-[var(--color-popover-border)] rounded-lg px-2 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] transition-colors text-center"
+            className="ui-input w-16 text-center"
           />
           <span className="text-xs text-[var(--color-text-muted)]">days</span>
         </div>
@@ -99,9 +99,12 @@ export function RecurrentTaskDetailPopover({
     rt?.frequency ?? { type: 'daily' }
   );
 
-  if (!rt) return null;
-
   const handleClose = () => {
+    if (!rt) {
+      onClose();
+      return;
+    }
+
     updateRecurrentTask(recurrentTaskId, {
       title: title.trim() || rt.title,
       notes,
@@ -110,9 +113,23 @@ export function RecurrentTaskDetailPopover({
     onClose();
   };
 
+  if (!rt) return null;
+
   return (
-    <DetailPopover anchor={anchor} onClose={handleClose}>
-      <div className="flex flex-col gap-4">
+    <DetailPopover
+      anchor={anchor}
+      onClose={handleClose}
+      className="w-[24rem]"
+      headerActions={(
+        <button
+          onClick={() => { deleteRecurrentTask(recurrentTaskId); onClose(); }}
+          className="ui-icon-button ui-icon-button--danger"
+        >
+          <Trash2 size={13} strokeWidth={2} />
+        </button>
+      )}
+    >
+      <div className="flex flex-col gap-5">
         <PopoverField label="Title">
           <PopoverInput value={title} onChange={setTitle} placeholder="Task title" />
         </PopoverField>
@@ -124,15 +141,6 @@ export function RecurrentTaskDetailPopover({
         <PopoverField label="Notes">
           <PopoverInput value={notes} onChange={setNotes} placeholder="Add notes…" multiline />
         </PopoverField>
-
-        <div className="flex justify-end pt-1 border-t border-[var(--color-popover-border)]">
-          <button
-            onClick={() => { deleteRecurrentTask(recurrentTaskId); onClose(); }}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer"
-          >
-            <Trash2 size={13} strokeWidth={2} />
-          </button>
-        </div>
       </div>
     </DetailPopover>
   );

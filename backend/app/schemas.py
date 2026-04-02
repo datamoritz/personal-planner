@@ -126,6 +126,43 @@ class GoogleTimedEventUpdate(BaseModel):
     tz: str = "America/Denver"
 
 
+class GoogleAllDayEventCreate(BaseModel):
+    title: str
+    date: date
+    end_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class GoogleAllDayEventOut(BaseModel):
+    id: str
+    title: str
+    date: str
+    endDate: str
+    source: str = "google"
+    notes: Optional[str] = None
+    createdAt: str
+    updatedAt: str
+
+
+class GoogleAllDayEventUpdate(BaseModel):
+    title: str
+    date: date
+    end_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# AI helpers
+# ---------------------------------------------------------------------------
+
+class EmojiSuggestionRequest(BaseModel):
+    title: str
+
+
+class EmojiSuggestionResponse(BaseModel):
+    emoji: str
+
+
 # ---------------------------------------------------------------------------
 # AI helpers
 # ---------------------------------------------------------------------------

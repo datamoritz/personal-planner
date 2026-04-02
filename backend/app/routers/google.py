@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -150,18 +150,29 @@ def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dic
     if event.get("status") == "cancelled":
         return None
 
-    date_raw = event.get("start", {}).get("date")
-    if not date_raw:
+    start_date_raw = event.get("start", {}).get("date")
+    end_date_raw = event.get("end", {}).get("date")
+    if not start_date_raw:
         return None
+
+    display_end_date = start_date_raw
+    if end_date_raw:
+        try:
+            display_end_date = (
+                datetime.strptime(end_date_raw, "%Y-%m-%d").date() - timedelta(days=1)
+            ).strftime("%Y-%m-%d")
+        except ValueError:
+            display_end_date = start_date_raw
 
     return {
         "id": event["id"],
         "title": event.get("summary", "(No title)"),
-        "date": date_raw,  # already "YYYY-MM-DD"
+        "date": start_date_raw,
+        "endDate": display_end_date,
         "source": "google",
         "notes": event.get("description"),
-        "createdAt": event.get("created", date_raw),
-        "updatedAt": event.get("updated", date_raw),
+        "createdAt": event.get("created", start_date_raw),
+        "updatedAt": event.get("updated", start_date_raw),
     }
 
 
@@ -249,6 +260,28 @@ def create_google_event(payload: schemas.GoogleTimedEventCreate, db: Session = D
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was created but could not be normalized")
     return normalized
+@router.post("/google/all-day-events", response_model=schemas.GoogleAllDayEventOut, status_code=201)
+def create_google_all_day_event(payload: schemas.GoogleAllDayEventCreate, db: Session = Depends(get_db)):
+    end_date = payload.end_date or payload.date
+    if end_date < payload.date:
+        raise HTTPException(status_code=400, detail="end_date cannot be before date")
+
+    # Google Calendar all-day events use an exclusive end date.
+    google_end_date = end_date + timedelta(days=1)
+
+    service = get_google_service(db)
+    body = {
+        "summary": payload.title,
+        "description": payload.notes,
+        "start": {"date": payload.date.isoformat()},
+        "end": {"date": google_end_date.isoformat()},
+    }
+
+    created = service.events().insert(calendarId="primary", body=body).execute()
+    normalized = _normalize_allday_event(created)
+    if normalized is None:
+        raise HTTPException(status_code=500, detail="Google all-day event was created but could not be normalized")
+    return normalized
 
 
 @router.patch("/google/events/{event_id}", response_model=schemas.GoogleTimedEventOut)
@@ -278,10 +311,37 @@ def update_google_event(event_id: str, payload: schemas.GoogleTimedEventUpdate, 
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was updated but could not be normalized")
     return normalized
+@router.patch("/google/all-day-events/{event_id}", response_model=schemas.GoogleAllDayEventOut)
+def update_google_all_day_event(event_id: str, payload: schemas.GoogleAllDayEventUpdate, db: Session = Depends(get_db)):
+    end_date = payload.end_date or payload.date
+    if end_date < payload.date:
+        raise HTTPException(status_code=400, detail="end_date cannot be before date")
+
+    google_end_date = end_date + timedelta(days=1)
+
+    service = get_google_service(db)
+    body = {
+        "summary": payload.title,
+        "description": payload.notes,
+        "start": {"date": payload.date.isoformat()},
+        "end": {"date": google_end_date.isoformat()},
+    }
+
+    updated = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+    normalized = _normalize_allday_event(updated)
+    if normalized is None:
+        raise HTTPException(status_code=500, detail="Google all-day event was updated but could not be normalized")
+    return normalized
 
 
 @router.delete("/google/events/{event_id}", status_code=204)
 def delete_google_event(event_id: str, db: Session = Depends(get_db)):
+    service = get_google_service(db)
+    service.events().delete(calendarId="primary", eventId=event_id).execute()
+
+
+@router.delete("/google/all-day-events/{event_id}", status_code=204)
+def delete_google_all_day_event(event_id: str, db: Session = Depends(get_db)):
     service = get_google_service(db)
     service.events().delete(calendarId="primary", eventId=event_id).execute()
 

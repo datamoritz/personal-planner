@@ -2,43 +2,65 @@
 
 interface DateTimePickerProps {
   date?: string;
+  endDate?: string;
   startTime?: string;
   endTime?: string;
   showTime?: boolean;
+  showEndDate?: boolean;
   onDateChange: (date: string | undefined) => void;
+  onEndDateChange?: (date: string | undefined) => void;
   onStartTimeChange?: (time: string) => void;
   onEndTimeChange?: (time: string) => void;
 }
 
 const inputCls =
-  'w-full min-w-0 bg-[var(--color-surface)] border border-[var(--color-popover-border)] rounded-xl px-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)] transition-colors';
+  'ui-input';
 
 export function DateTimePicker({
   date,
+  endDate,
   startTime,
   endTime,
   showTime = false,
+  showEndDate = false,
   onDateChange,
+  onEndDateChange,
   onStartTimeChange,
   onEndTimeChange,
 }: DateTimePickerProps) {
-  const hasTime = showTime || !!startTime;
-
   return (
-    <div className="flex flex-col gap-2.5">
-      {/* Date */}
-      <div>
-        <input
-          type="date"
-          value={date ?? ''}
-          onChange={(e) => onDateChange(e.target.value || undefined)}
-          className={`${inputCls} cursor-pointer`}
-        />
-      </div>
+    <div className="flex flex-col gap-3">
+      {showEndDate ? (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5">
+          <input
+            type="date"
+            aria-label="Start date"
+            value={date ?? ''}
+            onChange={(e) => onDateChange(e.target.value || undefined)}
+            className={`${inputCls} cursor-pointer`}
+          />
+          <span className="px-0.5 text-[var(--color-text-muted)] text-sm leading-none select-none">–</span>
+          <input
+            type="date"
+            aria-label="End date"
+            value={endDate ?? ''}
+            onChange={(e) => onEndDateChange?.(e.target.value || undefined)}
+            className={`${inputCls} cursor-pointer`}
+          />
+        </div>
+      ) : (
+        <div>
+          <input
+            type="date"
+            value={date ?? ''}
+            onChange={(e) => onDateChange(e.target.value || undefined)}
+            className={`${inputCls} cursor-pointer`}
+          />
+        </div>
+      )}
 
-      {/* Time */}
-      {hasTime && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+      {showTime && (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5">
           <input
             type="time"
             value={startTime ?? ''}

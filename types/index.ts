@@ -69,12 +69,15 @@ export interface CalendarEntry {
   /** Backend integer PK — populated after first successful API sync */
   backendId?: number;
   title: string;
+  startDate?: string;   // phase 1 multi-day support; current UI still uses `date` as start date
+  endDate?: string;
   date: string;         // 'YYYY-MM-DD'
   startTime: string;    // 'HH:MM'
   endTime: string;      // 'HH:MM'
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  syncState?: 'pending';
 }
 
 // ─── All-Day Event (Google Calendar, read-only) ────────────────────────────
@@ -82,11 +85,13 @@ export interface CalendarEntry {
 export interface AllDayEvent {
   id: string;
   title: string;
-  date: string;         // 'YYYY-MM-DD' — multi-day events arrive as one entry per day
+  date: string;         // inclusive start date
+  endDate?: string;     // inclusive end date
   source: 'google';
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  syncState?: 'pending';
 }
 
 // ─── Recurrent Task ────────────────────────────────────────────────────────
@@ -126,8 +131,11 @@ export interface PlannerState {
   currentDate: string;
 
   tasks: Task[];
-  calendarEntries: CalendarEntry[];
   recurrentTasks: RecurrentTask[];
   projects: Project[];
   tags: Tag[];
 }
+
+export type PlannerViewMode = 'day' | 'week' | 'month';
+export type MonthViewMode = 'events' | 'tasks';
+export type MonthTaskLayout = 'grid' | 'expanded';

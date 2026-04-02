@@ -34,7 +34,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
         value={uncertaintyNotes}
         onChange={(e) => setUncertaintyNotes(e.target.value)}
         placeholder="What is uncertain? Dump everything here…"
-        className="flex-1 w-full resize-none bg-transparent text-[13px] text-[var(--color-text-primary)] leading-relaxed placeholder:text-[var(--color-text-muted)] outline-none px-4 py-3"
+        className="flex-1 w-full resize-none bg-transparent text-[15px] text-[var(--color-text-primary)] leading-[1.8] placeholder:text-[var(--color-text-muted)] outline-none px-5 py-4"
         style={{ fontFamily: 'inherit' }}
       />
     );
@@ -74,7 +74,12 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
   };
 
   const toggleSelect = (i: number) =>
-    setSelected((prev) => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next; });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   const nonEmptySelected = [...selected].filter((i) => lines[i]?.trim());
   const hasSelection = nonEmptySelected.length > 1;
@@ -82,7 +87,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
   // ── Action mode: rendered lines ───────────────────────────────────────────
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-0.5">
+      <div ref={containerRef} className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-1">
         {lines.map((line, i) => {
           const isEmpty    = line.trim() === '';
           const isDone     = doneLines.has(i);
@@ -93,7 +98,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
             <div
               key={i}
               className={[
-                'group relative flex items-start gap-1.5 min-h-[22px] rounded px-1 -mx-1 transition-colors',
+                'group relative flex items-start gap-2 min-h-[24px] rounded-xl px-2 -mx-2 transition-colors',
                 isSelected ? 'bg-[var(--color-accent-subtle)]' : '',
               ].join(' ')}
             >
@@ -120,7 +125,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
 
               <span
                 className={[
-                  'flex-1 text-[13px] leading-relaxed whitespace-pre-wrap break-words',
+                  'flex-1 text-[15px] leading-[1.8] whitespace-pre-wrap break-words',
                   isDone ? 'line-through text-[var(--color-text-muted)]' : 'text-[var(--color-text-primary)]',
                   isEmpty ? 'text-transparent select-none' : '',
                 ].join(' ')}
@@ -137,7 +142,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
                     const cont = containerRef.current!.getBoundingClientRect();
                     setMenu({ lineIndex: i, anchor: { top: btn.bottom - cont.top + 4, left: btn.left - cont.left } });
                   }}
-                  className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)] transition-colors opacity-0 group-hover:opacity-100 mt-0.5"
+                  className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)] transition-colors opacity-0 group-hover:opacity-100 mt-0.5"
                 >
                   <Plus size={11} strokeWidth={2.5} />
                 </button>
@@ -145,7 +150,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
 
               {isMenuOpen && (
                 <div
-                  className="absolute z-50 bg-[var(--color-canvas)] border border-[var(--color-border)] rounded-xl shadow-xl py-1 min-w-[210px]"
+                  className="absolute z-50 ui-floating-surface py-1.5 min-w-[220px]"
                   style={{ top: menu.anchor.top, left: Math.max(0, menu.anchor.left - 170) }}
                 >
                   <MenuItem icon={<ListTodo size={12} />}     label="Add to Backlog"        onClick={() => executeAction([i], 'backlog')} />
@@ -170,7 +175,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
 
       {/* Multi-select action bar */}
       {hasSelection && (
-        <div className="flex-shrink-0 border-t border-[#fde68a] bg-[#fef9c3] px-4 py-2 flex items-center gap-2 flex-wrap">
+        <div className="flex-shrink-0 border-t border-[#f5df93] bg-[#fff7c7] px-5 py-3 flex items-center gap-2.5 flex-wrap">
           <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mr-1">
             {nonEmptySelected.length} selected:
           </span>
@@ -222,7 +227,7 @@ function BulkButton({ icon, label, onClick, disabled = false }: {
     <button
       onClick={disabled ? undefined : onClick}
       className={[
-        'flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] transition-colors',
+        'ui-chip border transition-colors',
         disabled
           ? 'border-[var(--color-border)] text-[var(--color-text-muted)] opacity-40 cursor-not-allowed'
           : 'border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white cursor-pointer',

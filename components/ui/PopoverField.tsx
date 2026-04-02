@@ -9,8 +9,8 @@ export function PopoverField({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
+    <div className="flex flex-col gap-1.5">
+      <span className="ui-section-label">
         {label}
       </span>
       {children}
@@ -25,15 +25,17 @@ export function PopoverInput({
   placeholder,
   multiline = false,
   className = '',
+  minHeight,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   multiline?: boolean;
   className?: string;
+  minHeight?: number;
 }) {
   const base =
-    'w-full bg-[var(--color-surface)] border border-[var(--color-popover-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none focus:border-[var(--color-accent)] transition-colors ' +
+    'ui-input ' +
     className;
 
   if (multiline) {
@@ -43,7 +45,7 @@ export function PopoverInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        style={{ resize: 'vertical', minHeight: '72px' }}
+        style={{ resize: 'vertical', minHeight: `${minHeight ?? 72}px` }}
         className={base}
       />
     );

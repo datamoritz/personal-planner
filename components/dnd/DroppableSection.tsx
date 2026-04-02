@@ -8,6 +8,7 @@ interface DroppableSectionProps {
   itemIds: string[];
   children: React.ReactNode;
   className?: string;
+  onDoubleClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 /**
@@ -19,6 +20,7 @@ export function DroppableSection({
   itemIds,
   children,
   className = '',
+  onDoubleClick,
 }: DroppableSectionProps) {
   const { setNodeRef } = useDroppable({
     id: `drop-${containerId}`,
@@ -26,7 +28,7 @@ export function DroppableSection({
   });
 
   return (
-    <div ref={setNodeRef} className={className}>
+    <div ref={setNodeRef} className={className} onDoubleClick={onDoubleClick}>
       <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
         {children}
       </SortableContext>

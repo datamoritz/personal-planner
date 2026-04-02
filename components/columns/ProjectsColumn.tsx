@@ -3,14 +3,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronsLeft, Plus } from 'lucide-react';
 import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
   useSortable,
   SortableContext,
   verticalListSortingStrategy,
@@ -28,7 +20,7 @@ import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import type { Project, Tag, Task } from '@/types';
 
 function SortableProjectCard({
-  project, tasks, tags, onAddSubtask, onToggleTask, onDoubleClickTask, onFinish, onDelete, onSetTag, isNoteSelected, onSelectForNotes,
+  project, tasks, tags, onAddSubtask, onToggleTask, onDoubleClickTask, onFinish, onDelete, onSetTag, isNoteSelected, onSelectForNotes, expanded, onToggleExpanded,
 }: {
   project: Project; tasks: Task[]; tags: Tag[];
   onAddSubtask: (pid: string, title: string) => void;
@@ -39,6 +31,8 @@ function SortableProjectCard({
   onSetTag: (projectId: string, tagId: string | undefined) => void;
   isNoteSelected: boolean;
   onSelectForNotes: () => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: project.id,
@@ -74,6 +68,8 @@ function SortableProjectCard({
         onFinish={onFinish}
         onDelete={onDelete}
         onSetTag={onSetTag}
+        expanded={expanded}
+        onToggleExpanded={onToggleExpanded}
       />
     </div>
   );
@@ -87,15 +83,9 @@ interface ProjectsColumnProps {
 }
 
 export function ProjectsColumn({ onCollapse, highlightSelection = false }: ProjectsColumnProps) {
-  const { projects, tasks, tags, addProject, deleteProject, addTask, toggleTask, finishProject, reorderProject,
-    setProjectTag, activeTagFilter, selectedProjectIdForNotes, setSelectedProjectIdForNotes } = usePlannerStore();
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (over && active.id !== over.id) reorderProject(String(active.id), String(over.id));
-  }
+  const { projects, tasks, tags, addProject, deleteProject, addTask, toggleTask, finishProject,
+    setProjectTag, activeTagFilter, selectedProjectIdForNotes, setSelectedProjectIdForNotes,
+    expandedProjectIds, toggleProjectExpanded } = usePlannerStore();
 
   const allActive = selectActiveProjects(projects);
   const active = activeTagFilter
@@ -109,33 +99,48 @@ export function ProjectsColumn({ onCollapse, highlightSelection = false }: Proje
 
   return (
     <div className="flex flex-col h-full overflow-hidden border-r border-[var(--color-border)]">
-      {/* Column header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
-          Projects
-        </span>
+      <div className="flex h-[52px] items-center justify-end px-2 border-b border-[var(--color-border)] flex-shrink-0">
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title="Collapse Projects"
+            className="ui-icon-button"
+          >
+            <ChevronsLeft size={12} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between px-3 py-2.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className="ui-section-label">
+            Projects
+          </span>
+          {active.length > 0 && (
+            <span className="text-[9px] font-semibold w-4 h-4 flex items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-muted)]">
+              {active.length}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => setAddingProject(true)}
             title="New project"
-            className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+            className="ui-icon-button"
           >
             <Plus size={13} strokeWidth={2.5} />
           </button>
-          {onCollapse && (
-            <button
-              onClick={onCollapse}
-              title="Collapse Projects"
-              className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
-            >
-              <ChevronsLeft size={12} strokeWidth={2.5} />
-            </button>
-          )}
         </div>
       </div>
 
       {/* Active projects */}
-      <div className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-2 min-h-0">
+      <div
+        className="flex-1 overflow-y-auto px-3 pb-3 flex flex-col gap-2.5 min-h-0"
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement) !== e.currentTarget) return;
+          setAddingProject(true);
+        }}
+      >
         {addingProject && (
           <InlineTaskInput
             placeholder="Project name…"
@@ -150,29 +155,29 @@ export function ProjectsColumn({ onCollapse, highlightSelection = false }: Proje
           </p>
         )}
 
-        <DndContext id="projects-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={active.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-            {active.map((project) => (
-              <div key={project.id} className="relative group">
-                <SortableProjectCard
-                  project={project}
-                  tasks={selectProjectTasks(tasks, project.id)}
-                  tags={tags}
-                  onAddSubtask={(pid, title) => addTask({ title, location: 'project', projectId: pid })}
-                  onToggleTask={toggleTask}
-                  onDoubleClickTask={(id, anchor) => setPopover({ id, anchor })}
-                  onFinish={finishProject}
-                  onDelete={deleteProject}
-                  onSetTag={setProjectTag}
-                  isNoteSelected={highlightSelection && selectedProjectIdForNotes === project.id}
-                  onSelectForNotes={() => setSelectedProjectIdForNotes(
-                    selectedProjectIdForNotes === project.id ? null : project.id
-                  )}
-                />
-              </div>
-            ))}
-          </SortableContext>
-        </DndContext>
+        <SortableContext items={active.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+          {active.map((project) => (
+            <div key={project.id} className="relative group">
+              <SortableProjectCard
+                project={project}
+                tasks={selectProjectTasks(tasks, project.id)}
+                tags={tags}
+                onAddSubtask={(pid, title) => addTask({ title, location: 'project', projectId: pid })}
+                onToggleTask={toggleTask}
+                onDoubleClickTask={(id, anchor) => setPopover({ id, anchor })}
+                onFinish={finishProject}
+                onDelete={deleteProject}
+                onSetTag={setProjectTag}
+                isNoteSelected={highlightSelection && selectedProjectIdForNotes === project.id}
+                onSelectForNotes={() => setSelectedProjectIdForNotes(
+                  selectedProjectIdForNotes === project.id ? null : project.id
+                )}
+                expanded={expandedProjectIds.includes(project.id)}
+                onToggleExpanded={() => toggleProjectExpanded(project.id)}
+              />
+            </div>
+          ))}
+        </SortableContext>
       </div>
 
       {/* Finished projects */}
@@ -180,21 +185,21 @@ export function ProjectsColumn({ onCollapse, highlightSelection = false }: Proje
         <div className="border-t border-[var(--color-border)] flex-shrink-0">
           <button
             onClick={() => setFinishedExpanded((v) => !v)}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
           >
             {finishedExpanded
               ? <ChevronDown size={12} strokeWidth={2.5} />
               : <ChevronRight size={12} strokeWidth={2.5} />}
-            <span className="uppercase tracking-widest font-semibold">Finished</span>
+            <span className="ui-section-label text-inherit">Finished</span>
             <span className="ml-auto text-[10px]">{finished.length}</span>
           </button>
 
           {finishedExpanded && (
-            <div className="px-3 pb-3 flex flex-col gap-1.5">
+            <div className="px-3 pb-3 flex flex-col gap-2">
               {finished.map((p) => (
                 <div
                   key={p.id}
-                  className="px-3 py-2 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-xs text-[var(--color-text-muted)] line-through"
+                  className="px-3 py-2 rounded-[0.9rem] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[12px] text-[var(--color-text-muted)] line-through"
                 >
                   {p.title}
                 </div>

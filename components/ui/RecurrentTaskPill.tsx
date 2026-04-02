@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { format } from 'date-fns';
 import { RefreshCw } from 'lucide-react';
 import type { RecurrentTask, RecurrenceFrequency } from '@/types';
@@ -28,8 +28,11 @@ interface RecurrentTaskPillProps {
 }
 
 export function RecurrentTaskPill({ task, hasActiveInstance = false, onDoubleClick }: RecurrentTaskPillProps) {
-  const [today, setToday] = useState('');
-  useEffect(() => { setToday(format(new Date(), 'yyyy-MM-dd')); }, []);
+  const today = useSyncExternalStore(
+    () => () => {},
+    () => format(new Date(), 'yyyy-MM-dd'),
+    () => '',
+  );
   // Highlight only when due AND no pending instance has been placed yet
   const isDue = today !== '' && task.nextDueDate <= today && !hasActiveInstance;
 
@@ -37,14 +40,14 @@ export function RecurrentTaskPill({ task, hasActiveInstance = false, onDoubleCli
     <div
       onDoubleClick={(e) => onDoubleClick?.(task.id, e.currentTarget)}
       className={[
-        'item-enter group flex items-center gap-2.5 px-3 py-2 rounded-full cursor-pointer select-none',
+        'item-enter group flex items-center gap-2 px-2.5 py-2 rounded-[1rem] cursor-pointer select-none',
         'border transition-all duration-150',
         isDue
           ? 'bg-[var(--color-accent-subtle)] border-[var(--color-accent)]'
           : 'border-[var(--color-border)] bg-[var(--color-surface-raised)]',
       ].join(' ')}
     >
-      <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+      <div className="flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center">
         <RefreshCw
           size={12}
           className={isDue ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
@@ -52,7 +55,7 @@ export function RecurrentTaskPill({ task, hasActiveInstance = false, onDoubleCli
         />
       </div>
 
-      <span className="flex-1 text-sm text-[var(--color-text-primary)] leading-tight truncate">
+      <span className="flex-1 text-[14px] text-[var(--color-text-primary)] leading-tight truncate">
         {task.title}
       </span>
 

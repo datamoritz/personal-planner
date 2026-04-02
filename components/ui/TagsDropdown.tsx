@@ -1,19 +1,19 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useState } from 'react';
+import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 
 // Preset light colors user can pick from
 const COLOR_OPTIONS: { color: string; colorDark: string; label: string }[] = [
-  { color: '#dbeafe', colorDark: '#3b82f6', label: 'Blue' },
-  { color: '#ede9fe', colorDark: '#8b5cf6', label: 'Purple' },
-  { color: '#dcfce7', colorDark: '#22c55e', label: 'Green' },
-  { color: '#fef9c3', colorDark: '#eab308', label: 'Yellow' },
-  { color: '#ffedd5', colorDark: '#f97316', label: 'Orange' },
-  { color: '#fce7f3', colorDark: '#ec4899', label: 'Pink' },
-  { color: '#cffafe', colorDark: '#06b6d4', label: 'Cyan' },
-  { color: '#f1f5f9', colorDark: '#64748b', label: 'Slate' },
+  { color: '#d8f2f8', colorDark: '#0891b2', label: 'Cyan' },
+  { color: '#fef3c7', colorDark: '#d97706', label: 'Amber' },
+  { color: '#e8defa', colorDark: '#7c3aed', label: 'Lilac' },
+  { color: '#dbeafe', colorDark: '#2563eb', label: 'Blue' },
+  { color: '#ffe3ec', colorDark: '#db2777', label: 'Rose' },
+  { color: '#ddf5e8', colorDark: '#15803d', label: 'Sage' },
+  { color: '#eef2ff', colorDark: '#4f46e5', label: 'Indigo' },
+  { color: '#e8eef5', colorDark: '#64748b', label: 'Slate' },
 ];
 
 interface TagsDropdownProps {
@@ -52,7 +52,7 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
   const isFormMode = mode === 'add' || typeof mode === 'object';
 
   return (
-    <div className="flex flex-col w-max">
+    <div className="flex w-[212px] flex-col">
       {/* Tag list */}
       {!isFormMode && (
         <>
@@ -60,7 +60,7 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
           <button
             onClick={() => { setActiveTagFilter(null); onClose(); }}
             className={[
-              'flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left transition-colors',
+              'flex items-center gap-2.5 w-full px-3.5 py-2 text-[13px] text-left rounded-xl transition-colors',
               activeTagFilter === null
                 ? 'font-semibold text-[var(--color-accent)]'
                 : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] cursor-pointer',
@@ -74,13 +74,13 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
           <div className="my-1 border-t border-[var(--color-border-subtle)]" />
 
           {tags.map((tag) => (
-            <div key={tag.id} className="group flex items-center gap-2 px-3 py-1.5">
+            <div key={tag.id} className="group flex items-center gap-2.5 px-1">
               <button
                 onClick={() => { setActiveTagFilter(activeTagFilter === tag.id ? null : tag.id); onClose(); }}
-                className="flex items-center gap-2 flex-1 text-[12px] text-left cursor-pointer"
+                className="flex items-center gap-2.5 flex-1 rounded-xl px-2.5 py-2 text-[13px] text-left cursor-pointer hover:bg-[var(--color-surface-raised)] transition-colors"
               >
                 <span
-                  className="w-3 h-3 rounded-full flex-shrink-0 border"
+                  className="w-3.5 h-3.5 rounded-full flex-shrink-0 border"
                   style={{ background: tag.color, borderColor: tag.colorDark }}
                 />
                 <span className="text-[var(--color-text-primary)]">{tag.name}</span>
@@ -88,13 +88,13 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
               </button>
               <button
                 onClick={() => startEdit(tag.id)}
-                className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-opacity cursor-pointer"
+                className="ui-icon-button opacity-0 group-hover:opacity-70 hover:!opacity-100"
               >
                 <Pencil size={11} strokeWidth={2} />
               </button>
               <button
                 onClick={() => deleteTag(tag.id)}
-                className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-[var(--color-text-muted)] hover:text-red-500 transition-opacity cursor-pointer"
+                className="ui-icon-button ui-icon-button--danger opacity-0 group-hover:opacity-70 hover:!opacity-100"
               >
                 <Trash2 size={11} strokeWidth={2} />
               </button>
@@ -109,7 +109,7 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
 
           <button
             onClick={() => { setName(''); setPickedColor(COLOR_OPTIONS[0]); setMode('add'); }}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
+            className="flex items-center gap-2.5 w-full rounded-xl px-3.5 py-2 text-[13px] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer"
           >
             <Plus size={12} strokeWidth={2.5} /> New tag
           </button>
@@ -118,8 +118,8 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
 
       {/* Add / Edit form */}
       {isFormMode && (
-        <div className="flex flex-col gap-3 p-3 min-w-[200px]">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
+        <div className="flex flex-col gap-3.5 p-3.5 min-w-[220px]">
+          <p className="ui-section-label">
             {mode === 'add' ? 'New tag' : 'Edit tag'}
           </p>
           <input
@@ -128,9 +128,9 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setMode('list'); }}
             placeholder="Tag name…"
-            className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-raised)] text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
+            className="ui-input text-[12px]"
           />
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {COLOR_OPTIONS.map((opt) => (
               <button
                 key={opt.color}
@@ -148,7 +148,7 @@ export function TagsDropdown({ onClose }: TagsDropdownProps) {
           {/* Preview */}
           <div className="flex items-center gap-1.5">
             <span
-              className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border"
+              className="ui-chip border"
               style={{ background: pickedColor.color, borderColor: pickedColor.colorDark, color: pickedColor.colorDark }}
             >
               {name || 'Preview'}

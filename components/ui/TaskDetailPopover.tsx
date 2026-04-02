@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Sparkles, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { X } from 'lucide-react';
 import { DetailPopover } from './DetailPopover';
 import { PopoverField, PopoverInput } from './PopoverField';
 import { DateTimePicker } from './DateTimePicker';
+import * as api from '@/lib/api';
 
 interface TaskDetailPopoverProps {
   taskId: string;
@@ -23,8 +24,9 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
   const [date,      setDate]      = useState(task?.date);
   const [startTime, setStartTime] = useState(task?.startTime ?? '');
   const [endTime,   setEndTime]   = useState(task?.endTime   ?? '');
+  const [emojiLoading, setEmojiLoading] = useState(false);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (!task) {
       onClose();
       return;
@@ -38,7 +40,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
     if (endTime      !== (task.endTime   ?? ''))   updates.endTime   = endTime   || undefined;
     if (Object.keys(updates).length) updateTask(taskId, updates);
     onClose();
-  };
+  }, [date, endTime, notes, onClose, startTime, task, taskId, title, updateTask]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -58,22 +60,49 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
   if (!task) return null;
 
   const showTime = task.location === 'myday' || !!task.startTime;
+  const handleSuggestEmoji = async () => {
+    const baseTitle = title.trim();
+    if (!baseTitle || emojiLoading) return;
+
+    setEmojiLoading(true);
+    try {
+      const emoji = await api.suggestEmoji(baseTitle);
+      setTitle((current) => current.startsWith(`${emoji} `) ? current : `${emoji} ${current.trim()}`);
+    } catch (err) {
+      console.error('[suggestEmoji]', err);
+    } finally {
+      setEmojiLoading(false);
+    }
+  };
 
   return (
     <DetailPopover
       anchor={anchor}
       onClose={handleClose}
+      className="w-[24rem]"
       headerActions={(
-        <button
-          onClick={() => { deleteTask(taskId); onClose(); }}
-          className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)] transition-colors cursor-pointer"
-          aria-label="Delete task"
-        >
-          <Trash2 size={12} strokeWidth={2.25} />
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={handleSuggestEmoji}
+            disabled={!title.trim() || emojiLoading}
+            className="ui-icon-button text-[var(--color-text-muted)] disabled:opacity-40"
+            aria-label="Suggest emoji"
+            title="Suggest emoji"
+          >
+            <Sparkles size={12} strokeWidth={2.2} />
+          </button>
+          <button
+            onClick={() => { deleteTask(taskId); onClose(); }}
+            className="ui-icon-button ui-icon-button--danger"
+            aria-label="Delete task"
+          >
+            <Trash2 size={12} strokeWidth={2.25} />
+          </button>
+        </>
       )}
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {/* Tag picker */}
         {tags.length > 0 && (
           <PopoverField label="Tag">
@@ -82,7 +111,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
                 <button
                   key={tag.id}
                   onClick={() => setTaskTag(taskId, task.tagId === tag.id ? undefined : tag.id)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-all cursor-pointer hover:opacity-90"
+                  className="ui-chip border cursor-pointer hover:opacity-90"
                   style={{
                     background: tag.color,
                     borderColor: task.tagId === tag.id ? tag.colorDark : 'transparent',

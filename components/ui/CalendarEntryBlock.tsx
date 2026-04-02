@@ -22,6 +22,23 @@ interface CalendarEntryBlockProps {
   className?: string;
 }
 
+function formatDisplayTime(time: string): string {
+  const minutes = timeToMinutes(time);
+  if (minutes < 24 * 60) return time;
+  return minutesToTime(minutes % (24 * 60));
+}
+
+function getDurationMinutes(startTime: string, endTime: string): number {
+  const startMinutes = timeToMinutes(startTime);
+  let endMinutes = timeToMinutes(endTime);
+
+  if (endMinutes <= startMinutes) {
+    endMinutes += 24 * 60;
+  }
+
+  return endMinutes - startMinutes;
+}
+
 export function CalendarEntryBlock({
   entry,
   style,
@@ -50,8 +67,10 @@ export function CalendarEntryBlock({
 
     const startY     = e.clientY;
     const startX     = e.clientX;
-    const initialTop = blockRef.current!.offsetTop;
-    const duration   = timeToMinutes(entry.endTime) - timeToMinutes(entry.startTime);
+    const initialTop = blockRef.current
+      ? parseFloat(window.getComputedStyle(blockRef.current).top) || blockRef.current.offsetTop
+      : 0;
+    const duration   = getDurationMinutes(entry.startTime, entry.endTime);
     let currentTop   = initialTop; // track in closure — avoids DOM read on pointerup
     let hasMoved     = false;
 
@@ -62,7 +81,11 @@ export function CalendarEntryBlock({
       if (!hasMoved) return;
       currentTop = Math.max(0, initialTop + dy);
       if (blockRef.current) {
-        blockRef.current.style.top     = `${currentTop}px`;
+        if (verticalOnly) {
+          blockRef.current.style.top = `${currentTop}px`;
+        } else {
+          blockRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+        }
         blockRef.current.style.zIndex  = '30';
         blockRef.current.style.opacity = '0.85';
         blockRef.current.style.cursor  = 'grabbing';
@@ -77,6 +100,7 @@ export function CalendarEntryBlock({
       if (hasMoved) {
         if (blockRef.current) {
           blockRef.current.style.top     = '';
+          blockRef.current.style.transform = '';
           blockRef.current.style.zIndex  = '';
           blockRef.current.style.opacity = '';
           blockRef.current.style.cursor  = '';
@@ -103,8 +127,11 @@ export function CalendarEntryBlock({
     captureTarget.setPointerCapture(e.pointerId);
 
     const startY         = e.clientY;
-    const initialEndMins = timeToMinutes(entry.endTime);
-    const startMins      = timeToMinutes(entry.startTime);
+    let initialEndMins = timeToMinutes(entry.endTime);
+    const startMins    = timeToMinutes(entry.startTime);
+    if (initialEndMins <= startMins) {
+      initialEndMins += 24 * 60;
+    }
     const initialHeight  = blockRef.current?.getBoundingClientRect().height ?? 0;
     let liveHeight       = initialHeight;
 
@@ -141,14 +168,14 @@ export function CalendarEntryBlock({
         e.stopPropagation();
         onDoubleClick?.(entry.id, e.currentTarget);
       }}
-      style={{ ...style, boxShadow: 'var(--shadow-card)' }}
+      style={{ ...style, boxShadow: 'none' }}
       className={[
         `absolute left-1 right-1 rounded-lg ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden transition-colors`,
         readOnly
-          ? `border border-[#10b981]/50 bg-[#10b981]/10 ${canReposition ? 'cursor-grab' : canOpen ? 'cursor-pointer' : 'cursor-default'}`
+          ? `bg-[var(--color-google-event)] ${canReposition ? 'cursor-grab' : canOpen ? 'cursor-pointer' : 'cursor-default'}`
           : [
-              'border border-[var(--color-accent)] bg-[var(--color-accent-subtle)]',
-              'hover:bg-[rgba(124,106,247,0.2)]',
+              'bg-[var(--color-accent-subtle)]',
+              'hover:bg-[color-mix(in_srgb,var(--color-accent-subtle)_88%,white_12%)]',
               canReposition ? 'cursor-grab' : 'cursor-pointer',
             ].join(' '),
         className,
@@ -156,15 +183,15 @@ export function CalendarEntryBlock({
     >
       <p className={[
         `${compact ? 'text-[10px]' : 'text-xs'} font-semibold leading-tight truncate`,
-        readOnly ? 'text-[#10b981]' : 'text-[var(--color-accent)]',
+        readOnly ? 'text-[var(--color-google-event-text)]' : 'text-[var(--color-accent)]',
       ].join(' ')}>
         {entry.title}
       </p>
       <p className={[
         `${compact ? 'text-[9px]' : 'text-[10px]'} mt-0.5`,
-        readOnly ? 'text-[#10b981]/70' : 'text-[var(--color-text-secondary)]',
+        readOnly ? 'text-[color-mix(in_srgb,var(--color-google-event-text)_72%,var(--color-text-secondary))]' : 'text-[var(--color-text-secondary)]',
       ].join(' ')}>
-        {entry.startTime} – {entry.endTime}
+        {formatDisplayTime(entry.startTime)} – {formatDisplayTime(entry.endTime)}
       </p>
 
       {canResize && (
@@ -172,7 +199,7 @@ export function CalendarEntryBlock({
           onPointerDown={handleResizePointerDown}
           className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group"
         >
-          <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[#10b981]' : 'bg-[var(--color-accent)]'} opacity-40 group-hover:opacity-100 transition-opacity`} />
+          <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[var(--color-google-event-text)]' : 'bg-[var(--color-accent)]'} opacity-30 group-hover:opacity-70 transition-opacity`} />
         </div>
       )}
     </div>

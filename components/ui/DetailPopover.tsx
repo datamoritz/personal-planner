@@ -12,7 +12,7 @@ import {
   useInteractions,
   useRole,
 } from '@floating-ui/react';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface DetailPopoverProps {
@@ -23,6 +23,7 @@ interface DetailPopoverProps {
   className?: string;   // overrides the default w-72
   noPadding?: boolean;  // removes the p-4 content wrapper
   headerActions?: React.ReactNode;
+  hideCloseButton?: boolean;
 }
 
 export function DetailPopover({
@@ -33,6 +34,7 @@ export function DetailPopover({
   className,
   noPadding,
   headerActions,
+  hideCloseButton = false,
 }: DetailPopoverProps) {
   const { refs, floatingStyles, context } = useFloating({
     open: true,
@@ -44,6 +46,9 @@ export function DetailPopover({
   const dismiss = useDismiss(context);
   const role = useRole(context, { role: 'dialog' });
   const { getFloatingProps } = useInteractions([dismiss, role]);
+  const setFloating = useCallback((node: HTMLDivElement | null) => {
+    refs.setFloating(node);
+  }, [refs]);
 
   useEffect(() => {
     refs.setReference(anchor);
@@ -53,40 +58,44 @@ export function DetailPopover({
     <FloatingPortal>
       <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
         <div
-          ref={refs.setFloating}
+          ref={setFloating}
           style={{ ...floatingStyles, zIndex: 50 }}
           {...getFloatingProps()}
-          className={`${className ?? 'w-72'} rounded-xl border border-[var(--color-popover-border)] bg-[var(--color-popover)] shadow-2xl`}
+          className={`${className ?? 'w-72'} ui-floating-surface bg-[var(--color-popover)]`}
         >
           {/* Header */}
           {title && (
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-popover-border)]">
-              <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--color-popover-border)]">
+              <span className="ui-section-label">
                 {title}
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 {headerActions}
-                <button
-                  onClick={onClose}
-                  className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-                >
-                  <X size={12} strokeWidth={2.5} />
-                </button>
+                {!hideCloseButton && (
+                  <button
+                    onClick={onClose}
+                    className="ui-icon-button"
+                  >
+                    <X size={12} strokeWidth={2.5} />
+                  </button>
+                )}
               </div>
             </div>
           )}
           {!title && (
-            <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
+            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
               {headerActions}
-              <button
-                onClick={onClose}
-                className="w-5 h-5 flex items-center justify-center rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)] transition-colors cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
-              >
-                <X size={12} strokeWidth={2.5} />
-              </button>
+              {!hideCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="ui-icon-button"
+                >
+                  <X size={12} strokeWidth={2.5} />
+                </button>
+              )}
             </div>
           )}
-          <div className={noPadding ? '' : 'p-4'}>{children}</div>
+          <div className={noPadding ? '' : 'p-4 md:p-[1.125rem]'}>{children}</div>
         </div>
       </FloatingFocusManager>
     </FloatingPortal>
