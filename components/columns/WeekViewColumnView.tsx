@@ -3,7 +3,7 @@
 import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { useCallback } from 'react';
-import { useDroppable } from '@dnd-kit/core';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { usePlannerStore } from '@/store/usePlannerStore';
@@ -68,6 +68,93 @@ function CalendarDayDropZone({
   return (
     <div ref={combined} className={className} onDoubleClick={onDoubleClick}>
       {children}
+    </div>
+  );
+}
+
+function createClickAnchor(x: number, y: number): HTMLElement {
+  const anchor = document.createElement('div');
+  anchor.style.position = 'fixed';
+  anchor.style.left = `${x}px`;
+  anchor.style.top = `${y}px`;
+  anchor.style.width = '1px';
+  anchor.style.height = '1px';
+  anchor.style.pointerEvents = 'none';
+  anchor.style.opacity = '0';
+  anchor.dataset.popoverAnchor = 'temporary';
+  document.body.appendChild(anchor);
+  return anchor;
+}
+
+function WeekAllDayDropZone({
+  dateStr,
+  onDoubleClick,
+  children,
+}: {
+  dateStr: string;
+  onDoubleClick: (e: React.MouseEvent<HTMLDivElement>) => void;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `week-all-day-${dateStr}`,
+    data: { containerId: 'week-all-day' },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      onDoubleClick={onDoubleClick}
+      className={[
+        'flex-1 flex flex-col gap-0.5 p-0.5 border-l border-[var(--color-border-grid)] min-w-0 transition-colors',
+        isOver ? 'bg-[color-mix(in_srgb,var(--color-google-event)_18%,var(--color-center-col)_82%)]' : '',
+      ].join(' ')}
+    >
+      {children}
+    </div>
+  );
+}
+
+function WeekAllDayEvent({
+  event,
+  dateStr,
+  onDoubleClick,
+  isStart,
+  isEnd,
+}: {
+  event: { id: string; title: string; notes?: string | null; syncState?: 'pending' };
+  dateStr: string;
+  onDoubleClick: (id: string, anchor: HTMLElement) => void;
+  isStart: boolean;
+  isEnd: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: event.id,
+    data: { type: 'google-all-day', containerId: `week-all-day-${dateStr}` },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        opacity: isDragging ? 0.84 : event.syncState === 'pending' ? 0.9 : 1,
+        boxShadow: isDragging ? '0 8px 20px rgba(15, 23, 42, 0.12)' : undefined,
+        zIndex: isDragging ? 20 : undefined,
+      }}
+      {...attributes}
+      {...listeners}
+      title={event.notes ?? event.title}
+      className={[
+        'px-1 py-0.5 text-[10px] font-medium text-[#10b981] bg-[#10b981]/10 truncate select-none cursor-grab transition-shadow',
+        isStart ? 'rounded-l' : '-ml-1 rounded-l-none pl-2',
+        isEnd ? 'rounded-r' : '-mr-1 rounded-r-none pr-2',
+      ].join(' ')}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onDoubleClick(event.id, e.currentTarget);
+      }}
+    >
+      {event.title}
     </div>
   );
 }
@@ -161,7 +248,9 @@ interface WeekDayData {
 interface WeekViewColumnViewProps {
   weekDays: Date[];
   todayStr: string;
-  googleAllDayEvents: Array<{ id: string; date: string; title: string; notes?: string | null }>;
+  googleAllDayEvents: Array<{ id: string; date: string; endDate?: string; title: string; notes?: string | null }>;
+  onAllDayEventDoubleClick: (id: string, anchor: HTMLElement) => void;
+  onAllDayCellDoubleClick: (date: string, anchor: HTMLElement) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   timeOffset: number;
   timeLabel: string;
@@ -190,6 +279,8 @@ export function WeekViewColumnView({
   weekDays,
   todayStr,
   googleAllDayEvents,
+  onAllDayEventDoubleClick,
+  onAllDayCellDoubleClick,
   scrollRef,
   timeOffset,
   timeLabel,
@@ -248,28 +339,34 @@ export function WeekViewColumnView({
         })}
       </div>
 
-      {weekDays.some((d) => selectGoogleAllDayEventsForDate(googleAllDayEvents, format(d, 'yyyy-MM-dd')).length > 0) && (
-        <div className="flex flex-shrink-0 border-b border-[var(--color-border)]">
+      <div className="flex flex-shrink-0 border-b border-[var(--color-border)] min-h-[28px]">
           <div className="flex-shrink-0" style={{ width: TIME_GUTTER_W }} aria-hidden="true" />
           {weekDays.map((day) => {
             const ds = format(day, 'yyyy-MM-dd');
             const events = selectGoogleAllDayEventsForDate(googleAllDayEvents, ds);
             return (
-              <div key={ds} className="flex-1 flex flex-col gap-0.5 p-0.5 border-l border-[var(--color-border-grid)] min-w-0">
+              <WeekAllDayDropZone
+                key={ds}
+                dateStr={ds}
+                onDoubleClick={(e) => {
+                  if ((e.target as HTMLElement) !== e.currentTarget) return;
+                  onAllDayCellDoubleClick(ds, createClickAnchor(e.clientX, e.clientY));
+                }}
+              >
                 {events.map((ev) => (
-                  <div
+                  <WeekAllDayEvent
                     key={ev.id}
-                    title={ev.notes ?? ev.title}
-                    className="px-1 py-0.5 rounded text-[10px] font-medium text-[#10b981] bg-[#10b981]/10 truncate select-none"
-                  >
-                    {ev.title}
-                  </div>
+                    event={ev}
+                    dateStr={ds}
+                    onDoubleClick={onAllDayEventDoubleClick}
+                    isStart={ev.date === ds}
+                    isEnd={(ev.endDate ?? ev.date) === ds}
+                  />
                 ))}
-              </div>
+              </WeekAllDayDropZone>
             );
           })}
         </div>
-      )}
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex" style={{ height: GRID_HEIGHT }}>

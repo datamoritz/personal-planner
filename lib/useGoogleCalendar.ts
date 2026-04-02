@@ -11,7 +11,7 @@ export function useGoogleCalendar(): { refresh: () => void } {
   const currentDate               = usePlannerStore((s) => s.currentDate);
   const viewMode                  = usePlannerStore((s) => s.viewMode);
   const reconcileGoogleCalendarEntries = usePlannerStore((s) => s.reconcileGoogleCalendarEntries);
-  const setGoogleAllDayEvents     = usePlannerStore((s) => s.setGoogleAllDayEvents);
+  const reconcileGoogleAllDayEvents = usePlannerStore((s) => s.reconcileGoogleAllDayEvents);
   const setGoogleNeedsReconnect   = usePlannerStore((s) => s.setGoogleNeedsReconnect);
 
   // Stable abort controller ref — cancelled on each new fetch and on unmount
@@ -49,13 +49,13 @@ export function useGoogleCalendar(): { refresh: () => void } {
       const data: { timed: CalendarEntry[]; allDay: AllDayEvent[] } = await res.json();
       setGoogleNeedsReconnect(false);
       reconcileGoogleCalendarEntries(data.timed ?? []);
-      setGoogleAllDayEvents(data.allDay ?? []);
+      reconcileGoogleAllDayEvents(data.allDay ?? []);
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       console.error('[Google Calendar] fetch failed:', err);
       setGoogleNeedsReconnect(true);
     }
-  }, [currentDate, viewMode, reconcileGoogleCalendarEntries, setGoogleAllDayEvents, setGoogleNeedsReconnect]);
+  }, [currentDate, viewMode, reconcileGoogleAllDayEvents, reconcileGoogleCalendarEntries, setGoogleNeedsReconnect]);
 
   useEffect(() => {
     fetchEntries();

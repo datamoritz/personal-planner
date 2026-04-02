@@ -28,8 +28,6 @@ export function DateTimePicker({
   onStartTimeChange,
   onEndTimeChange,
 }: DateTimePickerProps) {
-  const hasTime = showTime || !!startTime;
-
   return (
     <div className="flex flex-col gap-3">
       {showEndDate ? (
@@ -61,7 +59,7 @@ export function DateTimePicker({
         </div>
       )}
 
-      {hasTime && (
+      {showTime && (
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2.5">
           <input
             type="time"

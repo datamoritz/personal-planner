@@ -68,6 +68,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
     setCurrentDate, setViewMode,
     toggleTask, addTask,
     updateTask, moveTask, applyOptimisticGoogleEntry, clearPendingGoogleMutation, setGoogleCalendarEntries,
+    applyOptimisticGoogleAllDayEvent, clearPendingGoogleAllDayMutation, setGoogleAllDayEvents,
   } = usePlannerStore();
   const { refresh: refreshGoogle } = useGoogleCalendar();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -128,6 +129,37 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
       clearPendingGoogleMutation(entry.id);
     });
   }, [applyOptimisticGoogleEntry, clearPendingGoogleMutation, refreshGoogle, setGoogleCalendarEntries, tz]);
+
+  const updateAllDayEventDate = useCallback((eventId: string, nextDate: string) => {
+    const prevEvents = usePlannerStore.getState().googleAllDayEvents;
+    const entry = prevEvents.find((event) => event.id === eventId);
+    if (!entry) return;
+
+    const startDate = entry.date;
+    const endDate = entry.endDate ?? startDate;
+    const dayDelta = differenceInCalendarDays(new Date(`${endDate}T00:00:00`), new Date(`${startDate}T00:00:00`));
+    const shiftedEndDate = format(addDays(new Date(`${nextDate}T00:00:00`), dayDelta), 'yyyy-MM-dd');
+    const optimisticEntry = {
+      ...entry,
+      date: nextDate,
+      endDate: shiftedEndDate,
+    };
+
+    applyOptimisticGoogleAllDayEvent(optimisticEntry);
+
+    api.patchGoogleAllDayEvent(entry.id, {
+      title: entry.title,
+      date: nextDate,
+      endDate: shiftedEndDate,
+      notes: entry.notes ?? undefined,
+    }).then(() => {
+      refreshGoogle();
+    }).catch((err) => {
+      console.error('[patchGoogleAllDayEvent week move]', err);
+      setGoogleAllDayEvents(prevEvents);
+      clearPendingGoogleAllDayMutation(entry.id);
+    });
+  }, [applyOptimisticGoogleAllDayEvent, clearPendingGoogleAllDayMutation, refreshGoogle, setGoogleAllDayEvents]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = DEFAULT_SCROLL_H * SLOT_HEIGHT;
@@ -190,6 +222,16 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
   useDndMonitor({
     onDragEnd(event: DragEndEvent) {
       const { active, over } = event;
+      const sourceData  = active.data.current as { type?: string; containerId?: string } | undefined;
+
+      if (sourceData?.type === 'google-all-day') {
+        const targetContainer = String(over?.id ?? over?.data.current?.containerId ?? '');
+        const targetDate = targetContainer.replace(/^week-all-day-/, '');
+        if (targetDate && targetContainer.startsWith('week-all-day-')) {
+          updateAllDayEventDate(String(active.id), targetDate);
+        }
+        return;
+      }
 
       // ── Case 1: pointer was inside a calendar column droppable ──
       if (over?.data.current?.containerId === 'week-cal') {
@@ -209,7 +251,6 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
 
       // ── Case 2: no droppable matched — fallback position check ──
       if (!over) {
-        const sourceData  = active.data.current as { type?: string; containerId?: string } | undefined;
         const containerId = sourceData?.containerId ?? '';
         const eligible    = containerId.startsWith('week-today-')
           || containerId === 'backlog'
@@ -317,6 +358,26 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
       weekDays={weekDays}
       todayStr={todayStr}
       googleAllDayEvents={googleAllDayEvents}
+      onAllDayEventDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+      onAllDayCellDoubleClick={(date, anchor) => {
+        api.createGoogleAllDayEvent({
+          title: 'New event',
+          date,
+        }).then((created) => {
+          setPopover({
+            type: 'google-entry',
+            id: created.id,
+            anchor,
+            isDraft: true,
+          });
+          refreshGoogle();
+        }).catch((err) => {
+          console.error('[createGoogleAllDayEvent week]', err);
+          if (anchor.dataset.popoverAnchor === 'temporary') {
+            anchor.remove();
+          }
+        });
+      }}
       scrollRef={scrollRef}
       timeOffset={timeOffset}
       timeLabel={timeLabel}

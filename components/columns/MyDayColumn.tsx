@@ -282,6 +282,25 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       onToggleTask={toggleTask}
       onTaskDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
       onGoogleEntryDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+      onAllDayEmptyDoubleClick={(anchor) => {
+        const rect = anchor.getBoundingClientRect();
+        const clickAnchor = createClickAnchor(rect.left, rect.top);
+        api.createGoogleAllDayEvent({
+          title: 'New event',
+          date: currentDate,
+        }).then((created) => {
+          setPopover({
+            type: 'google-entry',
+            id: created.id,
+            anchor: clickAnchor,
+            isDraft: true,
+          });
+          refreshGoogle();
+        }).catch((err) => {
+          console.error('[createGoogleAllDayEvent myday]', err);
+          clickAnchor.remove();
+        });
+      }}
       onTaskResizeEnd={(id, endTime) => updateTask(id, { endTime })}
       onTaskRepositionEnd={(id, startTime, endTime) => updateTask(id, { startTime, endTime })}
       onGoogleResizeEnd={(id, endTime) => updateGoogleEntry(id, { date: currentDate, endTime })}

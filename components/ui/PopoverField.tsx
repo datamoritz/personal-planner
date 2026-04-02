@@ -25,12 +25,14 @@ export function PopoverInput({
   placeholder,
   multiline = false,
   className = '',
+  minHeight,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   multiline?: boolean;
   className?: string;
+  minHeight?: number;
 }) {
   const base =
     'ui-input ' +
@@ -43,7 +45,7 @@ export function PopoverInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        style={{ resize: 'vertical', minHeight: '72px' }}
+        style={{ resize: 'vertical', minHeight: `${minHeight ?? 72}px` }}
         className={base}
       />
     );

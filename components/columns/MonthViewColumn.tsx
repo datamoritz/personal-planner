@@ -38,6 +38,9 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
     applyOptimisticGoogleEntry,
     clearPendingGoogleMutation,
     setGoogleCalendarEntries,
+    applyOptimisticGoogleAllDayEvent,
+    clearPendingGoogleAllDayMutation,
+    setGoogleAllDayEvents,
     monthTaskLayout,
   } = usePlannerStore();
   const [addingDay, setAddingDay] = useState<string | null>(null);
@@ -120,6 +123,37 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
     });
   }, [applyOptimisticGoogleEntry, clearPendingGoogleMutation, refreshGoogle, setGoogleCalendarEntries, tz]);
 
+  const updateAllDayEventDate = useCallback((eventId: string, nextDate: string) => {
+    const prevEvents = usePlannerStore.getState().googleAllDayEvents;
+    const entry = prevEvents.find((event) => event.id === eventId);
+    if (!entry) return;
+
+    const startDate = entry.date;
+    const endDate = entry.endDate ?? startDate;
+    const dayDelta = differenceInCalendarDays(new Date(`${endDate}T00:00:00`), new Date(`${startDate}T00:00:00`));
+    const shiftedEndDate = format(addDays(new Date(`${nextDate}T00:00:00`), dayDelta), 'yyyy-MM-dd');
+    const optimisticEntry = {
+      ...entry,
+      date: nextDate,
+      endDate: shiftedEndDate,
+    };
+
+    applyOptimisticGoogleAllDayEvent(optimisticEntry);
+
+    api.patchGoogleAllDayEvent(entry.id, {
+      title: entry.title,
+      date: nextDate,
+      endDate: shiftedEndDate,
+      notes: entry.notes ?? undefined,
+    }).then(() => {
+      refreshGoogle();
+    }).catch((err) => {
+      console.error('[patchGoogleAllDayEvent month move]', err);
+      setGoogleAllDayEvents(prevEvents);
+      clearPendingGoogleAllDayMutation(entry.id);
+    });
+  }, [applyOptimisticGoogleAllDayEvent, clearPendingGoogleAllDayMutation, refreshGoogle, setGoogleAllDayEvents]);
+
   useDndMonitor({
     onDragEnd(event: DragEndEvent) {
       const { active, over } = event;
@@ -134,6 +168,8 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
 
       if (sourceData?.type === 'google-entry') {
         updateGoogleEntryDate(String(active.id), targetDate);
+      } else if (sourceData?.type === 'google-all-day') {
+        updateAllDayEventDate(String(active.id), targetDate);
       } else if (sourceData?.type === 'task') {
         const task = tasks.find((t) => t.id === String(active.id));
         if (!task?.startTime || !task.endTime) return;

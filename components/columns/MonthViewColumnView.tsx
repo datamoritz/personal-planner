@@ -50,11 +50,19 @@ function MonthEventRow({
   time,
   tone,
   showTime,
+  isStart = true,
+  isEnd = true,
+  isDragging = false,
+  isPending = false,
 }: {
   title: string;
   time?: string;
   tone: 'google' | 'task' | 'all-day';
   showTime: boolean;
+  isStart?: boolean;
+  isEnd?: boolean;
+  isDragging?: boolean;
+  isPending?: boolean;
 }) {
   const toneClass =
     tone === 'google'
@@ -64,7 +72,17 @@ function MonthEventRow({
       : 'bg-[color-mix(in_srgb,var(--color-google-event-text)_68%,var(--color-google-event)_32%)] text-[color-mix(in_srgb,white_86%,var(--color-google-event-text)_14%)]';
 
   return (
-    <div className={`flex items-center gap-1.5 rounded-[0.7rem] px-2 py-1 text-[11px] leading-tight ${toneClass}`}>
+    <div
+      className={[
+        `flex items-center gap-1.5 px-2 py-1 text-[11px] leading-tight ${toneClass}`,
+        isStart ? 'rounded-l-[0.7rem]' : '-ml-1 rounded-l-none pl-2.5',
+        isEnd ? 'rounded-r-[0.7rem]' : '-mr-1 rounded-r-none pr-2.5',
+      ].join(' ')}
+      style={{
+        opacity: isDragging ? 0.84 : isPending ? 0.9 : 1,
+        boxShadow: isDragging ? '0 8px 20px rgba(15, 23, 42, 0.12)' : undefined,
+      }}
+    >
       <span className="truncate flex-1 min-w-0 font-medium">{title}</span>
       {showTime && time && <span className="flex-shrink-0 text-[10px] opacity-80">{time}</span>}
     </div>
@@ -185,6 +203,9 @@ function MonthDraggableEventRow({
   showTime,
   onDoubleClick,
   dragType,
+  isStart,
+  isEnd,
+  isPending,
 }: {
   id: string;
   containerId: string;
@@ -193,7 +214,10 @@ function MonthDraggableEventRow({
   tone: 'google' | 'task' | 'all-day';
   showTime: boolean;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
-  dragType: 'google-entry' | 'task';
+  dragType: 'google-entry' | 'google-all-day' | 'task';
+  isStart?: boolean;
+  isEnd?: boolean;
+  isPending?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
@@ -205,7 +229,8 @@ function MonthDraggableEventRow({
       ref={setNodeRef}
       style={{
         transform: CSS.Translate.toString(transform),
-        opacity: isDragging ? 0.45 : 1,
+        opacity: isDragging ? 0.96 : 1,
+        zIndex: isDragging ? 20 : undefined,
       }}
       {...attributes}
       {...listeners}
@@ -216,7 +241,16 @@ function MonthDraggableEventRow({
         onDoubleClick(id, e.currentTarget);
       }}
     >
-      <MonthEventRow title={title} time={time} tone={tone} showTime={showTime} />
+      <MonthEventRow
+        title={title}
+        time={time}
+        tone={tone}
+        showTime={showTime}
+        isStart={isStart}
+        isEnd={isEnd}
+        isDragging={isDragging}
+        isPending={isPending}
+      />
     </div>
   );
 }
@@ -344,11 +378,18 @@ function MonthDayCell({
             onDoubleClick={handleEventDoubleClick}
           >
             {day.allDayEvents.map((event) => (
-              <MonthEventRow
+              <MonthDraggableEventRow
                 key={event.id}
+                id={event.id}
+                containerId={eventContainerId}
                 title={event.title}
                 tone="all-day"
                 showTime={false}
+                dragType="google-all-day"
+                onDoubleClick={onGoogleEntryDoubleClick}
+                isStart={event.date === day.dateString}
+                isEnd={(event.endDate ?? event.date) === day.dateString}
+                isPending={event.syncState === 'pending'}
               />
             ))}
             {day.googleTimedEntries.map((entry) => (

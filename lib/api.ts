@@ -18,6 +18,7 @@ import type {
   RecurrentTask,
   RecurrenceFrequency,
   CalendarEntry,
+  AllDayEvent,
   Tag,
 } from '@/types';
 
@@ -406,6 +407,38 @@ export async function patchGoogleTimedEvent(eventId: string, input: {
 
 export async function deleteGoogleTimedEvent(eventId: string): Promise<void> {
   await del(`/google/events/${eventId}`);
+}
+
+export async function createGoogleAllDayEvent(input: {
+  title: string;
+  date: string;
+  endDate?: string;
+  notes?: string;
+}): Promise<AllDayEvent> {
+  return post<AllDayEvent>('/google/all-day-events', {
+    title: input.title,
+    date: input.date,
+    end_date: input.endDate ?? null,
+    notes: input.notes ?? null,
+  });
+}
+
+export async function patchGoogleAllDayEvent(eventId: string, input: {
+  title: string;
+  date: string;
+  endDate?: string;
+  notes?: string;
+}): Promise<AllDayEvent> {
+  return patch<AllDayEvent>(`/google/all-day-events/${eventId}`, {
+    title: input.title,
+    date: input.date,
+    end_date: input.endDate ?? null,
+    notes: input.notes ?? null,
+  });
+}
+
+export async function deleteGoogleAllDayEvent(eventId: string): Promise<void> {
+  await del(`/google/all-day-events/${eventId}`);
 }
 
 // ─── Tag mutations ──────────────────────────────────────────────────────────

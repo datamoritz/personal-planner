@@ -48,6 +48,10 @@ type PendingGoogleMutation =
   | { type: 'upsert'; entry: CalendarEntry }
   | { type: 'delete' };
 
+type PendingAllDayMutation =
+  | { type: 'upsert'; event: AllDayEvent }
+  | { type: 'delete' };
+
 function googleBaseId(id: string): string {
   return id.split('::')[0];
 }
@@ -82,6 +86,46 @@ function sameGoogleEventShape(a: CalendarEntry, b: CalendarEntry): boolean {
     a.endTime === b.endTime &&
     (a.notes ?? '') === (b.notes ?? '')
   );
+}
+
+function sameAllDayEventShape(a: AllDayEvent, b: AllDayEvent): boolean {
+  return (
+    a.title === b.title &&
+    a.date === b.date &&
+    (a.endDate ?? a.date) === (b.endDate ?? b.date) &&
+    (a.notes ?? '') === (b.notes ?? '')
+  );
+}
+
+function reconcileFetchedAllDayEvents(
+  incoming: AllDayEvent[],
+  pending: Record<string, PendingAllDayMutation>,
+): {
+  events: AllDayEvent[];
+  pending: Record<string, PendingAllDayMutation>;
+} {
+  let nextEvents = [...incoming];
+  const nextPending = { ...pending };
+
+  for (const [eventId, mutation] of Object.entries(pending)) {
+    const incomingEvent = incoming.find((event) => event.id === eventId);
+
+    if (mutation.type === 'delete') {
+      nextEvents = nextEvents.filter((event) => event.id !== eventId);
+      if (!incomingEvent) delete nextPending[eventId];
+      continue;
+    }
+
+    if (incomingEvent && sameAllDayEventShape(incomingEvent, mutation.event)) {
+      delete nextPending[eventId];
+      continue;
+    }
+
+    nextEvents = nextEvents.filter((event) => event.id !== eventId);
+    nextEvents.push(mutation.event);
+  }
+
+  return { events: nextEvents, pending: nextPending };
 }
 
 function reconcileFetchedGoogleEntries(
@@ -170,6 +214,7 @@ interface PlannerStore extends PlannerState {
   // Google Calendar (fetched at runtime, never persisted)
   googleCalendarEntries: CalendarEntry[];
   pendingGoogleMutations: Record<string, PendingGoogleMutation>;
+  pendingGoogleAllDayMutations: Record<string, PendingAllDayMutation>;
   setGoogleCalendarEntries: (entries: CalendarEntry[]) => void;
   reconcileGoogleCalendarEntries: (entries: CalendarEntry[]) => void;
   applyOptimisticGoogleEntry: (entry: CalendarEntry) => void;
@@ -177,6 +222,10 @@ interface PlannerStore extends PlannerState {
   clearPendingGoogleMutation: (entryId: string) => void;
   googleAllDayEvents: AllDayEvent[];
   setGoogleAllDayEvents: (events: AllDayEvent[]) => void;
+  reconcileGoogleAllDayEvents: (events: AllDayEvent[]) => void;
+  applyOptimisticGoogleAllDayEvent: (event: AllDayEvent) => void;
+  applyOptimisticGoogleAllDayDelete: (eventId: string) => void;
+  clearPendingGoogleAllDayMutation: (eventId: string) => void;
   googleNeedsReconnect: boolean;
   setGoogleNeedsReconnect: (v: boolean) => void;
   // DnD
@@ -873,8 +922,46 @@ export const usePlannerStore = create<PlannerStore>()(
           return { pendingGoogleMutations: nextPending };
         }),
       pendingGoogleMutations: {},
+      pendingGoogleAllDayMutations: {},
       googleAllDayEvents:     [],
       setGoogleAllDayEvents:  (events)  => set({ googleAllDayEvents: events }),
+      reconcileGoogleAllDayEvents: (events) =>
+        set((s) => {
+          const reconciled = reconcileFetchedAllDayEvents(events, s.pendingGoogleAllDayMutations);
+          return {
+            googleAllDayEvents: reconciled.events,
+            pendingGoogleAllDayMutations: reconciled.pending,
+          };
+        }),
+      applyOptimisticGoogleAllDayEvent: (event) =>
+        set((s) => {
+          const optimisticEvent = { ...event, syncState: 'pending' as const };
+          return {
+            googleAllDayEvents: [
+              ...s.googleAllDayEvents.filter((existing) => existing.id !== event.id),
+              optimisticEvent,
+            ],
+            pendingGoogleAllDayMutations: {
+              ...s.pendingGoogleAllDayMutations,
+              [event.id]: { type: 'upsert', event: optimisticEvent },
+            },
+          };
+        }),
+      applyOptimisticGoogleAllDayDelete: (eventId) =>
+        set((s) => ({
+          googleAllDayEvents: s.googleAllDayEvents.filter((event) => event.id !== eventId),
+          pendingGoogleAllDayMutations: {
+            ...s.pendingGoogleAllDayMutations,
+            [eventId]: { type: 'delete' },
+          },
+        })),
+      clearPendingGoogleAllDayMutation: (eventId) =>
+        set((s) => {
+          if (!(eventId in s.pendingGoogleAllDayMutations)) return {};
+          const nextPending = { ...s.pendingGoogleAllDayMutations };
+          delete nextPending[eventId];
+          return { pendingGoogleAllDayMutations: nextPending };
+        }),
       googleNeedsReconnect:   false,
       setGoogleNeedsReconnect: (v) => set({ googleNeedsReconnect: v }),
     }),
@@ -1068,7 +1155,10 @@ export function selectMergedGoogleCalendarEntryById(entries: CalendarEntry[], en
 }
 
 export function selectGoogleAllDayEventsForDate(events: AllDayEvent[], date: string) {
-  return events.filter((e) => e.date === date);
+  return events.filter((e) => {
+    const endDate = e.endDate ?? e.date;
+    return e.date <= date && date <= endDate;
+  });
 }
 
 export function selectNextDayEarlyGoogleCalendarEntries(entries: CalendarEntry[], date: string): CalendarEntry[] {

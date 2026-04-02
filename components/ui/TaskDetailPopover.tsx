@@ -81,13 +81,25 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
       onClose={handleClose}
       className="w-[24rem]"
       headerActions={(
-        <button
-          onClick={() => { deleteTask(taskId); onClose(); }}
-          className="ui-icon-button ui-icon-button--danger"
-          aria-label="Delete task"
-        >
-          <Trash2 size={12} strokeWidth={2.25} />
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={handleSuggestEmoji}
+            disabled={!title.trim() || emojiLoading}
+            className="ui-icon-button text-[var(--color-text-muted)] disabled:opacity-40"
+            aria-label="Suggest emoji"
+            title="Suggest emoji"
+          >
+            <Sparkles size={12} strokeWidth={2.2} />
+          </button>
+          <button
+            onClick={() => { deleteTask(taskId); onClose(); }}
+            className="ui-icon-button ui-icon-button--danger"
+            aria-label="Delete task"
+          >
+            <Trash2 size={12} strokeWidth={2.25} />
+          </button>
+        </>
       )}
     >
       <div className="flex flex-col gap-5">
@@ -116,21 +128,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
         )}
 
         <PopoverField label="Title">
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleSuggestEmoji}
-                disabled={!title.trim() || emojiLoading}
-                className="ui-icon-button text-[var(--color-text-muted)] disabled:opacity-40"
-                aria-label="Suggest emoji"
-                title="Suggest emoji"
-              >
-                <Sparkles size={12} strokeWidth={2.2} />
-              </button>
-            </div>
-            <PopoverInput value={title} onChange={setTitle} placeholder="Task title" />
-          </div>
+          <PopoverInput value={title} onChange={setTitle} placeholder="Task title" />
         </PopoverField>
 
         <PopoverField label="Schedule">

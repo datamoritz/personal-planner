@@ -85,11 +85,13 @@ export interface CalendarEntry {
 export interface AllDayEvent {
   id: string;
   title: string;
-  date: string;         // 'YYYY-MM-DD' — multi-day events arrive as one entry per day
+  date: string;         // inclusive start date
+  endDate?: string;     // inclusive end date
   source: 'google';
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  syncState?: 'pending';
 }
 
 // ─── Recurrent Task ────────────────────────────────────────────────────────

@@ -40,6 +40,7 @@ interface MyDayColumnViewProps {
   onToggleTask: (id: string) => void;
   onTaskDoubleClick: (id: string, anchor: HTMLElement) => void;
   onGoogleEntryDoubleClick: (id: string, anchor: HTMLElement) => void;
+  onAllDayEmptyDoubleClick: (anchor: HTMLElement) => void;
   onTaskResizeEnd: (id: string, endTime: string) => void;
   onTaskRepositionEnd: (id: string, startTime: string, endTime: string) => void;
   onGoogleResizeEnd: (id: string, endTime: string) => void;
@@ -123,6 +124,7 @@ export function MyDayColumnView({
   onToggleTask,
   onTaskDoubleClick,
   onGoogleEntryDoubleClick,
+  onAllDayEmptyDoubleClick,
   onTaskResizeEnd,
   onTaskRepositionEnd,
   onGoogleResizeEnd,
@@ -202,7 +204,13 @@ export function MyDayColumnView({
         </div>
       </div>
 
-      {!notepadOpen && <AllDayStrip events={allDayEvents} />}
+      {!notepadOpen && (
+        <AllDayStrip
+          events={allDayEvents}
+          onEventDoubleClick={onGoogleEntryDoubleClick}
+          onEmptyDoubleClick={onAllDayEmptyDoubleClick}
+        />
+      )}
 
       {notepadOpen && (
         <div className="flex-1 flex flex-col min-h-0 bg-[#fffbe0]">
