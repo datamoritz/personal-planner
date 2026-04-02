@@ -164,6 +164,29 @@ class EmojiSuggestionResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Google connection status
+# ---------------------------------------------------------------------------
+
+class GoogleConnectionStatus(BaseModel):
+    connected: bool
+    gmailReady: bool
+    needsReconnect: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Email helpers
+# ---------------------------------------------------------------------------
+
+class RecentEmailItem(BaseModel):
+    id: str
+    subject: str
+    snippet: str
+    sender: str | None = None
+    receivers: list[str] = []
+    receivedAt: str
+
+
+# ---------------------------------------------------------------------------
 # AI helpers
 # ---------------------------------------------------------------------------
 

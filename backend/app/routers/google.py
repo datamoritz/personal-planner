@@ -8,6 +8,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,10 @@ from app.db import get_db
 
 router = APIRouter(tags=["google"])
 
-GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+GOOGLE_SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/gmail.readonly",
+]
 
 # In-memory OAuth state — intentionally not persisted (Phase 1 scope)
 _OAUTH_STATE_STORE: dict = {}
@@ -70,8 +74,7 @@ def _load_google_token(db: Session) -> dict | None:
     return {"refresh_token": row[0], "access_token": row[1]}
 
 
-def get_google_service(db: Session):
-    """Build an authenticated Google Calendar service, refreshing the token if needed."""
+def _get_google_credentials(db: Session) -> Credentials:
     saved = _load_google_token(db)
     if not saved:
         raise HTTPException(status_code=401, detail="Google not connected")
@@ -100,7 +103,17 @@ def get_google_service(db: Session):
         )
         db.commit()
 
-    return build("calendar", "v3", credentials=creds)
+    return creds
+
+
+def get_google_service(db: Session):
+    """Build an authenticated Google Calendar service, refreshing the token if needed."""
+    return build("calendar", "v3", credentials=_get_google_credentials(db))
+
+
+def get_gmail_service(db: Session):
+    """Build an authenticated Gmail service, refreshing the token if needed."""
+    return build("gmail", "v1", credentials=_get_google_credentials(db))
 
 
 def _event_part_to_local_dt(event_part: dict, fallback_tz: str) -> datetime | None:
@@ -220,6 +233,54 @@ def auth_google_callback(code: str, state: str, db: Session = Depends(get_db)):
     return {"ok": True, "message": "Google connected successfully and token saved"}
 
 
+@router.get("/google/status", response_model=schemas.GoogleConnectionStatus)
+def google_status(db: Session = Depends(get_db)):
+    saved = _load_google_token(db)
+    if not saved:
+        return schemas.GoogleConnectionStatus(
+            connected=False,
+            gmailReady=False,
+            needsReconnect=False,
+        )
+
+    try:
+        get_google_service(db)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return schemas.GoogleConnectionStatus(
+                connected=True,
+                gmailReady=False,
+                needsReconnect=True,
+            )
+        raise
+
+    try:
+        gmail = get_gmail_service(db)
+        gmail.users().labels().list(userId="me").execute()
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            return schemas.GoogleConnectionStatus(
+                connected=True,
+                gmailReady=False,
+                needsReconnect=True,
+            )
+        raise
+    except HttpError as exc:
+        if exc.resp.status in {401, 403}:
+            return schemas.GoogleConnectionStatus(
+                connected=True,
+                gmailReady=False,
+                needsReconnect=True,
+            )
+        raise
+
+    return schemas.GoogleConnectionStatus(
+        connected=True,
+        gmailReady=True,
+        needsReconnect=False,
+    )
+
+
 @router.get("/google/events")
 def google_events(start: str, end: str, tz: str = "America/Denver", db: Session = Depends(get_db)):
     service = get_google_service(db)
@@ -260,6 +321,8 @@ def create_google_event(payload: schemas.GoogleTimedEventCreate, db: Session = D
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was created but could not be normalized")
     return normalized
+
+
 @router.post("/google/all-day-events", response_model=schemas.GoogleAllDayEventOut, status_code=201)
 def create_google_all_day_event(payload: schemas.GoogleAllDayEventCreate, db: Session = Depends(get_db)):
     end_date = payload.end_date or payload.date
@@ -311,6 +374,8 @@ def update_google_event(event_id: str, payload: schemas.GoogleTimedEventUpdate, 
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was updated but could not be normalized")
     return normalized
+
+
 @router.patch("/google/all-day-events/{event_id}", response_model=schemas.GoogleAllDayEventOut)
 def update_google_all_day_event(event_id: str, payload: schemas.GoogleAllDayEventUpdate, db: Session = Depends(get_db)):
     end_date = payload.end_date or payload.date

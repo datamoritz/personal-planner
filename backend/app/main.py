@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.db import check_db_connection
-from app.routers import ai, google, projects, recurrent_tasks, tags, tasks
+from app.routers import ai, email, google, projects, recurrent_tasks, tags, tasks
 
 app = FastAPI(title="Planner API")
 
@@ -21,6 +21,7 @@ app.include_router(projects.router)
 app.include_router(recurrent_tasks.router)
 app.include_router(tags.router)
 app.include_router(google.router)
+app.include_router(email.router)
 app.include_router(ai.router)
 
 
