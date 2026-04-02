@@ -204,6 +204,10 @@ class EmailTaskSuggestion(BaseModel):
     projectTitle: str | None = None
 
 
+class EmailTaskSuggestionRequest(BaseModel):
+    promptAddition: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # AI helpers
 # ---------------------------------------------------------------------------
