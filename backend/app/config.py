@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ENV: str = "production"
     OPENAI_API_KEY: str = ""
     OPENAI_EMOJI_MODEL: str = "gpt-4.1-mini"
+    OPENAI_TASK_MODEL: str = "gpt-4.1-mini"
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

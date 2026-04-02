@@ -186,6 +186,24 @@ class RecentEmailItem(BaseModel):
     receivedAt: str
 
 
+class EmailContent(BaseModel):
+    id: str
+    subject: str
+    body: str
+
+
+class EmailTaskSuggestion(BaseModel):
+    title: str | None = None
+    notes: str | None = None
+    taskDate: str | None = None
+    startTime: str | None = None
+    endTime: str | None = None
+    location: str | None = None
+    status: str | None = None
+    tagName: str | None = None
+    projectTitle: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # AI helpers
 # ---------------------------------------------------------------------------
