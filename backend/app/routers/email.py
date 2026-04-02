@@ -260,7 +260,11 @@ def get_email_content(message_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{message_id}/task-suggestion", response_model=schemas.EmailTaskSuggestion)
-def suggest_task_from_email(message_id: str, db: Session = Depends(get_db)):
+def suggest_task_from_email(
+    message_id: str,
+    payload: schemas.EmailTaskSuggestionRequest | None = None,
+    db: Session = Depends(get_db),
+):
     if not settings.OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY is missing")
 
@@ -288,6 +292,7 @@ def suggest_task_from_email(message_id: str, db: Session = Depends(get_db)):
                     {
                         "subject": email.subject,
                         "body": email.body,
+                        "extra_instruction": (payload.promptAddition or "").strip() or None,
                     },
                     ensure_ascii=False,
                 ),
