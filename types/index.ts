@@ -90,7 +90,8 @@ export interface AllDayEvent {
   title: string;
   date: string;         // inclusive start date
   endDate?: string;     // inclusive end date
-  source: 'google';
+  source: 'google' | 'apple_birthdays';
+  readOnly?: boolean;
   notes?: string;
   createdAt: string;
   updatedAt: string;

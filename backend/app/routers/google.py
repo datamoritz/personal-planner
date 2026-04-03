@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -12,7 +13,7 @@ from googleapiclient.errors import HttpError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import schemas
+from app import models, schemas
 from app.config import settings
 from app.db import get_db
 
@@ -187,6 +188,55 @@ def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dic
         "createdAt": event.get("created", start_date_raw),
         "updatedAt": event.get("updated", start_date_raw),
     }
+
+
+def _apple_birthday_events_from_cache(
+    db: Session,
+    start: str,
+    end: str,
+) -> list[dict]:
+    start_date = datetime.strptime(start, "%Y-%m-%d").date()
+    end_date = datetime.strptime(end, "%Y-%m-%d").date()
+    rows = (
+        db.query(models.AppleBirthdayContactCache)
+        .order_by(
+            models.AppleBirthdayContactCache.month.asc(),
+            models.AppleBirthdayContactCache.day.asc(),
+            models.AppleBirthdayContactCache.title.asc(),
+        )
+        .all()
+    )
+
+    events: list[dict] = []
+    for row in rows:
+        for year in range(start_date.year, end_date.year + 1):
+            try:
+                occurrence = datetime(year, row.month, row.day).date()
+            except ValueError:
+                continue
+            if not (start_date <= occurrence <= end_date):
+                continue
+
+            base_title = row.title[:-11] if row.title.endswith("'s birthday") else row.title
+            notes = f"Born in {row.birth_year}" if row.birth_year else None
+            date_str = occurrence.isoformat()
+            digest = hashlib.sha1(
+                f"{row.contact_href}:{row.birth_year or 'yearless'}:{row.month:02d}:{row.day:02d}:{year}".encode("utf-8")
+            ).hexdigest()
+            events.append(
+                {
+                    "id": f"apple-birthday-{digest[:20]}",
+                    "title": f"🎂 {base_title}",
+                    "date": date_str,
+                    "endDate": date_str,
+                    "source": "apple_birthdays",
+                    "readOnly": True,
+                    "notes": notes,
+                    "createdAt": date_str,
+                    "updatedAt": date_str,
+                }
+            )
+    return events
 
 
 def _to_utc_iso(date_str: str, wall_time: time, tz_name: str) -> str:
@@ -445,5 +495,7 @@ def google_calendar_entries(start: str, end: str, tz: str = "America/Denver", db
     items = result.get("items", [])
     timed = [e for event in items if (e := _normalize_timed_event(event, tz_name=tz)) is not None]
     all_day = [e for event in items if (e := _normalize_allday_event(event, tz_name=tz)) is not None]
+    all_day.extend(_apple_birthday_events_from_cache(db, start, end))
+    all_day.sort(key=lambda event: (event["date"], event["title"].lower()))
 
     return {"timed": timed, "allDay": all_day}

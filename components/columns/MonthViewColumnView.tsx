@@ -57,7 +57,7 @@ function MonthEventRow({
 }: {
   title: string;
   time?: string;
-  tone: 'google' | 'task' | 'all-day';
+  tone: 'google' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
   isStart?: boolean;
   isEnd?: boolean;
@@ -69,6 +69,8 @@ function MonthEventRow({
       ? 'bg-[color-mix(in_srgb,var(--color-google-event)_94%,white_6%)] text-[var(--color-google-event-text)]'
       : tone === 'task'
       ? 'bg-[color-mix(in_srgb,var(--color-accent-subtle)_92%,white_8%)] text-[var(--color-accent)]'
+      : tone === 'birthday'
+      ? 'bg-[color-mix(in_srgb,#fb923c_18%,white_82%)] text-[#9a3412]'
       : 'bg-[color-mix(in_srgb,var(--color-google-event-text)_68%,var(--color-google-event)_32%)] text-[color-mix(in_srgb,white_86%,var(--color-google-event-text)_14%)]';
 
   return (
@@ -211,7 +213,7 @@ function MonthDraggableEventRow({
   containerId: string;
   title: string;
   time?: string;
-  tone: 'google' | 'task' | 'all-day';
+  tone: 'google' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
   dragType: 'google-entry' | 'google-all-day' | 'task';
@@ -249,6 +251,38 @@ function MonthDraggableEventRow({
         isStart={isStart}
         isEnd={isEnd}
         isDragging={isDragging}
+        isPending={isPending}
+      />
+    </div>
+  );
+}
+
+function MonthReadOnlyEventRow({
+  title,
+  time,
+  tone,
+  showTime,
+  isStart,
+  isEnd,
+  isPending,
+}: {
+  title: string;
+  time?: string;
+  tone: 'google' | 'task' | 'all-day' | 'birthday';
+  showTime: boolean;
+  isStart?: boolean;
+  isEnd?: boolean;
+  isPending?: boolean;
+}) {
+  return (
+    <div className="cursor-default">
+      <MonthEventRow
+        title={title}
+        time={time}
+        tone={tone}
+        showTime={showTime}
+        isStart={isStart}
+        isEnd={isEnd}
         isPending={isPending}
       />
     </div>
@@ -378,19 +412,31 @@ function MonthDayCell({
             onDoubleClick={handleEventDoubleClick}
           >
             {day.allDayEvents.map((event) => (
-              <MonthDraggableEventRow
-                key={event.id}
-                id={event.id}
-                containerId={eventContainerId}
-                title={event.title}
-                tone="all-day"
-                showTime={false}
-                dragType="google-all-day"
-                onDoubleClick={onGoogleEntryDoubleClick}
-                isStart={event.date === day.dateString}
-                isEnd={(event.endDate ?? event.date) === day.dateString}
-                isPending={event.syncState === 'pending'}
-              />
+              event.readOnly || event.source === 'apple_birthdays' ? (
+                <MonthReadOnlyEventRow
+                  key={event.id}
+                  title={event.title}
+                  tone="birthday"
+                  showTime={false}
+                  isStart={event.date === day.dateString}
+                  isEnd={(event.endDate ?? event.date) === day.dateString}
+                  isPending={event.syncState === 'pending'}
+                />
+              ) : (
+                <MonthDraggableEventRow
+                  key={event.id}
+                  id={event.id}
+                  containerId={eventContainerId}
+                  title={event.title}
+                  tone="all-day"
+                  showTime={false}
+                  dragType="google-all-day"
+                  onDoubleClick={onGoogleEntryDoubleClick}
+                  isStart={event.date === day.dateString}
+                  isEnd={(event.endDate ?? event.date) === day.dateString}
+                  isPending={event.syncState === 'pending'}
+                />
+              )
             ))}
             {day.googleTimedEntries.map((entry) => (
               <MonthDraggableEventRow

@@ -14,6 +14,7 @@ import {
   minutesToOffset,
   durationToHeight,
 } from '@/lib/timeGrid';
+import type { AllDayEvent } from '@/types';
 import type { OverlapDepthMap } from './sharedCalendarViewTypes';
 
 const TOTAL_HOURS = END_HOUR;
@@ -29,7 +30,7 @@ interface MyDayColumnViewProps {
   notepadOpen: boolean;
   actionsMode: boolean;
   focusMode: boolean;
-  allDayEvents: Array<{ id: string; title: string; notes?: string | null }>;
+  allDayEvents: AllDayEvent[];
   hours: number[];
   setRef: (el: HTMLDivElement | null) => void;
   handleGridDoubleClick: (e: React.MouseEvent<HTMLDivElement>) => void;

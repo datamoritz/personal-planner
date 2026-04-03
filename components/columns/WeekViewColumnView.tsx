@@ -21,6 +21,7 @@ import {
   durationToHeight,
 } from '@/lib/timeGrid';
 import type { Task } from '@/types';
+import type { AllDayEvent } from '@/types';
 import type { OverlapDepthMap } from './sharedCalendarViewTypes';
 
 const TOTAL_HOURS = END_HOUR;
@@ -121,7 +122,7 @@ function WeekAllDayEvent({
   isStart,
   isEnd,
 }: {
-  event: { id: string; title: string; notes?: string | null; syncState?: 'pending' };
+  event: AllDayEvent;
   dateStr: string;
   onDoubleClick: (id: string, anchor: HTMLElement) => void;
   isStart: boolean;
@@ -153,6 +154,30 @@ function WeekAllDayEvent({
         e.stopPropagation();
         onDoubleClick(event.id, e.currentTarget);
       }}
+    >
+      {event.title}
+    </div>
+  );
+}
+
+function WeekReadOnlyAllDayEvent({
+  event,
+  isStart,
+  isEnd,
+}: {
+  event: AllDayEvent;
+  isStart: boolean;
+  isEnd: boolean;
+}) {
+  return (
+    <div
+      title={event.notes ?? event.title}
+      className={[
+        'px-1 py-0.5 text-[10px] font-medium truncate select-none shadow-[0_8px_20px_rgba(251,146,60,0.10)]',
+        'bg-[#fb923c]/14 text-[#9a3412]',
+        isStart ? 'rounded-l' : '-ml-1 rounded-l-none pl-2',
+        isEnd ? 'rounded-r' : '-mr-1 rounded-r-none pr-2',
+      ].join(' ')}
     >
       {event.title}
     </div>
@@ -248,7 +273,7 @@ interface WeekDayData {
 interface WeekViewColumnViewProps {
   weekDays: Date[];
   todayStr: string;
-  googleAllDayEvents: Array<{ id: string; date: string; endDate?: string; title: string; notes?: string | null }>;
+  googleAllDayEvents: AllDayEvent[];
   onAllDayEventDoubleClick: (id: string, anchor: HTMLElement) => void;
   onAllDayCellDoubleClick: (date: string, anchor: HTMLElement) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
@@ -354,14 +379,23 @@ export function WeekViewColumnView({
                 }}
               >
                 {events.map((ev) => (
-                  <WeekAllDayEvent
-                    key={ev.id}
-                    event={ev}
-                    dateStr={ds}
-                    onDoubleClick={onAllDayEventDoubleClick}
-                    isStart={ev.date === ds}
-                    isEnd={(ev.endDate ?? ev.date) === ds}
-                  />
+                  ev.readOnly || ev.source === 'apple_birthdays' ? (
+                    <WeekReadOnlyAllDayEvent
+                      key={ev.id}
+                      event={ev}
+                      isStart={ev.date === ds}
+                      isEnd={(ev.endDate ?? ev.date) === ds}
+                    />
+                  ) : (
+                    <WeekAllDayEvent
+                      key={ev.id}
+                      event={ev}
+                      dateStr={ds}
+                      onDoubleClick={onAllDayEventDoubleClick}
+                      isStart={ev.date === ds}
+                      isEnd={(ev.endDate ?? ev.date) === ds}
+                    />
+                  )
                 ))}
               </WeekAllDayDropZone>
             );
