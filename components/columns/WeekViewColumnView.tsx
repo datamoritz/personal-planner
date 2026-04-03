@@ -173,8 +173,8 @@ function WeekReadOnlyAllDayEvent({
     <div
       title={event.notes ?? event.title}
       className={[
-        'px-1 py-0.5 text-[10px] font-medium truncate select-none shadow-[0_8px_20px_rgba(251,146,60,0.10)]',
-        'bg-[#fb923c]/14 text-[#9a3412]',
+        'px-1 py-0.5 text-[10px] font-medium truncate select-none shadow-[0_8px_20px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28',
+        'bg-[color-mix(in_srgb,#f97316_12%,white_88%)] text-[#b45309]',
         isStart ? 'rounded-l' : '-ml-1 rounded-l-none pl-2',
         isEnd ? 'rounded-r' : '-mr-1 rounded-r-none pr-2',
       ].join(' ')}

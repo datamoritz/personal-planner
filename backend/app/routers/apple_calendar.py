@@ -449,6 +449,10 @@ def _clean_contact_name_candidate(value: str | None) -> str | None:
     return cleaned
 
 
+def _vcard_property_name(key: str) -> str:
+    return key.split(";", 1)[0].upper().strip()
+
+
 def _parse_vcard_name(lines: list[str]) -> str | None:
     fn_value: str | None = None
     n_value: str | None = None
@@ -456,12 +460,12 @@ def _parse_vcard_name(lines: list[str]) -> str | None:
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        upper_key = key.upper()
-        if upper_key.startswith("FN"):
+        property_name = _vcard_property_name(key)
+        if property_name == "FN":
             fn_value = _clean_contact_name_candidate(value)
             if fn_value:
                 break
-        if upper_key.startswith("N"):
+        if property_name == "N":
             n_value = _clean_contact_name_candidate(value) or _unescape_vcard_text(value)
 
     if fn_value:
@@ -483,8 +487,8 @@ def _parse_vcard_name(lines: list[str]) -> str | None:
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        upper_key = key.upper()
-        if upper_key.startswith("NICKNAME") or upper_key.startswith("ORG") or upper_key.startswith("EMAIL"):
+        property_name = _vcard_property_name(key)
+        if property_name in {"NICKNAME", "ORG", "EMAIL"}:
             fallback = _clean_contact_name_candidate(value)
             if fallback:
                 return fallback

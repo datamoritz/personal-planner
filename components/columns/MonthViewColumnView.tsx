@@ -70,7 +70,7 @@ function MonthEventRow({
       : tone === 'task'
       ? 'bg-[color-mix(in_srgb,var(--color-accent-subtle)_92%,white_8%)] text-[var(--color-accent)]'
       : tone === 'birthday'
-      ? 'bg-[color-mix(in_srgb,#fb923c_18%,white_82%)] text-[#9a3412]'
+      ? 'bg-[color-mix(in_srgb,#f97316_12%,white_88%)] text-[#b45309]'
       : 'bg-[color-mix(in_srgb,var(--color-google-event-text)_68%,var(--color-google-event)_32%)] text-[color-mix(in_srgb,white_86%,var(--color-google-event-text)_14%)]';
 
   return (

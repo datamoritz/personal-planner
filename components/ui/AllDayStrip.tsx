@@ -25,7 +25,7 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick }: 
           className={[
             'flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium truncate select-none',
             ev.source === 'apple_birthdays'
-              ? 'text-[#9a3412] bg-[#fb923c]/12 shadow-[0_4px_16px_rgba(251,146,60,0.10)]'
+              ? 'text-[#b45309] bg-[color-mix(in_srgb,#f97316_10%,white_90%)] shadow-[0_6px_18px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28'
               : 'text-[#10b981] bg-[#10b981]/10',
             ev.readOnly ? 'cursor-default' : 'cursor-pointer',
           ].join(' ')}
@@ -38,7 +38,7 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick }: 
           <span
             className={[
               'w-1.5 h-1.5 rounded-full flex-shrink-0',
-              ev.source === 'apple_birthdays' ? 'bg-[#f97316]' : 'bg-[#10b981]',
+              ev.source === 'apple_birthdays' ? 'bg-[#f59e0b]' : 'bg-[#10b981]',
             ].join(' ')}
           />
           {ev.title}
