@@ -203,6 +203,20 @@ def _to_local_iso(date_value, wall_time: time, tz_name: str) -> str:
     return local_dt.isoformat()
 
 
+def _get_existing_event(service, event_id: str) -> dict:
+    return service.events().get(calendarId="primary", eventId=event_id).execute()
+
+
+def _update_event_resource(service, event_id: str, existing: dict, body_updates: dict) -> dict:
+    updated_body = dict(existing)
+    updated_body.update(body_updates)
+    return service.events().update(
+        calendarId="primary",
+        eventId=event_id,
+        body=updated_body,
+    ).execute()
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -369,7 +383,8 @@ def update_google_event(event_id: str, payload: schemas.GoogleTimedEventUpdate, 
         },
     }
 
-    updated = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+    existing = _get_existing_event(service, event_id)
+    updated = _update_event_resource(service, event_id, existing, body)
     normalized = _normalize_timed_event(updated, tz_name=payload.tz)
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was updated but could not be normalized")
@@ -393,7 +408,8 @@ def update_google_all_day_event(event_id: str, payload: schemas.GoogleAllDayEven
     }
 
     try:
-        updated = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+        existing = _get_existing_event(service, event_id)
+        updated = _update_event_resource(service, event_id, existing, body)
     except HttpError as exc:
         detail = exc.error_details if getattr(exc, "error_details", None) else str(exc)
         raise HTTPException(status_code=exc.resp.status if exc.resp else 502, detail=detail) from exc
