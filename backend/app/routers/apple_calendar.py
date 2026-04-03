@@ -1,15 +1,18 @@
 import base64
-from datetime import date
+from datetime import date, datetime
 import hashlib
 import re
 from typing import Iterable
 from urllib import error, parse, request
 import xml.etree.ElementTree as ET
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.db import get_db
+from app import models
 
 router = APIRouter(tags=["apple-calendar"])
 
@@ -72,6 +75,8 @@ class AppleBirthdayContact(BaseModel):
     month: int
     day: int
     hasYear: bool = False
+    vcardUid: str | None = None
+    etag: str | None = None
 
 
 class AppleBirthdaysContactsDiscoveryResponse(BaseModel):
@@ -94,6 +99,30 @@ class AppleBirthdayEventsResponse(BaseModel):
     contactsScanned: int = 0
     birthdaysFound: int = 0
     events: list[AppleBirthdaySampleEvent] = []
+
+
+class AppleBirthdayCachedRecord(BaseModel):
+    id: int
+    source: str = "apple_birthdays"
+    title: str
+    month: int
+    day: int
+    birthYear: int | None = None
+    contactHref: str
+    vcardUid: str | None = None
+    etag: str | None = None
+    lastSyncedAt: str
+
+
+class AppleBirthdaySyncResponse(BaseModel):
+    configured: bool
+    connected: bool
+    usedBirthdayFilter: bool = False
+    contactsScanned: int = 0
+    birthdaysFound: int = 0
+    cachedRecords: int = 0
+    sampleRecords: list[AppleBirthdayCachedRecord] = []
+    detail: str | None = None
 
 
 def _auth_header() -> str:
@@ -351,20 +380,21 @@ def _discover_addressbooks(addressbook_home_url: str) -> list[AppleAddressBookDi
     return items
 
 
-def _response_vcards(root: ET.Element) -> list[tuple[str, str]]:
-    vcards: list[tuple[str, str]] = []
+def _response_vcards(root: ET.Element) -> list[tuple[str, str, str | None]]:
+    vcards: list[tuple[str, str, str | None]] = []
     for response in _response_nodes(root):
         status = _response_status_code(response)
         if status and status >= 400:
             continue
         href = _first_text(response, "d:href")
         card_data = _first_text(response, ".//card:address-data")
+        etag = _first_text(response, ".//d:getetag")
         if href and card_data:
-            vcards.append((href, card_data))
+            vcards.append((href, card_data, etag))
     return vcards
 
 
-def _query_addressbook_vcards(addressbook_url: str, only_with_birthdays: bool) -> list[tuple[str, str]]:
+def _query_addressbook_vcards(addressbook_url: str, only_with_birthdays: bool) -> list[tuple[str, str, str | None]]:
     filter_xml = ""
     if only_with_birthdays:
         filter_xml = """
@@ -491,6 +521,16 @@ def _parse_vcard_birthday(lines: list[str]) -> tuple[int | None, int, int] | Non
     return None
 
 
+def _parse_vcard_uid(lines: list[str]) -> str | None:
+    for line in lines:
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        if key.upper().startswith("UID"):
+            return _clean_contact_name_candidate(value)
+    return None
+
+
 def _normalize_birthday_sample(
     href: str,
     name: str,
@@ -521,7 +561,7 @@ def _normalize_birthday_sample(
     )
 
 
-def _extract_birthday_contact(href: str, vcard_text: str) -> AppleBirthdayContact | None:
+def _extract_birthday_contact(href: str, vcard_text: str, etag: str | None = None) -> AppleBirthdayContact | None:
     lines = _unfold_vcard_lines(vcard_text)
     birthday_parts = _parse_vcard_birthday(lines)
     if not birthday_parts:
@@ -535,6 +575,8 @@ def _extract_birthday_contact(href: str, vcard_text: str) -> AppleBirthdayContac
         month=month,
         day=day,
         hasYear=birth_year is not None,
+        vcardUid=_parse_vcard_uid(lines),
+        etag=etag,
     )
 
 
@@ -558,7 +600,7 @@ def _fetch_birthday_contacts() -> tuple[str, str, list[AppleAddressBookDiscovery
         raise HTTPException(status_code=502, detail="No address books were discovered via Apple CardDAV")
 
     used_birthday_filter = True
-    vcards: list[tuple[str, str]] = []
+    vcards: list[tuple[str, str, str | None]] = []
     for book in usable_addressbooks:
         try:
             vcards.extend(_query_addressbook_vcards(book.href, only_with_birthdays=True))
@@ -573,14 +615,98 @@ def _fetch_birthday_contacts() -> tuple[str, str, list[AppleAddressBookDiscovery
 
     contacts_scanned = 0
     birthdays: list[AppleBirthdayContact] = []
-    for href, vcard_text in vcards:
+    for href, vcard_text, etag in vcards:
         contacts_scanned += 1
-        parsed = _extract_birthday_contact(href, vcard_text)
+        parsed = _extract_birthday_contact(href, vcard_text, etag)
         if parsed:
             birthdays.append(parsed)
 
     birthdays.sort(key=lambda item: (item.month, item.day, item.name.lower()))
     return addressbook_home_url, principal_url, addressbooks, used_birthday_filter, contacts_scanned, birthdays
+
+
+def _birthday_title(contact: AppleBirthdayContact) -> str:
+    return f"{contact.name}'s birthday" if contact.name else "Birthday"
+
+
+def _cached_record_out(row: models.AppleBirthdayContactCache) -> AppleBirthdayCachedRecord:
+    return AppleBirthdayCachedRecord(
+        id=row.id,
+        source=row.source,
+        title=row.title,
+        month=row.month,
+        day=row.day,
+        birthYear=row.birth_year,
+        contactHref=row.contact_href,
+        vcardUid=row.vcard_uid,
+        etag=row.etag,
+        lastSyncedAt=row.last_synced_at.isoformat(),
+    )
+
+
+def _sync_cached_birthdays(
+    db: Session,
+    contacts: list[AppleBirthdayContact],
+) -> list[models.AppleBirthdayContactCache]:
+    now = datetime.utcnow()
+    existing_rows = db.query(models.AppleBirthdayContactCache).all()
+    existing_by_href = {row.contact_href: row for row in existing_rows}
+    seen_hrefs: set[str] = set()
+
+    for contact in contacts:
+        seen_hrefs.add(contact.href)
+        row = existing_by_href.get(contact.href)
+        if row is None:
+            row = models.AppleBirthdayContactCache(contact_href=contact.href)
+            db.add(row)
+        row.source = "apple_birthdays"
+        row.title = _birthday_title(contact)
+        row.month = contact.month
+        row.day = contact.day
+        row.birth_year = contact.birthYear
+        row.vcard_uid = contact.vcardUid
+        row.etag = contact.etag
+        row.last_synced_at = now
+        row.updated_at = now
+        if not getattr(row, "created_at", None):
+            row.created_at = now
+
+    for stale_row in existing_rows:
+        if stale_row.contact_href not in seen_hrefs:
+            db.delete(stale_row)
+
+    db.commit()
+    return (
+        db.query(models.AppleBirthdayContactCache)
+        .order_by(
+            models.AppleBirthdayContactCache.month.asc(),
+            models.AppleBirthdayContactCache.day.asc(),
+            models.AppleBirthdayContactCache.title.asc(),
+        )
+        .all()
+    )
+
+
+def _birthday_occurrences_between_cached(
+    row: models.AppleBirthdayContactCache,
+    start_date: date,
+    end_date: date,
+) -> list[AppleBirthdaySampleEvent]:
+    events: list[AppleBirthdaySampleEvent] = []
+    name = row.title[:-11] if row.title.endswith("'s birthday") else row.title
+    for year in range(start_date.year, end_date.year + 1):
+        normalized = _normalize_birthday_sample(
+            row.contact_href,
+            name,
+            (row.birth_year, row.month, row.day),
+            year,
+        )
+        if not normalized:
+            continue
+        event_date = date.fromisoformat(normalized.date)
+        if start_date <= event_date <= end_date:
+            events.append(normalized)
+    return events
 
 
 def _birthday_occurrences_between(
@@ -714,23 +840,95 @@ def discover_apple_contact_birthdays(year: int | None = None, sample: int = 10):
     )
 
 
+@router.post("/apple-birthdays/sync", response_model=AppleBirthdaySyncResponse)
+def sync_apple_contact_birthdays(sample: int = 10, db: Session = Depends(get_db)):
+    configured = bool(settings.APPLE_ICLOUD_EMAIL and settings.APPLE_ICLOUD_APP_PASSWORD)
+    if not configured:
+        return AppleBirthdaySyncResponse(
+            configured=False,
+            connected=False,
+            detail="Apple iCloud credentials are not configured",
+        )
+
+    sample = max(1, min(sample, 25))
+    try:
+        _addressbook_home_url, _principal_url, _addressbooks, used_birthday_filter, contacts_scanned, birthday_contacts = _fetch_birthday_contacts()
+    except HTTPException as exc:
+        return AppleBirthdaySyncResponse(
+            configured=True,
+            connected=True,
+            detail=str(exc.detail),
+        )
+
+    cached_rows = _sync_cached_birthdays(db, birthday_contacts)
+    return AppleBirthdaySyncResponse(
+        configured=True,
+        connected=True,
+        usedBirthdayFilter=used_birthday_filter,
+        contactsScanned=contacts_scanned,
+        birthdaysFound=len(birthday_contacts),
+        cachedRecords=len(cached_rows),
+        sampleRecords=[_cached_record_out(row) for row in cached_rows[:sample]],
+    )
+
+
+@router.get("/apple-birthdays/cache", response_model=AppleBirthdaySyncResponse)
+def get_cached_apple_birthdays(sample: int = 10, db: Session = Depends(get_db)):
+    configured = bool(settings.APPLE_ICLOUD_EMAIL and settings.APPLE_ICLOUD_APP_PASSWORD)
+    sample = max(1, min(sample, 25))
+    rows = (
+        db.query(models.AppleBirthdayContactCache)
+        .order_by(
+            models.AppleBirthdayContactCache.month.asc(),
+            models.AppleBirthdayContactCache.day.asc(),
+            models.AppleBirthdayContactCache.title.asc(),
+        )
+        .all()
+    )
+    detail = None if rows else "No cached Apple birthdays found"
+    return AppleBirthdaySyncResponse(
+        configured=configured,
+        connected=configured,
+        birthdaysFound=len(rows),
+        cachedRecords=len(rows),
+        sampleRecords=[_cached_record_out(row) for row in rows[:sample]],
+        detail=detail,
+    )
+
+
 @router.get("/apple-birthdays/events", response_model=AppleBirthdayEventsResponse)
-def get_apple_birthday_events(start: date, end: date):
+def get_apple_birthday_events(start: date, end: date, db: Session = Depends(get_db)):
     if end < start:
         raise HTTPException(status_code=400, detail="end cannot be before start")
 
-    _server_url = settings.APPLE_CARDDAV_URL.rstrip("/")
-    _addressbook_home_url, _principal_url, _addressbooks, _used_birthday_filter, contacts_scanned, birthday_contacts = _fetch_birthday_contacts()
-
     events: list[AppleBirthdaySampleEvent] = []
-    for contact in birthday_contacts:
-        events.extend(_birthday_occurrences_between(contact, start, end))
+    cached_rows = (
+        db.query(models.AppleBirthdayContactCache)
+        .order_by(
+            models.AppleBirthdayContactCache.month.asc(),
+            models.AppleBirthdayContactCache.day.asc(),
+            models.AppleBirthdayContactCache.title.asc(),
+        )
+        .all()
+    )
+    contacts_scanned = len(cached_rows)
+
+    if cached_rows:
+        for row in cached_rows:
+            events.extend(_birthday_occurrences_between_cached(row, start, end))
+        birthdays_found = len(cached_rows)
+    else:
+        _server_url = settings.APPLE_CARDDAV_URL.rstrip("/")
+        _addressbook_home_url, _principal_url, _addressbooks, _used_birthday_filter, contacts_scanned, birthday_contacts = _fetch_birthday_contacts()
+        for contact in birthday_contacts:
+            events.extend(_birthday_occurrences_between(contact, start, end))
+        birthdays_found = len(birthday_contacts)
 
     events.sort(key=lambda item: (item.date, item.title.lower()))
     return AppleBirthdayEventsResponse(
         start=start.isoformat(),
         end=end.isoformat(),
         contactsScanned=contacts_scanned,
-        birthdaysFound=len(birthday_contacts),
+        birthdaysFound=birthdays_found,
         events=events,
     )

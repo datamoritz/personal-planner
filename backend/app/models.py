@@ -116,3 +116,20 @@ class CalendarEntry(Base):
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AppleBirthdayContactCache(Base):
+    __tablename__ = "apple_birthday_contacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="apple_birthdays")
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    day: Mapped[int] = mapped_column(Integer, nullable=False)
+    birth_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contact_href: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    vcard_uid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    etag: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
