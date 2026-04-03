@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     APPLE_ICLOUD_EMAIL: str = ""
     APPLE_ICLOUD_APP_PASSWORD: str = ""
     APPLE_CALDAV_URL: str = "https://caldav.icloud.com"
+    APPLE_CARDDAV_URL: str = "https://contacts.icloud.com"
 
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
@@ -30,6 +31,13 @@ class Settings(BaseSettings):
     def default_apple_caldav_url(cls, value: str | None) -> str:
         if value is None or not str(value).strip():
             return "https://caldav.icloud.com"
+        return str(value).strip()
+
+    @field_validator("APPLE_CARDDAV_URL", mode="before")
+    @classmethod
+    def default_apple_carddav_url(cls, value: str | None) -> str:
+        if value is None or not str(value).strip():
+            return "https://contacts.icloud.com"
         return str(value).strip()
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
