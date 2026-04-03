@@ -659,6 +659,7 @@ def _sync_cached_birthdays(
         if row is None:
             row = models.AppleBirthdayContactCache(contact_href=contact.href)
             db.add(row)
+            existing_by_href[contact.href] = row
         row.source = "apple_birthdays"
         row.title = _birthday_title(contact)
         row.month = contact.month
