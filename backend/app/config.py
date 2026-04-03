@@ -1,5 +1,6 @@
 from typing import List
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,13 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "https://personal-planner.vercel.app",
     ]
+
+    @field_validator("APPLE_CALDAV_URL", mode="before")
+    @classmethod
+    def default_apple_caldav_url(cls, value: str | None) -> str:
+        if value is None or not str(value).strip():
+            return "https://caldav.icloud.com"
+        return str(value).strip()
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

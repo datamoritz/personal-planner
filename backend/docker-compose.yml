@@ -14,7 +14,7 @@ services:
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
       APPLE_ICLOUD_EMAIL: ${APPLE_ICLOUD_EMAIL}
       APPLE_ICLOUD_APP_PASSWORD: ${APPLE_ICLOUD_APP_PASSWORD}
-      APPLE_CALDAV_URL: ${APPLE_CALDAV_URL}
+      APPLE_CALDAV_URL: ${APPLE_CALDAV_URL:-https://caldav.icloud.com}
     ports:
       - "127.0.0.1:8001:8000"
     restart: unless-stopped
