@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
 
+    APPLE_ICLOUD_EMAIL: str = ""
+    APPLE_ICLOUD_APP_PASSWORD: str = ""
+    APPLE_CALDAV_URL: str = "https://caldav.icloud.com"
+
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "https://personal-planner.vercel.app",
