@@ -44,6 +44,7 @@ def create_recurrent_task(payload: schemas.RecurrentTaskCreate, db: Session = De
     db_task = models.RecurrentTask(
         client_id=payload.client_id or uuid.uuid4(),
         project_id=payload.project_id,
+        tag_id=payload.tag_id,
         title=payload.title,
         location=payload.location,
         notes=payload.notes,
@@ -125,6 +126,7 @@ def generate_recurring_tasks(
                 end_time=recurrent_task.default_end_time,
                 project_id=recurrent_task.project_id,
                 recurrent_task_id=recurrent_task.id,
+                tag_id=recurrent_task.tag_id,
                 sort_order=0,
                 completed_at=None,
             )

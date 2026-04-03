@@ -20,6 +20,11 @@ import type {
   CalendarEntry,
   AllDayEvent,
   Tag,
+  RecentEmail,
+  EmailContent,
+  EmailTaskSuggestion,
+  TextDraftMode,
+  TextDraftResponse,
 } from '@/types';
 
 export const API_BASE = 'https://planner-api.moritzknodler.com';
@@ -56,7 +61,9 @@ export function frequencyToRule(freq: RecurrenceFrequency): string {
     case 'daily':   return 'daily';
     case 'weekly':  return `weekly:${WEEKDAY_NAMES[freq.dayOfWeek]}`;
     case 'monthly': return `monthly:${freq.dayOfMonth}`;
-    case 'custom':  return `custom:${freq.intervalDays}`;
+    case 'custom-days':   return `custom-days:${freq.intervalDays}`;
+    case 'custom-weeks':  return `custom-weeks:${freq.intervalWeeks}:${WEEKDAY_NAMES[freq.dayOfWeek]}`;
+    case 'custom-months': return `custom-months:${freq.intervalMonths}:${freq.dayOfMonth}`;
   }
 }
 
@@ -74,9 +81,27 @@ export function ruleToFrequency(rule: string): RecurrenceFrequency {
     if (!isNaN(dayOfMonth)) return { type: 'monthly', dayOfMonth };
   }
 
-  if (rule.startsWith('custom:')) {
+  if (rule.startsWith('custom-days:')) {
     const intervalDays = parseInt(rule.split(':')[1], 10);
-    if (!isNaN(intervalDays)) return { type: 'custom', intervalDays };
+    if (!isNaN(intervalDays)) return { type: 'custom-days', intervalDays };
+  }
+
+  if (rule.startsWith('custom-weeks:')) {
+    const [, intervalRaw, dayRaw] = rule.split(':');
+    const intervalWeeks = parseInt(intervalRaw, 10);
+    const dayOfWeek = WEEKDAY_NAMES.indexOf(dayRaw as typeof WEEKDAY_NAMES[number]);
+    if (!isNaN(intervalWeeks) && dayOfWeek !== -1) {
+      return { type: 'custom-weeks', intervalWeeks, dayOfWeek };
+    }
+  }
+
+  if (rule.startsWith('custom-months:')) {
+    const [, intervalRaw, dayRaw] = rule.split(':');
+    const intervalMonths = parseInt(intervalRaw, 10);
+    const dayOfMonth = parseInt(dayRaw, 10);
+    if (!isNaN(intervalMonths) && !isNaN(dayOfMonth)) {
+      return { type: 'custom-months', intervalMonths, dayOfMonth };
+    }
   }
 
   // Unknown rule: fall back to daily
@@ -101,11 +126,24 @@ export function computeNextDueDate(freq: RecurrenceFrequency): string {
     case 'monthly': {
       const thisMonth = new Date(today.getFullYear(), today.getMonth(), freq.dayOfMonth);
       if (thisMonth >= today) return format(thisMonth, 'yyyy-MM-dd');
-      return format(addMonths(startOfMonth(today), 1).setDate(freq.dayOfMonth), 'yyyy-MM-dd');
+      const nextMonth = addMonths(startOfMonth(today), 1);
+      nextMonth.setDate(freq.dayOfMonth);
+      return format(nextMonth, 'yyyy-MM-dd');
     }
 
-    case 'custom':
+    case 'custom-days':
       return format(today, 'yyyy-MM-dd');
+    case 'custom-weeks': {
+      const daysUntil = (freq.dayOfWeek - today.getDay() + 7) % 7;
+      return format(addDays(today, daysUntil), 'yyyy-MM-dd');
+    }
+    case 'custom-months': {
+      const thisMonth = new Date(today.getFullYear(), today.getMonth(), freq.dayOfMonth);
+      if (thisMonth >= today) return format(thisMonth, 'yyyy-MM-dd');
+      const nextMonth = addMonths(startOfMonth(today), 1);
+      nextMonth.setDate(freq.dayOfMonth);
+      return format(nextMonth, 'yyyy-MM-dd');
+    }
   }
 }
 
@@ -143,6 +181,7 @@ function toTask(
   return {
     id:               b.client_id ?? String(b.id),
     backendId:        b.id,
+    sortOrder:        b.sort_order ?? 0,
     title:            b.title,
     status:           b.status,
     location:         b.location,
@@ -162,6 +201,7 @@ function toProject(b: BackendProject, tagIdMap: Map<number, string>): Project {
   return {
     id:          b.client_id ?? String(b.id),
     backendId:   b.id,
+    sortOrder:   b.sort_order ?? 0,
     title:       b.title,
     subtaskIds:  [],  // derived from tasks after full fetch
     status:      b.is_finished ? 'finished' : 'active',
@@ -171,12 +211,13 @@ function toProject(b: BackendProject, tagIdMap: Map<number, string>): Project {
   };
 }
 
-function toRecurrentTask(b: BackendRecurrentTask): RecurrentTask {
+function toRecurrentTask(b: BackendRecurrentTask, tagIdMap: Map<number, string>): RecurrentTask {
   const frequency = ruleToFrequency(b.recurrence_rule);
   return {
     id:          b.client_id ?? String(b.id),
     backendId:   b.id,
     title:       b.title,
+    tagId:       b.tag_id != null ? tagIdMap.get(b.tag_id) : undefined,
     frequency,
     nextDueDate: computeNextDueDate(frequency),
     notes:       b.notes ?? undefined,
@@ -265,7 +306,7 @@ export async function fetchAll(): Promise<BootData> {
 
   const tags            = backendTags.map(toTag);
   const projects        = backendProjects.map((p) => toProject(p, tagIdMap));
-  const recurrentTasks  = backendRecurrentTasks.map(toRecurrentTask);
+  const recurrentTasks  = backendRecurrentTasks.map((r) => toRecurrentTask(r, tagIdMap));
   const tasks           = backendTasks.map((t) => toTask(t, projectIdMap, recurrentTaskIdMap, tagIdMap));
 
   return { projects, tags, recurrentTasks, tasks };
@@ -306,10 +347,34 @@ export async function createTask(
     project_id:          resolveProjectBackendId(task.projectId, projects),
     recurrent_task_id:   resolveRecurrentTaskBackendId(task.recurrentTaskId, recurrentTasks),
     tag_id:              resolveTagBackendId(task.tagId, tags),
-    sort_order:          0,
+    sort_order:          task.sortOrder ?? 0,
   };
 
   return post<{ id: number }>('/tasks', payload);
+}
+
+export async function createTasksBulk(
+  tasks: Task[],
+  projects: Project[],
+  recurrentTasks: RecurrentTask[],
+  tags: Tag[],
+): Promise<{ count: number; created: Array<{ id: number; client_id?: string | null }> }> {
+  return post('/tasks/bulk', {
+    tasks: tasks.map((task) => ({
+      client_id: task.id,
+      title: task.title,
+      notes: task.notes ?? null,
+      location: task.location,
+      status: task.status,
+      task_date: task.date ?? null,
+      start_time: toApiTime(task.startTime),
+      end_time: toApiTime(task.endTime),
+      project_id: resolveProjectBackendId(task.projectId, projects),
+      recurrent_task_id: resolveRecurrentTaskBackendId(task.recurrentTaskId, recurrentTasks),
+      tag_id: resolveTagBackendId(task.tagId, tags),
+      sort_order: task.sortOrder ?? 0,
+    })),
+  });
 }
 
 export async function patchTask(backendId: number, fields: Record<string, unknown>): Promise<void> {
@@ -323,6 +388,34 @@ export async function deleteTask(backendId: number): Promise<void> {
 export async function suggestEmoji(title: string): Promise<string> {
   const res = await post<{ emoji: string }>('/ai/emoji-suggestion', { title });
   return res.emoji;
+}
+
+export async function getRecentEmails(): Promise<RecentEmail[]> {
+  return get<RecentEmail[]>('/email/recent');
+}
+
+export async function getEmailContent(messageId: string): Promise<EmailContent> {
+  return get<EmailContent>(`/email/${messageId}`);
+}
+
+export async function suggestTaskFromEmail(
+  messageId: string,
+  promptAddition?: string,
+): Promise<EmailTaskSuggestion> {
+  return post<EmailTaskSuggestion>(`/email/${messageId}/task-suggestion`, {
+    promptAddition: promptAddition?.trim() || undefined,
+  });
+}
+
+export async function suggestTextDraft(input: {
+  text: string;
+  mode: TextDraftMode;
+  currentDate: string;
+  currentDateTime: string;
+  currentView: 'day' | 'week' | 'month';
+  timezone: string;
+}): Promise<TextDraftResponse> {
+  return post<TextDraftResponse>('/ai/text-draft', input);
 }
 
 // ─── Project mutations ──────────────────────────────────────────────────────
@@ -346,9 +439,10 @@ export async function deleteProject(backendId: number): Promise<void> {
 
 // ─── RecurrentTask mutations ────────────────────────────────────────────────
 
-export async function createRecurrentTask(rt: RecurrentTask): Promise<{ id: number }> {
+export async function createRecurrentTask(rt: RecurrentTask, tags: Tag[]): Promise<{ id: number }> {
   return post<{ id: number }>('/recurrent-tasks', {
     client_id:       rt.id,
+    tag_id:          resolveTagBackendId(rt.tagId, tags),
     title:           rt.title,
     notes:           rt.notes ?? null,
     recurrence_rule: frequencyToRule(rt.frequency),

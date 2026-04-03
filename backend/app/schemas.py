@@ -21,6 +21,7 @@ class RecurringTaskGenerationResponse(BaseModel):
 
 class RecurrentTaskBase(BaseModel):
     project_id: Optional[int] = None
+    tag_id: Optional[int] = None
     title: str
     location: str = "backlog"
     notes: Optional[str] = None
@@ -36,6 +37,7 @@ class RecurrentTaskCreate(RecurrentTaskBase):
 
 class RecurrentTaskUpdate(BaseModel):
     project_id: Optional[int] = None
+    tag_id: Optional[int] = None
     title: Optional[str] = None
     location: Optional[str] = None
     notes: Optional[str] = None

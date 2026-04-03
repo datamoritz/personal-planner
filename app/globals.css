@@ -172,6 +172,15 @@ html, body {
   color: white;
 }
 
+@keyframes emailSuggestShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -20% 0;
+  }
+}
+
 .ui-chip {
   display: inline-flex;
   align-items: center;

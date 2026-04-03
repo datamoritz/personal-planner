@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Sparkles, Trash2 } from 'lucide-react';
+import { Check, Sparkles, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { X } from 'lucide-react';
 import { DetailPopover } from './DetailPopover';
@@ -13,9 +13,10 @@ interface TaskDetailPopoverProps {
   taskId: string;
   anchor: HTMLElement;
   onClose: () => void;
+  isDraft?: boolean;
 }
 
-export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopoverProps) {
+export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: TaskDetailPopoverProps) {
   const { tasks, tags, updateTask, deleteTask, setTaskTag } = usePlannerStore();
   const task = tasks.find((t) => t.id === taskId);
 
@@ -60,6 +61,12 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
   if (!task) return null;
 
   const showTime = task.location === 'myday' || !!task.startTime;
+  const hasChanges =
+    title.trim() !== task.title ||
+    notes !== (task.notes ?? '') ||
+    date !== task.date ||
+    startTime !== (task.startTime ?? '') ||
+    endTime !== (task.endTime ?? '');
   const handleSuggestEmoji = async () => {
     const baseTitle = title.trim();
     if (!baseTitle || emojiLoading) return;
@@ -99,6 +106,17 @@ export function TaskDetailPopover({ taskId, anchor, onClose }: TaskDetailPopover
           >
             <Trash2 size={12} strokeWidth={2.25} />
           </button>
+          {(isDraft || hasChanges) && (
+            <button
+              type="button"
+              onClick={handleClose}
+              className="ui-icon-button ui-icon-button--accent"
+              aria-label={isDraft ? 'Create task' : 'Save task'}
+              title={isDraft ? 'Create task' : 'Save task'}
+            >
+              <Check size={12} strokeWidth={2.5} />
+            </button>
+          )}
         </>
       )}
     >

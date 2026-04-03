@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useDroppable } from '@dnd-kit/core';
 import { Plus } from 'lucide-react';
 import { usePlannerStore, selectTasksToday } from '@/store/usePlannerStore';
 
@@ -13,6 +14,10 @@ type PopoverState = { id: string; anchor: HTMLElement } | null;
 
 export function TasksTodayColumn() {
   const { currentDate, tasks, addTask, toggleTask, viewMode, activeTagFilter } = usePlannerStore();
+  const { setNodeRef } = useDroppable({
+    id: 'drop-today-column',
+    data: { type: 'container', containerId: 'today' },
+  });
   const allTodayTasks = selectTasksToday(tasks, currentDate);
   const todayTasks = activeTagFilter
     ? allTodayTasks.filter((t) => t.tagId === activeTagFilter)
@@ -35,7 +40,7 @@ export function TasksTodayColumn() {
   }, [viewMode]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden border-r border-[var(--color-border)]">
+    <div ref={setNodeRef} className="flex flex-col h-full overflow-hidden border-r border-[var(--color-border)]">
       <div className="flex h-[52px] items-center justify-between px-4 border-b border-[var(--color-border)] flex-shrink-0">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Tasks Today</h2>
         <div className="flex items-center gap-1.5">

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -8,7 +9,7 @@ import {
   type DragStartEvent,
   type SensorDescriptor,
 } from '@dnd-kit/core';
-import { ChevronLeft, ChevronRight, Moon, RefreshCw, Sun, Tag } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Mail, Moon, RefreshCw, Sparkles, Sun, Tag } from 'lucide-react';
 import { DayHeader } from './DayHeader';
 import { ProjectsColumn } from './columns/ProjectsColumn';
 import { MyDayColumn } from './columns/MyDayColumn';
@@ -19,6 +20,8 @@ import { MonthViewColumn } from './columns/MonthViewColumn';
 import { ViewToggle } from './ui/ViewToggle';
 import { TagsDropdown } from './ui/TagsDropdown';
 import { DetailPopover } from './ui/DetailPopover';
+import { EmailToTaskPanel } from './ui/EmailToTaskPanel';
+import { SmartCaptureBar } from './ui/SmartCaptureBar';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
 
@@ -123,6 +126,9 @@ export function PlannerAppView({
   handleDragStart,
   handleDragEnd,
 }: PlannerAppViewProps) {
+  const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [smartCaptureOpen, setSmartCaptureOpen] = useState(true);
+  const [smartCaptureFocusToken, setSmartCaptureFocusToken] = useState(0);
   const showLeftPanel = viewMode === 'week' || viewMode === 'month' ? weekProjectsVisible : !leftCollapsed;
   const showMonthEventTimes = !(viewMode === 'month' && showLeftPanel && !rightCollapsed);
 
@@ -136,7 +142,7 @@ export function PlannerAppView({
         onDragEnd={handleDragEnd}
       >
         <div className="flex flex-col flex-1 max-w-[1920px] mx-auto min-w-0">
-          <div className="flex items-center justify-between px-3 pb-2">
+          <div className="relative flex items-center justify-between px-3 pb-2">
             <div className="flex items-center gap-3.5">
               <span className="text-sm font-semibold tracking-tight text-[var(--color-text-primary)] flex-shrink-0">
                 Planner
@@ -144,7 +150,46 @@ export function PlannerAppView({
               <ViewToggle value={viewMode} onChange={setViewMode} />
             </div>
 
+            {smartCaptureOpen && (
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 flex w-full -translate-x-1/2 -translate-y-[7px] items-center justify-center px-48">
+                <div className="pointer-events-auto">
+                  <SmartCaptureBar autoFocusToken={smartCaptureFocusToken} />
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-1.5">
+              <div className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSmartCaptureOpen((current) => {
+                      const next = !current;
+                      if (next) setSmartCaptureFocusToken((token) => token + 1);
+                      return next;
+                    });
+                  }}
+                  title={smartCaptureOpen ? 'Hide AI capture' : 'Show AI capture'}
+                  className={[
+                    'ui-icon-button',
+                    smartCaptureOpen
+                      ? 'text-[var(--color-accent)] bg-[var(--color-accent-subtle)] border border-[var(--color-accent)]/18'
+                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10',
+                  ].join(' ')}
+                >
+                  <Sparkles size={14} strokeWidth={2.1} />
+                </button>
+              </div>
+              <div className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={() => setEmailPanelOpen(true)}
+                  title="Recent emails"
+                  className="ui-icon-button text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10"
+                >
+                  <Mail size={14} strokeWidth={2.1} />
+                </button>
+              </div>
               <div className="relative inline-flex">
                 <button
                   type="button"
@@ -286,6 +331,8 @@ export function PlannerAppView({
           {activeDrag?.type === 'task' && <TaskGhost task={activeDrag.item} compact={activeDrag.compact} />}
           {activeDrag?.type === 'recurrent' && <RecurrentGhost task={activeDrag.item} />}
         </DragOverlay>
+
+        <EmailToTaskPanel open={emailPanelOpen} onClose={() => setEmailPanelOpen(false)} />
       </DndContext>
     </div>
   );
