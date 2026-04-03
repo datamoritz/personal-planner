@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, date, time
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -218,6 +218,28 @@ class EmojiSuggestionRequest(BaseModel):
 
 class EmojiSuggestionResponse(BaseModel):
     emoji: str
+
+
+class TextDraftRequest(BaseModel):
+    text: str
+    mode: Literal["task", "event"]
+    currentDate: date
+    currentDateTime: datetime
+    currentView: Literal["day", "week", "month", "year"] = "day"
+    timezone: str = "America/Denver"
+
+
+class TextDraftResponse(BaseModel):
+    mode: Literal["task", "event"]
+    title: str | None = None
+    notes: str | None = None
+    taskDate: str | None = None
+    startTime: str | None = None
+    endTime: str | None = None
+    allDay: bool = False
+    location: str | None = None
+    dateDetected: bool = False
+    timeDetected: bool = False
 
 
 # ---------------------------------------------------------------------------
