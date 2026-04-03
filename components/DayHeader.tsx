@@ -110,11 +110,6 @@ export function DayHeader() {
                 Today
               </button>
             )}
-            {mounted && atPresentUnit && (
-              <span className="px-2.5 py-1 rounded-full bg-[var(--color-accent-subtle)] text-[11px] font-semibold tracking-[0.08em] text-[var(--color-accent)]">
-                {isMonth ? 'This month' : isWeek ? 'This week' : 'Now'}
-              </span>
-            )}
           </div>
 
           <button
