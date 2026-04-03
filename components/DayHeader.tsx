@@ -52,6 +52,9 @@ export function DayHeader() {
     else if (isWeek) navigateWeek('next');
     else navigateDay('next');
   };
+  const jumpToToday = () => {
+    setCurrentDate(format(new Date(), 'yyyy-MM-dd'));
+  };
 
   // Read fresh state inside the handler so the dep array is always [] (stable size)
   useEffect(() => {
@@ -81,7 +84,7 @@ export function DayHeader() {
       <div className="flex items-center justify-between px-6 py-2.5 min-h-[58px]">
         <div style={{ width: '25%' }} />
 
-        <div className="flex items-center gap-2.5" style={{ width: '50%', justifyContent: 'center' }}>
+        <div className="flex items-center justify-center" style={{ width: '50%' }}>
           <button
             onClick={navPrev}
             className="ui-icon-button"
@@ -89,13 +92,27 @@ export function DayHeader() {
             <ChevronLeft size={16} strokeWidth={2} />
           </button>
 
-          <div className="flex items-center gap-2.5 min-w-[220px] justify-center">
+          <div className="flex items-center justify-center gap-2.5 min-w-[220px] px-3">
             <span className="text-[1.15rem] font-bold tracking-tight text-[var(--color-text-primary)]" suppressHydrationWarning>
               {mounted ? (isMonth ? format(date, 'MMMM yyyy') : isWeek ? formatWeekRange(currentDate) : format(date, 'EEEE, MMMM d')) : ''}
             </span>
+            {mounted && (
+              <button
+                type="button"
+                onClick={jumpToToday}
+                className={[
+                  'px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-[0.08em] transition-colors',
+                  atPresentUnit
+                    ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
+                    : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-[var(--color-text-secondary)]',
+                ].join(' ')}
+              >
+                Today
+              </button>
+            )}
             {mounted && atPresentUnit && (
               <span className="px-2.5 py-1 rounded-full bg-[var(--color-accent-subtle)] text-[11px] font-semibold tracking-[0.08em] text-[var(--color-accent)]">
-                {isMonth ? 'This month' : isWeek ? 'This week' : 'Today'}
+                {isMonth ? 'This month' : isWeek ? 'This week' : 'Now'}
               </span>
             )}
           </div>
@@ -105,18 +122,6 @@ export function DayHeader() {
             className="ui-icon-button"
           >
             <ChevronRight size={16} strokeWidth={2} />
-          </button>
-
-          <button
-            onClick={() => setCurrentDate(format(new Date(), 'yyyy-MM-dd'))}
-            className={[
-              'px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors',
-              atPresentUnit
-                ? 'invisible'
-                : 'text-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)] cursor-pointer',
-            ].join(' ')}
-          >
-            Today
           </button>
         </div>
 

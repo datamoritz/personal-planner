@@ -9,9 +9,15 @@ interface SortableRecurrentItemProps {
   task: RecurrentTask;
   hasActiveInstance?: boolean;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
+  onAdvance?: (id: string) => void;
 }
 
-export function SortableRecurrentItem({ task, hasActiveInstance, onDoubleClick }: SortableRecurrentItemProps) {
+export function SortableRecurrentItem({
+  task,
+  hasActiveInstance,
+  onDoubleClick,
+  onAdvance,
+}: SortableRecurrentItemProps) {
   const {
     attributes,
     listeners,
@@ -35,7 +41,12 @@ export function SortableRecurrentItem({ task, hasActiveInstance, onDoubleClick }
       {...attributes}
       {...listeners}
     >
-      <RecurrentTaskPill task={task} hasActiveInstance={hasActiveInstance} onDoubleClick={onDoubleClick} />
+      <RecurrentTaskPill
+        task={task}
+        hasActiveInstance={hasActiveInstance}
+        onDoubleClick={onDoubleClick}
+        onAdvance={onAdvance}
+      />
     </div>
   );
 }

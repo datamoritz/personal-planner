@@ -59,7 +59,7 @@ export function DetailPopover({
       <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
         <div
           ref={setFloating}
-          style={{ ...floatingStyles, zIndex: 50 }}
+          style={{ ...floatingStyles, zIndex: 120 }}
           {...getFloatingProps()}
           className={`${className ?? 'w-72'} ui-floating-surface bg-[var(--color-popover)]`}
         >

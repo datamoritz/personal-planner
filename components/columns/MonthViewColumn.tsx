@@ -36,9 +36,11 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
     setCurrentDate,
     setViewMode,
     applyOptimisticGoogleEntry,
+    applyOptimisticGoogleDelete,
     clearPendingGoogleMutation,
     setGoogleCalendarEntries,
     applyOptimisticGoogleAllDayEvent,
+    applyOptimisticGoogleAllDayDelete,
     clearPendingGoogleAllDayMutation,
     setGoogleAllDayEvents,
     monthTaskLayout,
@@ -154,6 +156,30 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
     });
   }, [applyOptimisticGoogleAllDayEvent, clearPendingGoogleAllDayMutation, refreshGoogle, setGoogleAllDayEvents]);
 
+  const deleteGoogleEntry = useCallback((entryId: string) => {
+    const prevEntries = usePlannerStore.getState().googleCalendarEntries;
+    applyOptimisticGoogleDelete(entryId);
+    api.deleteGoogleTimedEvent(entryId).then(() => {
+      refreshGoogle();
+    }).catch((err) => {
+      console.error('[deleteGoogleTimedEvent month]', err);
+      setGoogleCalendarEntries(prevEntries);
+      clearPendingGoogleMutation(entryId);
+    });
+  }, [applyOptimisticGoogleDelete, clearPendingGoogleMutation, refreshGoogle, setGoogleCalendarEntries]);
+
+  const deleteAllDayEvent = useCallback((eventId: string) => {
+    const prevEvents = usePlannerStore.getState().googleAllDayEvents;
+    applyOptimisticGoogleAllDayDelete(eventId);
+    api.deleteGoogleAllDayEvent(eventId).then(() => {
+      refreshGoogle();
+    }).catch((err) => {
+      console.error('[deleteGoogleAllDayEvent month]', err);
+      setGoogleAllDayEvents(prevEvents);
+      clearPendingGoogleAllDayMutation(eventId);
+    });
+  }, [applyOptimisticGoogleAllDayDelete, clearPendingGoogleAllDayMutation, refreshGoogle, setGoogleAllDayEvents]);
+
   useDndMonitor({
     onDragEnd(event: DragEndEvent) {
       const { active, over } = event;
@@ -162,6 +188,15 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
       const sourceData = active.data.current as { type?: string; containerId?: string } | undefined;
       const overData = over.data.current as { containerId?: string } | undefined;
       const destContainer = overData?.containerId ?? String(over.id).replace(/^drop-/, '');
+
+      if (destContainer === 'trash') {
+        if (sourceData?.type === 'google-entry') {
+          deleteGoogleEntry(String(active.id));
+        } else if (sourceData?.type === 'google-all-day') {
+          deleteAllDayEvent(String(active.id));
+        }
+        return;
+      }
 
       if (!destContainer.startsWith('month-events-')) return;
       const targetDate = destContainer.replace('month-events-', '');

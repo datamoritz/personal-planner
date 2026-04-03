@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { addDays, addMonths, format, subDays, subMonths } from 'date-fns';
+import { addDays, addMonths, endOfYear, format, subDays, subMonths } from 'date-fns';
 import * as api from '@/lib/api';
 import { minutesToTime, timeToMinutes } from '@/lib/timeGrid';
 import type {
@@ -30,6 +30,119 @@ function uid(): string {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function taskBucketKey(task: Pick<Task, 'location' | 'date' | 'projectId'>): string {
+  switch (task.location) {
+    case 'project':
+      return `project:${task.projectId ?? ''}`;
+    case 'myday':
+      return `myday:${task.date ?? ''}`;
+    case 'today':
+      return `today:${task.date ?? ''}`;
+    case 'upcoming':
+      return `upcoming:${task.date ?? ''}`;
+    case 'backlog':
+    default:
+      return 'backlog';
+  }
+}
+
+function sortBySortOrder<T extends { sortOrder?: number; createdAt?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const orderDiff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    if (orderDiff !== 0) return orderDiff;
+    return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+  });
+}
+
+function assignSequentialSortOrders<T extends Task | Project>(items: T[]): T[] {
+  return items.map((item, index) => ({ ...item, sortOrder: index }));
+}
+
+function nextTaskSortOrder(tasks: Task[], bucket: Pick<Task, 'location' | 'date' | 'projectId'>): number {
+  return tasks.filter((task) => taskBucketKey(task) === taskBucketKey(bucket)).length;
+}
+
+function parseIsoDate(dateStr: string): Date {
+  return new Date(`${dateStr}T00:00:00`);
+}
+
+function enumerateRecurringDates(
+  frequency: RecurrenceFrequency,
+  startDate: string,
+  endDate: string,
+  anchorDate?: string,
+): string[] {
+  const start = parseIsoDate(startDate);
+  const end = parseIsoDate(endDate);
+  const dates: string[] = [];
+
+  switch (frequency.type) {
+    case 'daily': {
+      for (let current = start; current <= end; current = addDays(current, 1)) {
+        dates.push(format(current, 'yyyy-MM-dd'));
+      }
+      return dates;
+    }
+
+    case 'weekly': {
+      const offset = (frequency.dayOfWeek - start.getDay() + 7) % 7;
+      for (let current = addDays(start, offset); current <= end; current = addDays(current, 7)) {
+        dates.push(format(current, 'yyyy-MM-dd'));
+      }
+      return dates;
+    }
+
+    case 'monthly': {
+      for (let monthStart = new Date(start.getFullYear(), start.getMonth(), 1); monthStart <= end; monthStart = addMonths(monthStart, 1)) {
+        const candidate = new Date(monthStart.getFullYear(), monthStart.getMonth(), frequency.dayOfMonth);
+        if (candidate.getMonth() !== monthStart.getMonth()) continue;
+        if (candidate < start || candidate > end) continue;
+        dates.push(format(candidate, 'yyyy-MM-dd'));
+      }
+      return dates;
+    }
+
+    case 'custom-days': {
+      const interval = Math.max(1, frequency.intervalDays);
+      let current = parseIsoDate(anchorDate ?? startDate);
+      while (current < start) current = addDays(current, interval);
+      for (; current <= end; current = addDays(current, interval)) {
+        dates.push(format(current, 'yyyy-MM-dd'));
+      }
+      return dates;
+    }
+
+    case 'custom-weeks': {
+      const intervalWeeks = Math.max(1, frequency.intervalWeeks);
+      let current = parseIsoDate(anchorDate ?? startDate);
+      const targetDay = frequency.dayOfWeek;
+      const firstOffset = (targetDay - current.getDay() + 7) % 7;
+      current = addDays(current, firstOffset);
+      while (current < start) current = addDays(current, intervalWeeks * 7);
+      for (; current <= end; current = addDays(current, intervalWeeks * 7)) {
+        dates.push(format(current, 'yyyy-MM-dd'));
+      }
+      return dates;
+    }
+
+    case 'custom-months': {
+      const intervalMonths = Math.max(1, frequency.intervalMonths);
+      let cursor = parseIsoDate(anchorDate ?? startDate);
+      if (cursor.getDate() !== frequency.dayOfMonth) {
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth(), frequency.dayOfMonth);
+      }
+      while (cursor < start) cursor = addMonths(cursor, intervalMonths);
+      for (; cursor <= end; cursor = addMonths(cursor, intervalMonths)) {
+        const candidate = new Date(cursor.getFullYear(), cursor.getMonth(), frequency.dayOfMonth);
+        if (candidate.getMonth() !== cursor.getMonth()) continue;
+        if (candidate < start || candidate > end) continue;
+        dates.push(format(candidate, 'yyyy-MM-dd'));
+      }
+      return dates;
+    }
+  }
 }
 
 const DISPLAY_TAG_COLORS_BY_NAME: Record<string, Pick<Tag, 'color' | 'colorDark'>> = {
@@ -189,7 +302,7 @@ interface PlannerStore extends PlannerState {
   hydrateFromBackend: (data: BootData) => void;
   // Tasks
   toggleTask: (id: string) => void;
-  addTask: (data: { title: string; location: Task['location']; date?: string; projectId?: string }) => void;
+  addTask: (data: { title: string; location: Task['location']; date?: string; projectId?: string }) => string;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime'>>) => void;
   deleteTask: (id: string) => void;
   // Recurrent tasks
@@ -197,6 +310,8 @@ interface PlannerStore extends PlannerState {
   updateRecurrentTask: (id: string, updates: Partial<Pick<RecurrentTask, 'title' | 'notes' | 'frequency'>>) => void;
   deleteRecurrentTask: (id: string) => void;
   advanceRecurrentTask: (id: string) => void;
+  spawnRecurrentTasksForNextMonths: (id: string, months?: number) => void;
+  setRecurrentTaskTag: (id: string, tagId: string | undefined) => void;
   // Projects
   addProject: (title: string) => void;
   deleteProject: (id: string) => void;
@@ -355,6 +470,11 @@ export const usePlannerStore = create<PlannerStore>()(
           : undefined;
         const newTask: Task = {
           id:        uid(),
+          sortOrder: nextTaskSortOrder(get().tasks, {
+            location: data.location,
+            date: data.date,
+            projectId: data.projectId,
+          }),
           title:     data.title,
           status:    'pending',
           location:  data.location,
@@ -396,6 +516,8 @@ export const usePlannerStore = create<PlannerStore>()(
               ),
             }));
           });
+
+        return newTask.id;
       },
 
       updateTask: (id, updates) => {
@@ -468,6 +590,7 @@ export const usePlannerStore = create<PlannerStore>()(
         const rt: RecurrentTask = {
           id:          uid(),
           title:       data.title,
+          tagId:       undefined,
           frequency:   data.frequency,
           nextDueDate: today,
           createdAt:   ts,
@@ -475,7 +598,7 @@ export const usePlannerStore = create<PlannerStore>()(
         };
         set((s) => ({ recurrentTasks: [...s.recurrentTasks, rt] }));
 
-        api.createRecurrentTask(rt)
+        api.createRecurrentTask(rt, get().tags)
           .then(({ id: backendId }) => {
             set((s) => ({
               recurrentTasks: s.recurrentTasks.map((r) =>
@@ -549,12 +672,69 @@ export const usePlannerStore = create<PlannerStore>()(
           }),
         })),
 
+      spawnRecurrentTasksForNextMonths: (id) => {
+        const rt = get().recurrentTasks.find((r) => r.id === id);
+        if (!rt) return;
+
+        const startDate = today;
+        const endDate = format(endOfYear(parseIsoDate(today)), 'yyyy-MM-dd');
+        const candidateDates = enumerateRecurringDates(rt.frequency, startDate, endDate, rt.nextDueDate);
+        const existingDates = new Set(
+          get().tasks
+            .filter((t) => t.recurrentTaskId === id && t.date)
+            .map((t) => t.date as string)
+        );
+        const datesToCreate = candidateDates.filter((date) => !existingDates.has(date));
+        if (datesToCreate.length === 0) return;
+
+        const ts = now();
+        const newTasks: Task[] = datesToCreate.map((date) => ({
+          id: uid(),
+          sortOrder: nextTaskSortOrder(get().tasks, { location: 'today', date }),
+          title: rt.title,
+          status: 'pending',
+          location: 'today',
+          date,
+          recurrentTaskId: id,
+          tagId: rt.tagId,
+          notes: rt.notes,
+          createdAt: ts,
+          updatedAt: ts,
+        }));
+
+        set((s) => ({ tasks: [...s.tasks, ...newTasks] }));
+
+        const { projects, recurrentTasks, tags } = get();
+        api.createTasksBulk(newTasks, projects, recurrentTasks, tags)
+          .then(({ created }) => {
+            const backendIdByClientId = new Map(
+              created
+                .filter((task) => task.client_id)
+                .map((task) => [String(task.client_id), task.id])
+            );
+            set((s) => ({
+              tasks: s.tasks.map((task) =>
+                backendIdByClientId.has(task.id)
+                  ? { ...task, backendId: backendIdByClientId.get(task.id) }
+                  : task
+              ),
+            }));
+          })
+          .catch((err) => {
+            console.error('[spawnRecurrentTasksForNextMonths]', err);
+            set((s) => ({
+              tasks: s.tasks.filter((task) => !newTasks.some((createdTask) => createdTask.id === task.id)),
+            }));
+          });
+      },
+
       // ── Projects ───────────────────────────────────────────────────────
 
       addProject: (title) => {
         const ts = now();
         const project: Project = {
           id:          uid(),
+          sortOrder:   get().projects.length,
           title,
           subtaskIds:  [],
           status:      'active',
@@ -623,16 +803,27 @@ export const usePlannerStore = create<PlannerStore>()(
         }
       },
 
-      reorderProject: (activeId, overId) =>
-        set((s) => {
-          const projects = [...s.projects];
-          const from = projects.findIndex((p) => p.id === activeId);
-          const to   = projects.findIndex((p) => p.id === overId);
-          if (from === -1 || to === -1) return {};
-          projects.splice(to, 0, projects.splice(from, 1)[0]);
-          return { projects };
-          // Note: sort_order not synced to backend in Phase 2
-        }),
+      reorderProject: (activeId, overId) => {
+        const prevProjects = get().projects;
+        const projects = [...prevProjects];
+        const from = projects.findIndex((p) => p.id === activeId);
+        const to   = projects.findIndex((p) => p.id === overId);
+        if (from === -1 || to === -1) return;
+        projects.splice(to, 0, projects.splice(from, 1)[0]);
+        const reordered = assignSequentialSortOrders(projects);
+        set({ projects: reordered });
+
+        Promise.all(
+          reordered
+            .filter((project) => project.backendId)
+            .map((project) =>
+              api.patchProject(project.backendId!, { sort_order: project.sortOrder ?? 0 })
+            )
+        ).catch((err) => {
+          console.error('[reorderProject]', err);
+          set({ projects: prevProjects });
+        });
+      },
 
       setProjectTag: (projectId, tagId) => {
         const prevProject = get().projects.find((p) => p.id === projectId);
@@ -765,22 +956,66 @@ export const usePlannerStore = create<PlannerStore>()(
         }
       },
 
+      setRecurrentTaskTag: (id, tagId) => {
+        const prevRecurrentTasks = get().recurrentTasks;
+        set((s) => ({
+          recurrentTasks: s.recurrentTasks.map((task) =>
+            task.id === id ? { ...task, tagId, updatedAt: now() } : task
+          ),
+        }));
+        const task = get().recurrentTasks.find((recurrentTask) => recurrentTask.id === id);
+        if (task?.backendId) {
+          api.patchRecurrentTask(task.backendId, {
+            tag_id: api.resolveTagBackendId(tagId, get().tags),
+          }).catch((err) => {
+            console.error('[setRecurrentTaskTag]', err);
+            set({ recurrentTasks: prevRecurrentTasks });
+          });
+        }
+      },
+
       // ── DnD ────────────────────────────────────────────────────────────
 
-      reorderTask: (activeId, overId) =>
-        set((s) => {
-          const tasks = [...s.tasks];
-          const from = tasks.findIndex((t) => t.id === activeId);
-          const to   = tasks.findIndex((t) => t.id === overId);
-          if (from === -1 || to === -1) return {};
-          tasks.splice(to, 0, tasks.splice(from, 1)[0]);
-          return { tasks };
-          // Note: sort_order not synced to backend in Phase 2
-        }),
+      reorderTask: (activeId, overId) => {
+        const prevTasks = get().tasks;
+        const tasks = [...prevTasks];
+        const from = tasks.findIndex((t) => t.id === activeId);
+        const to   = tasks.findIndex((t) => t.id === overId);
+        if (from === -1 || to === -1) return;
+
+        tasks.splice(to, 0, tasks.splice(from, 1)[0]);
+
+        const activeTask = tasks.find((t) => t.id === activeId);
+        const overTask = tasks.find((t) => t.id === overId);
+        if (!activeTask || !overTask) return;
+        if (taskBucketKey(activeTask) !== taskBucketKey(overTask)) {
+          set({ tasks });
+          return;
+        }
+
+        const bucketKey = taskBucketKey(activeTask);
+        const bucketTasks = assignSequentialSortOrders(tasks.filter((t) => taskBucketKey(t) === bucketKey));
+        let bucketIndex = 0;
+        const reordered = tasks.map((task) =>
+          taskBucketKey(task) === bucketKey ? bucketTasks[bucketIndex++] : task
+        );
+        set({ tasks: reordered });
+
+        Promise.all(
+          bucketTasks
+            .filter((task) => task.backendId)
+            .map((task) => api.patchTask(task.backendId!, { sort_order: task.sortOrder ?? 0 }))
+        ).catch((err) => {
+          console.error('[reorderTask]', err);
+          set({ tasks: prevTasks });
+        });
+      },
 
       moveTask: (taskId, dest) => {
         const prevTask = get().tasks.find((t) => t.id === taskId);
         if (!prevTask) return;
+        const prevTasks = get().tasks;
+        const prevProjects = get().projects;
         const ts = now();
 
         const destTagId =
@@ -789,7 +1024,7 @@ export const usePlannerStore = create<PlannerStore>()(
             : undefined;
 
         set((s) => {
-          const updatedTasks = s.tasks.map((t) =>
+          let updatedTasks = s.tasks.map((t) =>
             t.id === taskId
               ? {
                   ...t,
@@ -798,11 +1033,27 @@ export const usePlannerStore = create<PlannerStore>()(
                   projectId: dest.projectId,
                   startTime: dest.startTime,
                   endTime:   dest.endTime,
+                  sortOrder: 0,
                   tagId:     dest.location === 'project' ? destTagId : t.tagId,
                   updatedAt: ts,
                 }
               : t
           );
+          const sourceBucket = taskBucketKey(prevTask);
+          const destBucket = taskBucketKey({
+            location: dest.location,
+            date: dest.date,
+            projectId: dest.projectId,
+          });
+          const rebalanceBucket = (bucketKey: string) => {
+            const bucketTasks = assignSequentialSortOrders(updatedTasks.filter((task) => taskBucketKey(task) === bucketKey));
+            let bucketIndex = 0;
+            updatedTasks = updatedTasks.map((task) =>
+              taskBucketKey(task) === bucketKey ? bucketTasks[bucketIndex++] : task
+            );
+          };
+          rebalanceBucket(sourceBucket);
+          if (destBucket !== sourceBucket) rebalanceBucket(destBucket);
           let projects = s.projects;
           if (prevTask.location === 'project' && prevTask.projectId) {
             projects = projects.map((p) =>
@@ -823,20 +1074,38 @@ export const usePlannerStore = create<PlannerStore>()(
 
         const movedTask = get().tasks.find((t) => t.id === taskId);
         if (movedTask?.backendId) {
-          const projectBackendId = dest.projectId
-            ? get().projects.find((p) => p.id === dest.projectId)?.backendId ?? null
-            : null;
-          api.patchTask(movedTask.backendId, {
-            location:   dest.location,
-            task_date:  dest.date ?? null,
-            project_id: projectBackendId,
-            start_time: dest.startTime ? `${dest.startTime}:00` : null,
-            end_time:   dest.endTime   ? `${dest.endTime}:00`   : null,
-          }).catch((err) => {
+          const updatedTasks = get().tasks;
+          const sourceBucket = taskBucketKey(prevTask);
+          const destBucket = taskBucketKey({
+            location: dest.location,
+            date: dest.date,
+            projectId: dest.projectId,
+          });
+          const affectedTasks = updatedTasks.filter((task) => {
+            const key = taskBucketKey(task);
+            return key === sourceBucket || key === destBucket;
+          });
+          Promise.all(
+            affectedTasks
+              .filter((task) => task.backendId)
+              .map((task) =>
+                api.patchTask(task.backendId!, {
+                  location: task.location,
+                  task_date: task.date ?? null,
+                  project_id: task.projectId
+                    ? get().projects.find((p) => p.id === task.projectId)?.backendId ?? null
+                    : null,
+                  start_time: task.startTime ? `${task.startTime}:00` : null,
+                  end_time: task.endTime ? `${task.endTime}:00` : null,
+                  sort_order: task.sortOrder ?? 0,
+                })
+              )
+          ).catch((err) => {
             console.error('[moveTask]', err);
-            set((s) => ({
-              tasks: s.tasks.map((t) => (t.id === taskId ? prevTask : t)),
-            }));
+            set({
+              tasks: prevTasks,
+              projects: prevProjects,
+            });
           });
         }
       },
@@ -847,11 +1116,17 @@ export const usePlannerStore = create<PlannerStore>()(
         const ts = now();
         const newTask: Task = {
           id:              uid(),
+          sortOrder:       nextTaskSortOrder(get().tasks, {
+            location: dest.location,
+            date: dest.date,
+            projectId: undefined,
+          }),
           title:           rt.title,
           status:          'pending',
           location:        dest.location,
           date:            dest.date,
           recurrentTaskId: recId,
+          tagId:           rt.tagId,
           notes:           rt.notes,
           createdAt:       ts,
           updatedAt:       ts,
@@ -989,16 +1264,18 @@ function computeNextDueDate(freq: RecurrenceFrequency, fromDate: string): string
     case 'daily':   return format(addDays(base, 1),                'yyyy-MM-dd');
     case 'weekly':  return format(addDays(base, 7),                'yyyy-MM-dd');
     case 'monthly': return format(addDays(base, 30),               'yyyy-MM-dd');
-    case 'custom':  return format(addDays(base, freq.intervalDays), 'yyyy-MM-dd');
+    case 'custom-days':   return format(addDays(base, freq.intervalDays), 'yyyy-MM-dd');
+    case 'custom-weeks':  return format(addDays(base, freq.intervalWeeks * 7), 'yyyy-MM-dd');
+    case 'custom-months': return format(addMonths(base, freq.intervalMonths), 'yyyy-MM-dd');
   }
 }
 
 // ─── Selectors ─────────────────────────────────────────────────────────────
 
 export function selectTasksToday(tasks: Task[], date: string) {
-  return tasks.filter(
+  return sortBySortOrder(tasks.filter(
     (t) => t.date === date && (t.location === 'today' || t.location === 'upcoming')
-  );
+  ));
 }
 
 export function selectMyDayTasks(tasks: Task[], date: string) {
@@ -1017,7 +1294,7 @@ export function selectOverdueTasks(tasks: Task[]) {
 }
 
 export function selectBacklogTasks(tasks: Task[]) {
-  return tasks.filter((t) => t.location === 'backlog');
+  return sortBySortOrder(tasks.filter((t) => t.location === 'backlog'));
 }
 
 export function selectUpcomingTasks(tasks: Task[], currentDate: string) {
@@ -1030,19 +1307,23 @@ export function selectUpcomingTasks(tasks: Task[], currentDate: string) {
         t.date <= maxUpcomingDate &&
         (t.location === 'upcoming' || t.location === 'today')
     )
-    .sort((a, b) => (a.date! > b.date! ? 1 : -1));
+    .sort((a, b) => {
+      const dateDiff = a.date!.localeCompare(b.date!);
+      if (dateDiff !== 0) return dateDiff;
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    });
 }
 
 export function selectProjectTasks(tasks: Task[], projectId: string) {
-  return tasks.filter((t) => t.location === 'project' && t.projectId === projectId);
+  return sortBySortOrder(tasks.filter((t) => t.location === 'project' && t.projectId === projectId));
 }
 
 export function selectActiveProjects(projects: Project[]) {
-  return projects.filter((p) => p.status === 'active');
+  return sortBySortOrder(projects.filter((p) => p.status === 'active'));
 }
 
 export function selectFinishedProjects(projects: Project[]) {
-  return projects.filter((p) => p.status === 'finished');
+  return sortBySortOrder(projects.filter((p) => p.status === 'finished'));
 }
 
 export function selectRecurrentTasksSorted(recurrentTasks: RecurrentTask[]) {

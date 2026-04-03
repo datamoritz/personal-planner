@@ -61,7 +61,7 @@ function TrashDropTarget() {
 }
 
 export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandled }: SidebarColumnProps) {
-  const { currentDate, tasks, recurrentTasks, addTask, toggleTask, addRecurrentTask, activeTagFilter } = usePlannerStore();
+  const { currentDate, tasks, recurrentTasks, addTask, toggleTask, addRecurrentTask, advanceRecurrentTask, activeTagFilter } = usePlannerStore();
 
   const overdue  = activeTagFilter
     ? selectOverdueTasks(tasks).filter((t) => t.tagId === activeTagFilter)
@@ -247,6 +247,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                       key={rt.id}
                       task={rt}
                       hasActiveInstance={hasActive}
+                      onAdvance={advanceRecurrentTask}
                       onDoubleClick={(id, anchor) => setPopover({ type: 'recurrent', id, anchor })}
                     />
                   );

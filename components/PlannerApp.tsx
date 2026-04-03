@@ -146,6 +146,12 @@ export function PlannerApp() {
         spawnRecurrentInstance(activeId, { location: 'today', date: currentDate });
       } else if (destContainer === 'backlog') {
         spawnRecurrentInstance(activeId, { location: 'backlog' });
+      } else if (destContainer.startsWith('week-today-')) {
+        const date = destContainer.replace('week-today-', '');
+        spawnRecurrentInstance(activeId, { location: 'today', date });
+      } else if (destContainer.startsWith('month-day-')) {
+        const date = destContainer.replace('month-day-', '');
+        spawnRecurrentInstance(activeId, { location: 'today', date });
       }
       return;
     }

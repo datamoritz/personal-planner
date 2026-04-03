@@ -11,7 +11,9 @@ function formatFrequency(freq: RecurrenceFrequency): string {
     case 'daily':   return 'Daily';
     case 'weekly':  return `Every ${days[freq.dayOfWeek]}`;
     case 'monthly': return `Monthly (${freq.dayOfMonth}${ordinal(freq.dayOfMonth)})`;
-    case 'custom':  return `Every ${freq.intervalDays}d`;
+    case 'custom-days':   return `Every ${freq.intervalDays}d`;
+    case 'custom-weeks':  return `Every ${freq.intervalWeeks}w (${days[freq.dayOfWeek]})`;
+    case 'custom-months': return `Every ${freq.intervalMonths}mo (${freq.dayOfMonth}${ordinal(freq.dayOfMonth)})`;
   }
 }
 
@@ -25,9 +27,15 @@ interface RecurrentTaskPillProps {
   task: RecurrentTask;
   hasActiveInstance?: boolean; // true if a spawned pending instance exists for today or future
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
+  onAdvance?: (id: string) => void;
 }
 
-export function RecurrentTaskPill({ task, hasActiveInstance = false, onDoubleClick }: RecurrentTaskPillProps) {
+export function RecurrentTaskPill({
+  task,
+  hasActiveInstance = false,
+  onDoubleClick,
+  onAdvance,
+}: RecurrentTaskPillProps) {
   const today = useSyncExternalStore(
     () => () => {},
     () => format(new Date(), 'yyyy-MM-dd'),
@@ -47,6 +55,37 @@ export function RecurrentTaskPill({ task, hasActiveInstance = false, onDoubleCli
           : 'border-[var(--color-border)] bg-[var(--color-surface-raised)]',
       ].join(' ')}
     >
+      <button
+        type="button"
+        disabled={hasActiveInstance}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (hasActiveInstance) return;
+          onAdvance?.(task.id);
+        }}
+        className={[
+          'flex-shrink-0 w-[15px] h-[15px] rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer',
+          hasActiveInstance
+            ? 'bg-[var(--color-accent)]/12 border-[var(--color-accent)] opacity-60 cursor-default'
+            : isDue
+            ? 'border-[var(--color-accent)]'
+            : 'border-[var(--color-text-muted)]',
+        ].join(' ')}
+        aria-label={hasActiveInstance ? 'Recurrent task already has an active instance' : 'Mark recurrent task complete for this cycle'}
+        title={hasActiveInstance ? 'Recurrent task already has an active instance' : 'Mark recurrent task complete for this cycle'}
+      >
+        {hasActiveInstance && (
+          <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+            <path d="M1 3L3 5L7 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
+      <span className="flex-1 text-[14px] text-[var(--color-text-primary)] leading-tight truncate">
+        {task.title}
+      </span>
+
       <div className="flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center">
         <RefreshCw
           size={12}
@@ -54,10 +93,6 @@ export function RecurrentTaskPill({ task, hasActiveInstance = false, onDoubleCli
           strokeWidth={2.5}
         />
       </div>
-
-      <span className="flex-1 text-[14px] text-[var(--color-text-primary)] leading-tight truncate">
-        {task.title}
-      </span>
 
       <span className={[
         'text-[10px] whitespace-nowrap flex-shrink-0',
