@@ -65,6 +65,15 @@ class AppleBirthdaySampleEvent(BaseModel):
     hasYear: bool = False
 
 
+class AppleBirthdayContact(BaseModel):
+    href: str
+    name: str
+    birthYear: int | None = None
+    month: int
+    day: int
+    hasYear: bool = False
+
+
 class AppleBirthdaysContactsDiscoveryResponse(BaseModel):
     configured: bool
     connected: bool
@@ -77,6 +86,14 @@ class AppleBirthdaysContactsDiscoveryResponse(BaseModel):
     birthdaysFound: int = 0
     sampleBirthdays: list[AppleBirthdaySampleEvent] = []
     detail: str | None = None
+
+
+class AppleBirthdayEventsResponse(BaseModel):
+    start: str
+    end: str
+    contactsScanned: int = 0
+    birthdaysFound: int = 0
+    events: list[AppleBirthdaySampleEvent] = []
 
 
 def _auth_header() -> str:
@@ -383,6 +400,12 @@ def _unfold_vcard_lines(vcard_text: str) -> list[str]:
     return lines
 
 
+def _unescape_vcard_text(value: str) -> str:
+    value = value.replace("\\n", "\n").replace("\\N", "\n")
+    value = value.replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
+    return value.strip()
+
+
 def _parse_vcard_name(lines: list[str]) -> str | None:
     fn_value: str | None = None
     n_value: str | None = None
@@ -392,10 +415,10 @@ def _parse_vcard_name(lines: list[str]) -> str | None:
         key, value = line.split(":", 1)
         upper_key = key.upper()
         if upper_key.startswith("FN"):
-            fn_value = value.strip()
+            fn_value = _unescape_vcard_text(value)
             break
         if upper_key.startswith("N"):
-            n_value = value.strip()
+            n_value = _unescape_vcard_text(value)
 
     if fn_value:
         return fn_value
@@ -410,6 +433,16 @@ def _parse_vcard_name(lines: list[str]) -> str | None:
         full_name = " ".join(part for part in [prefix, given, middle, family, suffix] if part)
         if full_name:
             return full_name
+
+    for line in lines:
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        upper_key = key.upper()
+        if upper_key.startswith("NICKNAME") or upper_key.startswith("ORG") or upper_key.startswith("EMAIL"):
+            fallback = _unescape_vcard_text(value)
+            if fallback:
+                return fallback
     return None
 
 
@@ -435,7 +468,10 @@ def _parse_vcard_birthday(lines: list[str]) -> tuple[int | None, int, int] | Non
 
         dated_match = re.fullmatch(r"(\d{4})-?(\d{2})-?(\d{2})", normalized)
         if dated_match:
-            return int(dated_match.group(1)), int(dated_match.group(2)), int(dated_match.group(3))
+            birth_year = int(dated_match.group(1))
+            if birth_year == 1604:
+                birth_year = None
+            return birth_year, int(dated_match.group(2)), int(dated_match.group(3))
 
     return None
 
@@ -468,6 +504,89 @@ def _normalize_birthday_sample(
         updatedAt=date_str,
         hasYear=birth_year is not None,
     )
+
+
+def _extract_birthday_contact(href: str, vcard_text: str) -> AppleBirthdayContact | None:
+    lines = _unfold_vcard_lines(vcard_text)
+    birthday_parts = _parse_vcard_birthday(lines)
+    if not birthday_parts:
+        return None
+    name = _parse_vcard_name(lines) or "Contact"
+    birth_year, month, day = birthday_parts
+    return AppleBirthdayContact(
+        href=href,
+        name=name,
+        birthYear=birth_year,
+        month=month,
+        day=day,
+        hasYear=birth_year is not None,
+    )
+
+
+def _fetch_birthday_contacts() -> tuple[str, str, list[AppleAddressBookDiscoveryItem], bool, int, list[AppleBirthdayContact]]:
+    configured = bool(settings.APPLE_ICLOUD_EMAIL and settings.APPLE_ICLOUD_APP_PASSWORD)
+    if not configured:
+        raise HTTPException(status_code=500, detail="Apple iCloud credentials are not configured")
+
+    server_url = settings.APPLE_CARDDAV_URL.rstrip("/")
+    principal_url = _discover_principal(server_url)
+    if not principal_url:
+        raise HTTPException(status_code=502, detail="Connected to Apple CardDAV but could not discover a principal URL")
+
+    addressbook_home_url = _discover_addressbook_home(principal_url)
+    if not addressbook_home_url:
+        raise HTTPException(status_code=502, detail="Connected to Apple CardDAV but could not discover an address book home")
+
+    addressbooks = _discover_addressbooks(addressbook_home_url)
+    usable_addressbooks = [book for book in addressbooks if book.isAddressBook]
+    if not usable_addressbooks:
+        raise HTTPException(status_code=502, detail="No address books were discovered via Apple CardDAV")
+
+    used_birthday_filter = True
+    vcards: list[tuple[str, str]] = []
+    for book in usable_addressbooks:
+        try:
+            vcards.extend(_query_addressbook_vcards(book.href, only_with_birthdays=True))
+        except HTTPException:
+            used_birthday_filter = False
+            vcards = []
+            break
+
+    if not used_birthday_filter:
+        for book in usable_addressbooks:
+            vcards.extend(_query_addressbook_vcards(book.href, only_with_birthdays=False))
+
+    contacts_scanned = 0
+    birthdays: list[AppleBirthdayContact] = []
+    for href, vcard_text in vcards:
+        contacts_scanned += 1
+        parsed = _extract_birthday_contact(href, vcard_text)
+        if parsed:
+            birthdays.append(parsed)
+
+    birthdays.sort(key=lambda item: (item.month, item.day, item.name.lower()))
+    return addressbook_home_url, principal_url, addressbooks, used_birthday_filter, contacts_scanned, birthdays
+
+
+def _birthday_occurrences_between(
+    contact: AppleBirthdayContact,
+    start_date: date,
+    end_date: date,
+) -> list[AppleBirthdaySampleEvent]:
+    events: list[AppleBirthdaySampleEvent] = []
+    for year in range(start_date.year, end_date.year + 1):
+        normalized = _normalize_birthday_sample(
+            contact.href,
+            contact.name,
+            (contact.birthYear, contact.month, contact.day),
+            year,
+        )
+        if not normalized:
+            continue
+        event_date = date.fromisoformat(normalized.date)
+        if start_date <= event_date <= end_date:
+            events.append(normalized)
+    return events
 
 
 @router.get("/apple-birthdays/discovery", response_model=AppleBirthdaysDiscoveryResponse)
@@ -539,65 +658,26 @@ def discover_apple_contact_birthdays(year: int | None = None, sample: int = 10):
     target_year = year or date.today().year
 
     server_url = settings.APPLE_CARDDAV_URL.rstrip("/")
-    principal_url = _discover_principal(server_url)
-    if not principal_url:
-        return AppleBirthdaysContactsDiscoveryResponse(
-            configured=True,
-            connected=True,
-            serverUrl=server_url,
-            detail="Connected to Apple CardDAV but could not discover a principal URL",
-        )
+    try:
+      addressbook_home_url, principal_url, addressbooks, used_birthday_filter, contacts_scanned, birthday_contacts = _fetch_birthday_contacts()
+    except HTTPException as exc:
+      return AppleBirthdaysContactsDiscoveryResponse(
+          configured=True,
+          connected=True,
+          serverUrl=server_url,
+          detail=str(exc.detail),
+      )
 
-    addressbook_home_url = _discover_addressbook_home(principal_url)
-    if not addressbook_home_url:
-        return AppleBirthdaysContactsDiscoveryResponse(
-            configured=True,
-            connected=True,
-            serverUrl=server_url,
-            principalUrl=principal_url,
-            detail="Connected to Apple CardDAV but could not discover an address book home",
-        )
-
-    addressbooks = _discover_addressbooks(addressbook_home_url)
-    usable_addressbooks = [book for book in addressbooks if book.isAddressBook]
-    if not usable_addressbooks:
-        return AppleBirthdaysContactsDiscoveryResponse(
-            configured=True,
-            connected=True,
-            serverUrl=server_url,
-            principalUrl=principal_url,
-            addressBookHomeUrl=addressbook_home_url,
-            addressBooks=addressbooks,
-            detail="No address books were discovered via Apple CardDAV",
-        )
-
-    used_birthday_filter = True
-    vcards: list[tuple[str, str]] = []
-    for book in usable_addressbooks:
-        try:
-            vcards.extend(_query_addressbook_vcards(book.href, only_with_birthdays=True))
-        except HTTPException:
-            used_birthday_filter = False
-            vcards = []
-            break
-
-    if not used_birthday_filter:
-        for book in usable_addressbooks:
-            vcards.extend(_query_addressbook_vcards(book.href, only_with_birthdays=False))
-
-    contacts_scanned = 0
-    birthdays: list[AppleBirthdaySampleEvent] = []
-    for href, vcard_text in vcards:
-        contacts_scanned += 1
-        lines = _unfold_vcard_lines(vcard_text)
-        birthday_parts = _parse_vcard_birthday(lines)
-        if not birthday_parts:
-            continue
-        name = _parse_vcard_name(lines) or "Contact"
-        normalized = _normalize_birthday_sample(href, name, birthday_parts, target_year)
-        if normalized:
-            birthdays.append(normalized)
-
+    birthdays = [
+        normalized
+        for contact in birthday_contacts
+        if (normalized := _normalize_birthday_sample(
+            contact.href,
+            contact.name,
+            (contact.birthYear, contact.month, contact.day),
+            target_year,
+        )) is not None
+    ]
     birthdays.sort(key=lambda item: (item.date, item.title.lower()))
 
     detail = None
@@ -616,4 +696,26 @@ def discover_apple_contact_birthdays(year: int | None = None, sample: int = 10):
         birthdaysFound=len(birthdays),
         sampleBirthdays=birthdays[:sample],
         detail=detail,
+    )
+
+
+@router.get("/apple-birthdays/events", response_model=AppleBirthdayEventsResponse)
+def get_apple_birthday_events(start: date, end: date):
+    if end < start:
+        raise HTTPException(status_code=400, detail="end cannot be before start")
+
+    _server_url = settings.APPLE_CARDDAV_URL.rstrip("/")
+    _addressbook_home_url, _principal_url, _addressbooks, _used_birthday_filter, contacts_scanned, birthday_contacts = _fetch_birthday_contacts()
+
+    events: list[AppleBirthdaySampleEvent] = []
+    for contact in birthday_contacts:
+        events.extend(_birthday_occurrences_between(contact, start, end))
+
+    events.sort(key=lambda item: (item.date, item.title.lower()))
+    return AppleBirthdayEventsResponse(
+        start=start.isoformat(),
+        end=end.isoformat(),
+        contactsScanned=contacts_scanned,
+        birthdaysFound=len(birthday_contacts),
+        events=events,
     )
