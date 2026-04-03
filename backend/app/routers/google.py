@@ -392,7 +392,11 @@ def update_google_all_day_event(event_id: str, payload: schemas.GoogleAllDayEven
         "end": {"date": google_end_date.isoformat()},
     }
 
-    updated = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+    try:
+        updated = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+    except HttpError as exc:
+        detail = exc.error_details if getattr(exc, "error_details", None) else str(exc)
+        raise HTTPException(status_code=exc.resp.status if exc.resp else 502, detail=detail) from exc
     normalized = _normalize_allday_event(updated)
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google all-day event was updated but could not be normalized")
