@@ -406,6 +406,19 @@ def _unescape_vcard_text(value: str) -> str:
     return value.strip()
 
 
+def _clean_contact_name_candidate(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = _unescape_vcard_text(value)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = cleaned.strip(" ;,")
+    if not cleaned:
+        return None
+    if not any(char.isalnum() for char in cleaned):
+        return None
+    return cleaned
+
+
 def _parse_vcard_name(lines: list[str]) -> str | None:
     fn_value: str | None = None
     n_value: str | None = None
@@ -415,10 +428,11 @@ def _parse_vcard_name(lines: list[str]) -> str | None:
         key, value = line.split(":", 1)
         upper_key = key.upper()
         if upper_key.startswith("FN"):
-            fn_value = _unescape_vcard_text(value)
-            break
+            fn_value = _clean_contact_name_candidate(value)
+            if fn_value:
+                break
         if upper_key.startswith("N"):
-            n_value = _unescape_vcard_text(value)
+            n_value = _clean_contact_name_candidate(value) or _unescape_vcard_text(value)
 
     if fn_value:
         return fn_value
@@ -431,8 +445,9 @@ def _parse_vcard_name(lines: list[str]) -> str | None:
         prefix = parts[3] if len(parts) > 3 else ""
         suffix = parts[4] if len(parts) > 4 else ""
         full_name = " ".join(part for part in [prefix, given, middle, family, suffix] if part)
-        if full_name:
-            return full_name
+        cleaned_full_name = _clean_contact_name_candidate(full_name)
+        if cleaned_full_name:
+            return cleaned_full_name
 
     for line in lines:
         if ":" not in line:
@@ -440,7 +455,7 @@ def _parse_vcard_name(lines: list[str]) -> str | None:
         key, value = line.split(":", 1)
         upper_key = key.upper()
         if upper_key.startswith("NICKNAME") or upper_key.startswith("ORG") or upper_key.startswith("EMAIL"):
-            fallback = _unescape_vcard_text(value)
+            fallback = _clean_contact_name_candidate(value)
             if fallback:
                 return fallback
     return None
