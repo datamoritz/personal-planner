@@ -7,6 +7,7 @@ from html import unescape
 from urllib import error, request
 
 from fastapi import APIRouter, Depends, HTTPException
+from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
 from app import schemas
@@ -222,8 +223,16 @@ def _modify_message_labels(
                 "removeLabelIds": remove_label_ids or [],
             },
         ).execute()
-    except Exception as exc:
-        raise HTTPException(status_code=404, detail="Email not found") from exc
+    except HttpError as exc:
+        status = exc.resp.status if exc.resp else 502
+        if status == 404:
+            raise HTTPException(status_code=404, detail="Email not found") from exc
+        if status == 403:
+            raise HTTPException(
+                status_code=403,
+                detail="Gmail modify access is missing — reconnect Google required",
+            ) from exc
+        raise HTTPException(status_code=status, detail="Unable to update email labels") from exc
 
 
 def _extract_output_text(payload: dict) -> str:
