@@ -22,6 +22,7 @@ router = APIRouter(tags=["google"])
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
 # In-memory OAuth state — intentionally not persisted (Phase 1 scope)
