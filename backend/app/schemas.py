@@ -225,6 +225,10 @@ class EmailTaskSuggestion(BaseModel):
 
 class EmailTaskSuggestionRequest(BaseModel):
     promptAddition: str | None = None
+    currentDate: date
+    currentDateTime: datetime
+    currentView: Literal["day", "week", "month", "year"] = "day"
+    timezone: str = "America/Denver"
 
 
 # ---------------------------------------------------------------------------

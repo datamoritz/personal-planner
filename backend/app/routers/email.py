@@ -206,6 +206,26 @@ def _fetch_email_content(gmail, message_id: str) -> schemas.EmailContent:
     )
 
 
+def _modify_message_labels(
+    gmail,
+    message_id: str,
+    *,
+    add_label_ids: list[str] | None = None,
+    remove_label_ids: list[str] | None = None,
+) -> None:
+    try:
+        gmail.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={
+                "addLabelIds": add_label_ids or [],
+                "removeLabelIds": remove_label_ids or [],
+            },
+        ).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="Email not found") from exc
+
+
 def _extract_output_text(payload: dict) -> str:
     output_text = payload.get("output_text")
     if isinstance(output_text, str) and output_text.strip():
@@ -259,10 +279,22 @@ def get_email_content(message_id: str, db: Session = Depends(get_db)):
     return _fetch_email_content(gmail, message_id)
 
 
+@router.post("/{message_id}/archive", status_code=204)
+def archive_email(message_id: str, db: Session = Depends(get_db)):
+    gmail = get_gmail_service(db)
+    _modify_message_labels(gmail, message_id, remove_label_ids=["INBOX"])
+
+
+@router.post("/{message_id}/unarchive", status_code=204)
+def unarchive_email(message_id: str, db: Session = Depends(get_db)):
+    gmail = get_gmail_service(db)
+    _modify_message_labels(gmail, message_id, add_label_ids=["INBOX"])
+
+
 @router.post("/{message_id}/task-suggestion", response_model=schemas.EmailTaskSuggestion)
 def suggest_task_from_email(
     message_id: str,
-    payload: schemas.EmailTaskSuggestionRequest | None = None,
+    payload: schemas.EmailTaskSuggestionRequest,
     db: Session = Depends(get_db),
 ):
     if not settings.OPENAI_API_KEY:
@@ -282,6 +314,8 @@ def suggest_task_from_email(
                     "title, notes, taskDate, startTime, endTime, location, status, tagName, projectTitle. "
                     "Prefer a concise actionable title. "
                     "Only include extra fields when strongly implied by the email. "
+                    "Use the provided current date context when interpreting relative dates or missing years. "
+                    "Do not infer past years unless the email clearly requires it. "
                     "Do not mention missing information. "
                     "Do not include markdown or explanatory prose."
                 ),
@@ -293,6 +327,10 @@ def suggest_task_from_email(
                         "subject": email.subject,
                         "body": email.body,
                         "extra_instruction": (payload.promptAddition or "").strip() or None,
+                        "current_date": payload.currentDate.isoformat(),
+                        "current_datetime": payload.currentDateTime.isoformat(),
+                        "current_view": payload.currentView,
+                        "timezone": payload.timezone,
                     },
                     ensure_ascii=False,
                 ),
