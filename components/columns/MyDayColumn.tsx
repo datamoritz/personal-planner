@@ -33,7 +33,8 @@ const DEFAULT_SCROLL_H = 8;
 
 type TaskPopover  = { type: 'task';  id: string; anchor: HTMLElement };
 type GoogleEntryPopover = { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean };
-type PopoverState = TaskPopover | GoogleEntryPopover | null;
+type BirthdayPopover = { type: 'birthday'; event: import('@/types').AllDayEvent; anchor: HTMLElement };
+type PopoverState = TaskPopover | GoogleEntryPopover | BirthdayPopover | null;
 
 function createClickAnchor(x: number, y: number): HTMLElement {
   const anchor = document.createElement('div');
@@ -282,6 +283,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       onToggleTask={toggleTask}
       onTaskDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
       onGoogleEntryDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+      onBirthdayClick={(event, anchor) => setPopover({ type: 'birthday', event, anchor })}
       onAllDayEmptyDoubleClick={(anchor) => {
         const rect = anchor.getBoundingClientRect();
         const clickAnchor = createClickAnchor(rect.left, rect.top);

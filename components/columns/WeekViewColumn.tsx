@@ -13,6 +13,7 @@ import {
   selectNextDayEarlyMyDayTasks,
 } from '@/store/usePlannerStore';
 import { computeOverlapDepths } from '@/lib/overlapLayout';
+import type { AllDayEvent } from '@/types';
 import {
   END_HOUR,
   SLOT_HEIGHT,
@@ -44,6 +45,7 @@ function getCurrentTimeLabel() {
 type Popover =
   | { type: 'task';  id: string; anchor: HTMLElement }
   | { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean }
+  | { type: 'birthday'; event: AllDayEvent; anchor: HTMLElement }
   | null;
 
 function createClickAnchor(x: number, y: number): HTMLElement {
@@ -392,6 +394,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
       setCurrentDateAndView={(date) => { setCurrentDate(date); setViewMode('day'); }}
       onTaskDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
       onGoogleEntryDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+      onBirthdayClick={(event, anchor) => setPopover({ type: 'birthday', event, anchor })}
       onToggleTask={toggleTask}
       onTaskResizeEnd={(id, endTime) => updateTask(id, { endTime })}
       onTaskRepositionEnd={(id, startTime, endTime, pos) => {

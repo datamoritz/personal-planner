@@ -12,6 +12,7 @@ import { TimedTaskBlock } from '@/components/ui/TimedTaskBlock';
 import { DroppableSection } from '@/components/dnd/DroppableSection';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
+import { AppleBirthdayDetailPopover } from '@/components/ui/AppleBirthdayDetailPopover';
 import { selectGoogleAllDayEventsForDate } from '@/store/usePlannerStore';
 import {
   END_HOUR,
@@ -164,22 +165,26 @@ function WeekReadOnlyAllDayEvent({
   event,
   isStart,
   isEnd,
+  onClick,
 }: {
   event: AllDayEvent;
   isStart: boolean;
   isEnd: boolean;
+  onClick?: (event: AllDayEvent, anchor: HTMLElement) => void;
 }) {
   return (
     <div
       title={event.notes ?? event.title}
       className={[
-        'px-1 py-0.5 text-[10px] font-medium truncate select-none shadow-[0_8px_20px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28',
+        'px-1 py-0.5 text-[10px] font-medium truncate select-none shadow-[0_8px_20px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28 cursor-pointer',
         'bg-[color-mix(in_srgb,#f97316_12%,white_88%)] text-[#b45309]',
         isStart ? 'rounded-l' : '-ml-1 rounded-l-none pl-2',
         isEnd ? 'rounded-r' : '-mr-1 rounded-r-none pr-2',
       ].join(' ')}
+      onClick={(e) => onClick?.(event, e.currentTarget)}
     >
-      {event.title}
+      <span className="truncate">{event.title}</span>
+      {event.source === 'apple_birthdays' && event.hasMessage && <span className="ml-1 flex-shrink-0 text-[10px] opacity-80">✓</span>}
     </div>
   );
 }
@@ -255,6 +260,7 @@ function WeekTaskItem({
 type Popover =
   | { type: 'task'; id: string; anchor: HTMLElement }
   | { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean }
+  | { type: 'birthday'; event: AllDayEvent; anchor: HTMLElement }
   | null;
 
 interface WeekDayData {
@@ -276,6 +282,7 @@ interface WeekViewColumnViewProps {
   googleAllDayEvents: AllDayEvent[];
   onAllDayEventDoubleClick: (id: string, anchor: HTMLElement) => void;
   onAllDayCellDoubleClick: (date: string, anchor: HTMLElement) => void;
+  onBirthdayClick: (event: AllDayEvent, anchor: HTMLElement) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   timeOffset: number;
   timeLabel: string;
@@ -306,6 +313,7 @@ export function WeekViewColumnView({
   googleAllDayEvents,
   onAllDayEventDoubleClick,
   onAllDayCellDoubleClick,
+  onBirthdayClick,
   scrollRef,
   timeOffset,
   timeLabel,
@@ -385,6 +393,7 @@ export function WeekViewColumnView({
                       event={ev}
                       isStart={ev.date === ds}
                       isEnd={(ev.endDate ?? ev.date) === ds}
+                      onClick={onBirthdayClick}
                     />
                   ) : (
                     <WeekAllDayEvent
@@ -611,6 +620,9 @@ export function WeekViewColumnView({
       )}
       {popover?.type === 'google-entry' && (
         <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={closePopover} isDraft={popover.isDraft} />
+      )}
+      {popover?.type === 'birthday' && (
+        <AppleBirthdayDetailPopover event={popover.event} anchor={popover.anchor} onClose={closePopover} />
       )}
     </div>
   );

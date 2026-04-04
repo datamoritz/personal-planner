@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app import models
+from app import schemas
 
 router = APIRouter(tags=["apple-calendar"])
 
@@ -123,6 +124,19 @@ class AppleBirthdaySyncResponse(BaseModel):
     cachedRecords: int = 0
     sampleRecords: list[AppleBirthdayCachedRecord] = []
     detail: str | None = None
+
+
+def _birthday_message_payload(row: models.AppleBirthdayContactCache) -> schemas.AppleBirthdayMessageRead:
+    return schemas.AppleBirthdayMessageRead(
+        id=row.id,
+        title=row.title,
+        month=row.month,
+        day=row.day,
+        birthYear=row.birth_year,
+        messageText=row.message_text,
+        hasMessage=bool((row.message_text or "").strip()),
+        updatedAt=row.updated_at.isoformat(),
+    )
 
 
 def _auth_header() -> str:
@@ -899,6 +913,31 @@ def get_cached_apple_birthdays(sample: int = 10, db: Session = Depends(get_db)):
         sampleRecords=[_cached_record_out(row) for row in rows[:sample]],
         detail=detail,
     )
+
+
+@router.get("/apple-birthdays/{birthday_id}/message", response_model=schemas.AppleBirthdayMessageRead)
+def get_apple_birthday_message(birthday_id: int, db: Session = Depends(get_db)):
+    row = db.get(models.AppleBirthdayContactCache, birthday_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Apple birthday not found")
+    return _birthday_message_payload(row)
+
+
+@router.patch("/apple-birthdays/{birthday_id}/message", response_model=schemas.AppleBirthdayMessageRead)
+def update_apple_birthday_message(
+    birthday_id: int,
+    payload: schemas.AppleBirthdayMessageUpdate,
+    db: Session = Depends(get_db),
+):
+    row = db.get(models.AppleBirthdayContactCache, birthday_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Apple birthday not found")
+    row.message_text = (payload.messageText or "").strip() or None
+    row.updated_at = datetime.utcnow()
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _birthday_message_payload(row)
 
 
 @router.get("/apple-birthdays/events", response_model=AppleBirthdayEventsResponse)

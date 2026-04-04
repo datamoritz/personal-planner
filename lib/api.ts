@@ -25,6 +25,7 @@ import type {
   EmailTaskSuggestion,
   TextDraftMode,
   TextDraftResponse,
+  AppleBirthdayMessage,
 } from '@/types';
 
 export const API_BASE = 'https://planner-api.moritzknodler.com';
@@ -158,7 +159,21 @@ function fromApiTime(t: string | null | undefined): string | undefined {
 /** Frontend uses "HH:MM" — add ":00" for the backend. */
 function toApiTime(t: string | undefined): string | null {
   if (!t) return null;
-  return t.length === 5 ? `${t}:00` : t;
+  const [hoursRaw, minutesRaw = '00', secondsRaw = '00'] = t.split(':');
+  const hours = Number.parseInt(hoursRaw, 10);
+  const minutes = Number.parseInt(minutesRaw, 10);
+  const seconds = Number.parseInt(secondsRaw, 10);
+
+  if (
+    Number.isNaN(hours) ||
+    Number.isNaN(minutes) ||
+    Number.isNaN(seconds)
+  ) {
+    return t.length === 5 ? `${t}:00` : t;
+  }
+
+  const normalizedHours = ((hours % 24) + 24) % 24;
+  return `${String(normalizedHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 // ─── Backend → frontend converters ─────────────────────────────────────────
@@ -378,7 +393,10 @@ export async function createTasksBulk(
 }
 
 export async function patchTask(backendId: number, fields: Record<string, unknown>): Promise<void> {
-  await patch<unknown>(`/tasks/${backendId}`, fields);
+  const normalizedFields = { ...fields };
+  if ('start_time' in normalizedFields) normalizedFields.start_time = toApiTime(normalizedFields.start_time as string | undefined);
+  if ('end_time' in normalizedFields) normalizedFields.end_time = toApiTime(normalizedFields.end_time as string | undefined);
+  await patch<unknown>(`/tasks/${backendId}`, normalizedFields);
 }
 
 export async function deleteTask(backendId: number): Promise<void> {
@@ -416,6 +434,17 @@ export async function suggestTextDraft(input: {
   timezone: string;
 }): Promise<TextDraftResponse> {
   return post<TextDraftResponse>('/ai/text-draft', input);
+}
+
+export async function getAppleBirthdayMessage(birthdayId: number): Promise<AppleBirthdayMessage> {
+  return get<AppleBirthdayMessage>(`/apple-birthdays/${birthdayId}/message`);
+}
+
+export async function patchAppleBirthdayMessage(
+  birthdayId: number,
+  messageText: string,
+): Promise<AppleBirthdayMessage> {
+  return patch<AppleBirthdayMessage>(`/apple-birthdays/${birthdayId}/message`, { messageText });
 }
 
 // ─── Project mutations ──────────────────────────────────────────────────────

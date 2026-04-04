@@ -6,6 +6,7 @@ import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { DraggableTimedTaskBlock } from '@/components/dnd/DraggableTimedTaskBlock';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
+import { AppleBirthdayDetailPopover } from '@/components/ui/AppleBirthdayDetailPopover';
 import { UncertaintyNotepad } from '@/components/ui/UncertaintyNotepad';
 import {
   END_HOUR,
@@ -24,7 +25,8 @@ const OVERLAP_SHIFT = 14;
 
 type TaskPopover = { type: 'task'; id: string; anchor: HTMLElement };
 type GoogleEntryPopover = { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean };
-type PopoverState = TaskPopover | GoogleEntryPopover | null;
+type BirthdayPopover = { type: 'birthday'; event: AllDayEvent; anchor: HTMLElement };
+type PopoverState = TaskPopover | GoogleEntryPopover | BirthdayPopover | null;
 
 interface MyDayColumnViewProps {
   notepadOpen: boolean;
@@ -42,6 +44,7 @@ interface MyDayColumnViewProps {
   onTaskDoubleClick: (id: string, anchor: HTMLElement) => void;
   onGoogleEntryDoubleClick: (id: string, anchor: HTMLElement) => void;
   onAllDayEmptyDoubleClick: (anchor: HTMLElement) => void;
+  onBirthdayClick: (event: AllDayEvent, anchor: HTMLElement) => void;
   onTaskResizeEnd: (id: string, endTime: string) => void;
   onTaskRepositionEnd: (id: string, startTime: string, endTime: string) => void;
   onGoogleResizeEnd: (id: string, endTime: string) => void;
@@ -126,6 +129,7 @@ export function MyDayColumnView({
   onTaskDoubleClick,
   onGoogleEntryDoubleClick,
   onAllDayEmptyDoubleClick,
+  onBirthdayClick,
   onTaskResizeEnd,
   onTaskRepositionEnd,
   onGoogleResizeEnd,
@@ -210,6 +214,7 @@ export function MyDayColumnView({
           events={allDayEvents}
           onEventDoubleClick={onGoogleEntryDoubleClick}
           onEmptyDoubleClick={onAllDayEmptyDoubleClick}
+          onReadOnlyEventClick={onBirthdayClick}
         />
       )}
 
@@ -384,6 +389,9 @@ export function MyDayColumnView({
       )}
       {popover?.type === 'google-entry' && (
         <GoogleCalendarEntryDetailPopover entryId={popover.id} anchor={popover.anchor} onClose={closePopover} isDraft={popover.isDraft} />
+      )}
+      {popover?.type === 'birthday' && (
+        <AppleBirthdayDetailPopover event={popover.event} anchor={popover.anchor} onClose={closePopover} />
       )}
     </div>
   );

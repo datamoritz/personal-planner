@@ -6,9 +6,10 @@ interface AllDayStripProps {
   events: AllDayEvent[];
   onEventDoubleClick?: (id: string, anchor: HTMLElement) => void;
   onEmptyDoubleClick?: (anchor: HTMLElement) => void;
+  onReadOnlyEventClick?: (event: AllDayEvent, anchor: HTMLElement) => void;
 }
 
-export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick }: AllDayStripProps) {
+export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick, onReadOnlyEventClick }: AllDayStripProps) {
   return (
     <div
       className="flex flex-col gap-0.5 px-2 py-1 border-b border-[var(--color-border)] flex-shrink-0 min-h-[28px]"
@@ -27,8 +28,12 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick }: 
             ev.source === 'apple_birthdays'
               ? 'text-[#b45309] bg-[color-mix(in_srgb,#f97316_10%,white_90%)] shadow-[0_6px_18px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28'
               : 'text-[#10b981] bg-[#10b981]/10',
-            ev.readOnly ? 'cursor-default' : 'cursor-pointer',
+            ev.readOnly ? 'cursor-pointer' : 'cursor-pointer',
           ].join(' ')}
+          onClick={(e) => {
+            if (!ev.readOnly) return;
+            onReadOnlyEventClick?.(ev, e.currentTarget);
+          }}
           onDoubleClick={(e) => {
             if (ev.readOnly) return;
             e.stopPropagation();
@@ -41,7 +46,10 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick }: 
               ev.source === 'apple_birthdays' ? 'bg-[#f59e0b]' : 'bg-[#10b981]',
             ].join(' ')}
           />
-          {ev.title}
+          <span className="truncate flex-1 min-w-0">{ev.title}</span>
+          {ev.source === 'apple_birthdays' && ev.hasMessage && (
+            <span className="flex-shrink-0 text-[10px] leading-none opacity-80">✓</span>
+          )}
         </div>
       ))}
     </div>

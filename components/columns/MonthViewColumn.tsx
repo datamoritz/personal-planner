@@ -15,8 +15,10 @@ import type { MonthViewMode } from '@/types';
 import { MonthViewColumnView } from './MonthViewColumnView';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
+import { AppleBirthdayDetailPopover } from '@/components/ui/AppleBirthdayDetailPopover';
 import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
 import * as api from '@/lib/api';
+import type { AllDayEvent } from '@/types';
 
 interface MonthViewColumnProps {
   monthViewMode: MonthViewMode;
@@ -49,6 +51,7 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
   const [popover, setPopover] = useState<
     | { type: 'task'; id: string; anchor: HTMLElement }
     | { type: 'google-entry'; id: string; anchor: HTMLElement; isDraft?: boolean }
+    | { type: 'birthday'; event: AllDayEvent; anchor: HTMLElement }
     | null
   >(null);
   const { refresh: refreshGoogle } = useGoogleCalendar();
@@ -246,6 +249,7 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
         }}
         onTaskDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
         onGoogleEntryDoubleClick={(id, anchor) => setPopover({ type: 'google-entry', id, anchor })}
+        onBirthdayClick={(event, anchor) => setPopover({ type: 'birthday', event, anchor })}
         onEventCellDoubleClick={(date, anchor) => {
           api.createGoogleTimedEvent({
             title: 'New event',
@@ -280,6 +284,13 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
             }
             setPopover(null);
           }}
+        />
+      )}
+      {popover?.type === 'birthday' && (
+        <AppleBirthdayDetailPopover
+          event={popover.event}
+          anchor={popover.anchor}
+          onClose={() => setPopover(null)}
         />
       )}
     </>

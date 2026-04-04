@@ -141,9 +141,26 @@ class GoogleAllDayEventOut(BaseModel):
     date: str
     endDate: str
     source: str = "google"
+    birthdayContactId: Optional[int] = None
+    hasMessage: bool = False
     notes: Optional[str] = None
     createdAt: str
     updatedAt: str
+
+
+class AppleBirthdayMessageRead(BaseModel):
+    id: int
+    title: str
+    month: int
+    day: int
+    birthYear: Optional[int] = None
+    messageText: Optional[str] = None
+    hasMessage: bool = False
+    updatedAt: str
+
+
+class AppleBirthdayMessageUpdate(BaseModel):
+    messageText: Optional[str] = None
 
 
 class GoogleAllDayEventUpdate(BaseModel):

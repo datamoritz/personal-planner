@@ -92,10 +92,23 @@ export interface AllDayEvent {
   endDate?: string;     // inclusive end date
   source: 'google' | 'apple_birthdays';
   readOnly?: boolean;
+  birthdayContactId?: number;
+  hasMessage?: boolean;
   notes?: string;
   createdAt: string;
   updatedAt: string;
   syncState?: 'pending';
+}
+
+export interface AppleBirthdayMessage {
+  id: number;
+  title: string;
+  month: number;
+  day: number;
+  birthYear?: number | null;
+  messageText?: string | null;
+  hasMessage: boolean;
+  updatedAt: string;
 }
 
 // ─── Recurrent Task ────────────────────────────────────────────────────────

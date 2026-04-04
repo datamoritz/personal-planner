@@ -32,6 +32,7 @@ interface MonthViewColumnViewProps {
   onTaskDoubleClick: (id: string, anchor: HTMLElement) => void;
   onGoogleEntryDoubleClick: (id: string, anchor: HTMLElement) => void;
   onEventCellDoubleClick: (date: string, anchor: HTMLElement) => void;
+  onBirthdayClick: (event: AllDayEvent, anchor: HTMLElement) => void;
 }
 
 function formatEventTime(time?: string) {
@@ -50,6 +51,7 @@ function MonthEventRow({
   time,
   tone,
   showTime,
+  trailingIndicator,
   isStart = true,
   isEnd = true,
   isDragging = false,
@@ -59,6 +61,7 @@ function MonthEventRow({
   time?: string;
   tone: 'google' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
+  trailingIndicator?: string;
   isStart?: boolean;
   isEnd?: boolean;
   isDragging?: boolean;
@@ -86,6 +89,7 @@ function MonthEventRow({
       }}
     >
       <span className="truncate flex-1 min-w-0 font-medium">{title}</span>
+      {trailingIndicator && <span className="flex-shrink-0 text-[10px] opacity-80">{trailingIndicator}</span>}
       {showTime && time && <span className="flex-shrink-0 text-[10px] opacity-80">{time}</span>}
     </div>
   );
@@ -258,29 +262,36 @@ function MonthDraggableEventRow({
 }
 
 function MonthReadOnlyEventRow({
+  event,
   title,
   time,
   tone,
   showTime,
+  trailingIndicator,
   isStart,
   isEnd,
   isPending,
+  onClick,
 }: {
+  event: AllDayEvent;
   title: string;
   time?: string;
   tone: 'google' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
+  trailingIndicator?: string;
   isStart?: boolean;
   isEnd?: boolean;
   isPending?: boolean;
+  onClick?: (event: AllDayEvent, anchor: HTMLElement) => void;
 }) {
   return (
-    <div className="cursor-default">
+    <div className="cursor-pointer" onClick={(e) => onClick?.(event, e.currentTarget)}>
       <MonthEventRow
         title={title}
         time={time}
         tone={tone}
         showTime={showTime}
+        trailingIndicator={trailingIndicator}
         isStart={isStart}
         isEnd={isEnd}
         isPending={isPending}
@@ -317,6 +328,7 @@ function MonthDayCell({
   onTaskDoubleClick: (id: string, anchor: HTMLElement) => void;
   onGoogleEntryDoubleClick: (id: string, anchor: HTMLElement) => void;
   onEventCellDoubleClick: (date: string, anchor: HTMLElement) => void;
+  onBirthdayClick: (event: AllDayEvent, anchor: HTMLElement) => void;
 }) {
   const eventContainerId = `month-events-${day.dateString}`;
   const taskContainerId = `month-day-${day.dateString}`;
@@ -415,12 +427,15 @@ function MonthDayCell({
               event.readOnly || event.source === 'apple_birthdays' ? (
                 <MonthReadOnlyEventRow
                   key={event.id}
+                  event={event}
                   title={event.title}
                   tone="birthday"
                   showTime={false}
+                  trailingIndicator={event.hasMessage ? '✓' : undefined}
                   isStart={event.date === day.dateString}
                   isEnd={(event.endDate ?? event.date) === day.dateString}
                   isPending={event.syncState === 'pending'}
+                  onClick={onBirthdayClick}
                 />
               ) : (
                 <MonthDraggableEventRow
@@ -484,6 +499,7 @@ export function MonthViewColumnView({
   onTaskDoubleClick,
   onGoogleEntryDoubleClick,
   onEventCellDoubleClick,
+  onBirthdayClick,
 }: MonthViewColumnViewProps) {
   const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const todayString = format(new Date(), 'yyyy-MM-dd');
@@ -532,6 +548,7 @@ export function MonthViewColumnView({
                   onTaskDoubleClick={onTaskDoubleClick}
                   onGoogleEntryDoubleClick={onGoogleEntryDoubleClick}
                   onEventCellDoubleClick={onEventCellDoubleClick}
+                  onBirthdayClick={onBirthdayClick}
                 />
               ))}
             </div>

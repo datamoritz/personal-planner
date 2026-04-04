@@ -231,6 +231,8 @@ def _apple_birthday_events_from_cache(
                     "endDate": date_str,
                     "source": "apple_birthdays",
                     "readOnly": True,
+                    "birthdayContactId": row.id,
+                    "hasMessage": bool((row.message_text or "").strip()),
                     "notes": notes,
                     "createdAt": date_str,
                     "updatedAt": date_str,

@@ -127,6 +127,7 @@ class AppleBirthdayContactCache(Base):
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     day: Mapped[int] = mapped_column(Integer, nullable=False)
     birth_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    message_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     contact_href: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     vcard_uid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     etag: Mapped[str | None] = mapped_column(String(255), nullable=True)
