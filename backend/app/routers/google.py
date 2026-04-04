@@ -49,7 +49,9 @@ def _build_google_flow() -> Flow:
 
 
 def _save_google_token(db: Session, creds: Credentials) -> None:
-    if not creds.refresh_token:
+    existing = _load_google_token(db)
+    refresh_token = creds.refresh_token or (existing["refresh_token"] if existing else None)
+    if not refresh_token:
         raise HTTPException(status_code=400, detail="No refresh token returned by Google")
     db.execute(
         text("""
@@ -61,7 +63,7 @@ def _save_google_token(db: Session, creds: Credentials) -> None:
                 access_token  = EXCLUDED.access_token,
                 updated_at    = NOW()
         """),
-        {"refresh_token": creds.refresh_token, "access_token": creds.token},
+        {"refresh_token": refresh_token, "access_token": creds.token},
     )
     db.commit()
 
