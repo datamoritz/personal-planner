@@ -1,6 +1,6 @@
 """planner goals and milestones
 
-Revision ID: 0009_planner_goals_and_milestones
+Revision ID: 0009_planner_goals_milestones
 Revises: 0008_apple_birthday_message_text
 Create Date: 2026-04-06
 """
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
-revision = "0009_planner_goals_and_milestones"
+revision = "0009_planner_goals_milestones"
 down_revision = "0008_apple_birthday_message_text"
 branch_labels = None
 depends_on = None
