@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, date, time
+from datetime import date as date_value
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, model_validator
@@ -314,7 +315,7 @@ class ProjectOut(BaseModel):
 class MilestoneBase(BaseModel):
     goal_id: int
     name: str
-    date: date
+    date: date_value
 
 
 class MilestoneCreate(MilestoneBase):
@@ -324,7 +325,7 @@ class MilestoneCreate(MilestoneBase):
 class MilestoneUpdate(BaseModel):
     goal_id: Optional[int] = None
     name: Optional[str] = None
-    date: Optional[date] = None
+    date: Optional[date_value] = None
 
 
 class MilestoneOut(MilestoneBase):
