@@ -271,31 +271,105 @@ class TextDraftResponse(BaseModel):
 
 class ProjectCreate(BaseModel):
     client_id: Optional[uuid.UUID] = None
+    goal_id: int | None = None
     tag_id: int | None = None
     title: str
     color: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
 
 
 class ProjectUpdate(BaseModel):
+    goal_id: int | None = None
     tag_id: int | None = None
     title: Optional[str] = None
     color: Optional[str] = None
     is_finished: Optional[bool] = None
+    start_date: date | None = None
+    end_date: date | None = None
     sort_order: Optional[int] = None
 
 
 class ProjectOut(BaseModel):
     id: int
     client_id: Optional[uuid.UUID] = None
+    goal_id: int | None
     tag_id: int | None
     title: str
     color: str | None
     is_finished: bool
+    start_date: date | None
+    end_date: date | None
     sort_order: int
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Goals / Milestones / Planner
+# ---------------------------------------------------------------------------
+
+class MilestoneBase(BaseModel):
+    goal_id: int
+    name: str
+    date: date
+
+
+class MilestoneCreate(MilestoneBase):
+    client_id: Optional[uuid.UUID] = None
+
+
+class MilestoneUpdate(BaseModel):
+    goal_id: Optional[int] = None
+    name: Optional[str] = None
+    date: Optional[date] = None
+
+
+class MilestoneOut(MilestoneBase):
+    id: int
+    client_id: Optional[uuid.UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GoalBase(BaseModel):
+    name: str
+    color: str
+    start_date: date
+    end_date: date
+
+
+class GoalCreate(GoalBase):
+    client_id: Optional[uuid.UUID] = None
+
+
+class GoalUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+class GoalOut(GoalBase):
+    id: int
+    client_id: Optional[uuid.UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GoalWithMilestonesOut(GoalOut):
+    milestones: List[MilestoneOut] = []
+
+
+class PlannerRead(BaseModel):
+    goals: List[GoalWithMilestonesOut]
+    projects: List[ProjectOut]
 
 
 # ---------------------------------------------------------------------------
