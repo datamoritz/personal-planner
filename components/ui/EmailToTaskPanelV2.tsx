@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { ChevronLeft, ChevronRight, Loader2, Mail, RefreshCw, Sparkles, Tag as TagIcon, X } from 'lucide-react';
+import { Archive, ChevronRight, Loader2, Mail, RefreshCw, Sparkles, Tag as TagIcon, Undo2, X } from 'lucide-react';
 import * as api from '@/lib/api';
 import { usePlannerStore } from '@/store/usePlannerStore';
-import type { EmailContent, EmailTaskSuggestion, RecentEmail, TaskLocation } from '@/types';
+import type {
+  EmailContent,
+  EmailTaskSuggestion,
+  RecentEmail,
+  TaskLocation,
+  TextDraftMode,
+  TextDraftResponse,
+} from '@/types';
 import { PopoverField, PopoverInput } from './PopoverField';
 
 type DraftTask = {
@@ -14,9 +21,16 @@ type DraftTask = {
   taskDate: string;
   startTime: string;
   endTime: string;
+  allDay: boolean;
   tagName: string;
   projectTitle: string;
   targetLocation: Exclude<TaskLocation, 'upcoming'>;
+};
+
+type ArchivedEmailState = {
+  email: RecentEmail;
+  index: number;
+  selectedBeforeArchive: string | null;
 };
 
 const DEFAULT_WIDTH = 1140;
@@ -24,12 +38,13 @@ const DEFAULT_HEIGHT = 700;
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 540;
 
-const GHOST_INPUT =
-  'w-full min-w-0 rounded-[0.95rem] border border-transparent bg-[var(--color-surface-secondary)]/72 px-3 py-1.5 text-[13px] text-[var(--color-text-primary)] transition-all duration-150 placeholder:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-secondary)] hover:border-[var(--color-border-subtle)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)]';
-const GHOST_TEXTAREA =
-  'w-full min-w-0 rounded-[1rem] border border-transparent bg-[var(--color-surface-secondary)]/72 px-3 py-1.5 text-[13px] text-[var(--color-text-primary)] transition-all duration-150 placeholder:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-secondary)] hover:border-[var(--color-border-subtle)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)]';
 const DRAFT_CONTROL =
   'w-full min-w-0 rounded-[0.95rem] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 py-1.5 text-[13px] text-[var(--color-text-primary)] transition-all duration-150 placeholder:text-[var(--color-text-muted)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)]';
+const INLINE_CONTROL =
+  'h-11 rounded-[0.95rem] border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3 text-[13px] text-[var(--color-text-primary)] transition-all duration-150 hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)]';
+const CARD_SURFACE =
+  'rounded-[1.1rem] border border-[var(--color-border-subtle)] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface)_96%,transparent),color-mix(in_srgb,var(--color-surface-secondary)_92%,var(--color-canvas)_8%))] shadow-[0_18px_36px_rgba(19,23,38,0.08)]';
+const PANEL_LABEL = 'ui-section-label';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -62,9 +77,24 @@ function suggestionToDraft(suggestion: EmailTaskSuggestion | null, fallbackTitle
     taskDate: suggestion?.taskDate || '',
     startTime: toLocalTime(suggestion?.startTime),
     endTime: toLocalTime(suggestion?.endTime),
+    allDay: false,
     tagName: suggestion?.tagName?.trim() || '',
     projectTitle: suggestion?.projectTitle?.trim() || '',
     targetLocation: 'today',
+  };
+}
+
+function textDraftToEmailDraft(draft: TextDraftResponse, fallbackTitle = ''): DraftTask {
+  return {
+    title: draft.title?.trim() || fallbackTitle,
+    notes: draft.notes?.trim() || '',
+    taskDate: draft.taskDate || '',
+    startTime: toLocalTime(draft.startTime),
+    endTime: toLocalTime(draft.endTime),
+    allDay: Boolean(draft.allDay),
+    tagName: '',
+    projectTitle: '',
+    targetLocation: draft.location === 'myday' && draft.startTime ? 'myday' : 'today',
   };
 }
 
@@ -72,7 +102,91 @@ function looksLikeTimedSuggestion(draft: DraftTask): boolean {
   return Boolean(draft.startTime || draft.endTime);
 }
 
-export function EmailToTaskPanel({
+function PaneLabel({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
+  return (
+    <span className={`${PANEL_LABEL}${accent ? ' text-[var(--color-accent)]' : ''}`}>
+      {children}
+    </span>
+  );
+}
+
+function HeaderIcon() {
+  return (
+    <div className="pointer-events-none flex h-9 w-9 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--color-accent)_14%,white_86%)] text-[var(--color-accent)] shadow-[0_10px_24px_rgba(93,109,244,0.12)]">
+      <Mail size={16} strokeWidth={2.1} />
+    </div>
+  );
+}
+
+function DraftActionButton({
+  children,
+  active = false,
+  disabled = false,
+  onClick,
+}: {
+  children: React.ReactNode;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        'inline-flex h-11 min-w-[120px] items-center justify-center gap-1.5 rounded-[0.95rem] px-3 text-[13px] whitespace-nowrap transition-all',
+        active
+          ? 'relative overflow-hidden border border-[var(--color-accent)]/25 bg-[var(--color-surface)]/94 font-semibold text-[var(--color-accent)] shadow-[0_8px_18px_rgba(93,109,244,0.08)] hover:brightness-[0.99]'
+          : 'border border-[var(--color-border-subtle)] bg-[var(--color-surface)]/92 font-medium text-[var(--color-text-secondary)] shadow-[0_2px_8px_rgba(19,23,38,0.04)] hover:bg-[var(--color-surface-raised)]',
+        disabled ? 'opacity-40 cursor-not-allowed' : '',
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EmailPreviewCard({
+  email,
+  active,
+  onClick,
+}: {
+  email: RecentEmail;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'w-full text-left px-4 py-3 transition-all',
+        CARD_SURFACE,
+        active
+          ? 'border-[var(--color-accent)] ring-1 ring-[var(--color-accent)] shadow-[0_22px_42px_rgba(93,109,244,0.16)]'
+          : 'hover:border-[var(--color-border)] hover:shadow-[0_20px_38px_rgba(19,23,38,0.14)]',
+      ].join(' ')}
+    >
+      <div className="flex justify-end">
+        <span className="text-[11px] whitespace-nowrap text-[var(--color-text-muted)]">
+          {format(parseISO(email.receivedAt), 'p')}
+        </span>
+      </div>
+      <div className="mt-1 text-[13px] font-medium leading-5 tracking-tight text-[var(--color-text-primary)] line-clamp-3">
+        {email.subject || '(No subject)'}
+      </div>
+      <div className="mt-1.5 text-[11px] text-[var(--color-text-muted)] line-clamp-1">
+        {email.sender || email.receivers[0] || 'Unknown sender'}
+      </div>
+      <div className="mt-1.5 text-[12px] leading-5 text-[var(--color-text-muted)] line-clamp-2">
+        {email.snippet}
+      </div>
+    </button>
+  );
+}
+
+export function EmailToTaskPanelV2({
   open,
   onClose,
 }: {
@@ -82,23 +196,28 @@ export function EmailToTaskPanel({
   const addTask = usePlannerStore((s) => s.addTask);
   const updateTask = usePlannerStore((s) => s.updateTask);
   const setTaskTag = usePlannerStore((s) => s.setTaskTag);
+  const viewMode = usePlannerStore((s) => s.viewMode);
+  const applyOptimisticGoogleEntry = usePlannerStore((s) => s.applyOptimisticGoogleEntry);
+  const applyOptimisticGoogleAllDayEvent = usePlannerStore((s) => s.applyOptimisticGoogleAllDayEvent);
   const tags = usePlannerStore((s) => s.tags);
   const projects = usePlannerStore((s) => s.projects);
   const currentDate = usePlannerStore((s) => s.currentDate);
-  const viewMode = usePlannerStore((s) => s.viewMode);
 
   const [emails, setEmails] = useState<RecentEmail[]>([]);
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<EmailContent | null>(null);
   const [draft, setDraft] = useState<DraftTask>(() => suggestionToDraft(null));
+  const [draftMode, setDraftMode] = useState<TextDraftMode>('event');
   const [extraInstruction, setExtraInstruction] = useState('');
   const [isLoadingEmails, setIsLoadingEmails] = useState(false);
   const [isLoadingEmail, setIsLoadingEmail] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isUndoingArchive, setIsUndoingArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
-  const [draftCollapsed, setDraftCollapsed] = useState(false);
+  const [archivedEmail, setArchivedEmail] = useState<ArchivedEmailState | null>(null);
 
   const [size, setSize] = useState(() => getViewportBoundedSize(DEFAULT_WIDTH, DEFAULT_HEIGHT));
   const [position, setPosition] = useState(() => {
@@ -130,8 +249,11 @@ export function EmailToTaskPanel({
     [],
   );
   const showTimeFields = useMemo(
-    () => draft.targetLocation === 'myday' || looksLikeTimedSuggestion(draft),
-    [draft],
+    () =>
+      draftMode === 'event'
+        ? !draft.allDay
+        : draft.targetLocation === 'myday' || looksLikeTimedSuggestion(draft),
+    [draft, draftMode],
   );
 
   const loadEmails = useCallback(async () => {
@@ -238,27 +360,53 @@ export function EmailToTaskPanel({
     setIsSuggesting(true);
     setError(null);
     try {
-      const suggestion = await api.suggestTaskFromEmail(selectedEmailId, {
-        promptAddition: extraInstruction,
+      if (draftMode === 'task') {
+        const suggestion = await api.suggestTaskFromEmail(selectedEmailId, {
+          promptAddition: extraInstruction,
+          currentDate,
+          currentDateTime: new Date().toISOString(),
+          currentView: api.normalizeExecutionView(viewMode),
+          timezone,
+        });
+        const fallbackTitle = selectedEmail?.subject ? quickFollowUpTitle(selectedEmail.subject) : '';
+        setDraft(suggestionToDraft(suggestion, fallbackTitle));
+        return;
+      }
+
+      if (!selectedEmail) return;
+
+      const promptText = [
+        `Subject: ${selectedEmail.subject || '(No subject)'}`,
+        '',
+        selectedEmail.body || '',
+        extraInstruction.trim() ? `\nFocus: ${extraInstruction.trim()}` : '',
+      ]
+        .join('\n')
+        .trim();
+
+      const eventDraft = await api.suggestTextDraft({
+        text: promptText,
+        mode: 'event',
         currentDate,
         currentDateTime: new Date().toISOString(),
         currentView: api.normalizeExecutionView(viewMode),
         timezone,
       });
-      const fallbackTitle = selectedEmail?.subject ? quickFollowUpTitle(selectedEmail.subject) : '';
-      setDraft(suggestionToDraft(suggestion, fallbackTitle));
+      const fallbackTitle = selectedEmail.subject?.trim() || 'New event';
+      setDraft(textDraftToEmailDraft(eventDraft, fallbackTitle));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate task suggestion');
+      setError(err instanceof Error ? err.message : `Failed to generate ${draftMode} suggestion`);
     } finally {
       setIsSuggesting(false);
     }
-  }, [currentDate, extraInstruction, selectedEmail?.subject, selectedEmailId, timezone, viewMode]);
+  }, [currentDate, draftMode, extraInstruction, selectedEmail, selectedEmailId, timezone, viewMode]);
 
   const handleQuickFollowUp = useCallback(() => {
     if (!selectedEmail) return;
     setDraft((prev) => ({
       ...prev,
       title: quickFollowUpTitle(selectedEmail.subject),
+      allDay: false,
     }));
     setError(null);
   }, [selectedEmail]);
@@ -273,6 +421,32 @@ export function EmailToTaskPanel({
     setIsSaving(true);
     setError(null);
     try {
+      if (draftMode === 'event') {
+        const eventDate = draft.taskDate || currentDate;
+        const notes = draft.notes.trim() || undefined;
+
+        if (draft.allDay || (!draft.startTime && !draft.endTime)) {
+          const created = await api.createGoogleAllDayEvent({
+            title,
+            date: eventDate,
+            notes,
+          });
+          applyOptimisticGoogleAllDayEvent(created);
+          return;
+        }
+
+        const created = await api.createGoogleTimedEvent({
+          title,
+          date: eventDate,
+          startTime: draft.startTime || '14:00',
+          endTime: draft.endTime || '15:00',
+          notes,
+          tz: timezone,
+        });
+        applyOptimisticGoogleEntry(created);
+        return;
+      }
+
       const project = projects.find(
         (candidate) => candidate.title.trim().toLowerCase() === draft.projectTitle.trim().toLowerCase(),
       );
@@ -319,14 +493,75 @@ export function EmailToTaskPanel({
       }
 
       if (tag) setTaskTag(taskId, tag.id);
-
-      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save task');
+      setError(err instanceof Error ? err.message : `Failed to save ${draftMode}`);
     } finally {
       setIsSaving(false);
     }
-  }, [addTask, currentDate, draft, onClose, projects, setTaskTag, tags, updateTask]);
+  }, [
+    addTask,
+    applyOptimisticGoogleAllDayEvent,
+    applyOptimisticGoogleEntry,
+    currentDate,
+    draft,
+    draftMode,
+    projects,
+    setTaskTag,
+    tags,
+    timezone,
+    updateTask,
+  ]);
+
+  const handleArchive = useCallback(async () => {
+    if (!selectedListItem || isArchiving) return;
+    setIsArchiving(true);
+    setError(null);
+    try {
+      await api.archiveEmail(selectedListItem.id);
+
+      const archivedId = selectedListItem.id;
+      setEmails((prev) => {
+        const index = prev.findIndex((email) => email.id === archivedId);
+        if (index === -1) return prev;
+        const nextEmails = prev.filter((email) => email.id !== archivedId);
+        setArchivedEmail({
+          email: prev[index],
+          index,
+          selectedBeforeArchive: archivedId,
+        });
+
+        const fallback = nextEmails[index] ?? nextEmails[index - 1] ?? null;
+        setSelectedEmailId(fallback?.id ?? null);
+        if (!fallback) setSelectedEmail(null);
+        return nextEmails;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to archive email');
+    } finally {
+      setIsArchiving(false);
+    }
+  }, [isArchiving, selectedListItem]);
+
+  const handleUndoArchive = useCallback(async () => {
+    if (!archivedEmail || isUndoingArchive) return;
+    setIsUndoingArchive(true);
+    setError(null);
+    try {
+      await api.unarchiveEmail(archivedEmail.email.id);
+      setEmails((prev) => {
+        const next = [...prev];
+        const insertIndex = Math.max(0, Math.min(archivedEmail.index, next.length));
+        next.splice(insertIndex, 0, archivedEmail.email);
+        return next;
+      });
+      setSelectedEmailId(archivedEmail.email.id);
+      setArchivedEmail(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to undo archive');
+    } finally {
+      setIsUndoingArchive(false);
+    }
+  }, [archivedEmail, isUndoingArchive]);
 
   if (!open) return null;
 
@@ -354,9 +589,7 @@ export function EmailToTaskPanel({
           }}
         >
           <div className="flex items-center gap-2.5">
-            <div className="pointer-events-none flex h-9 w-9 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--color-accent)_14%,white_86%)] text-[var(--color-accent)] shadow-[0_10px_24px_rgba(93,109,244,0.12)]">
-              <Mail size={16} strokeWidth={2.1} />
-            </div>
+            <HeaderIcon />
             <div>
               <div className="text-[15px] font-semibold tracking-tight text-[var(--color-text-primary)]">Email to Task</div>
               <div className="text-[11px] text-[var(--color-text-muted)]">Inbox emails from the last 24 hours</div>
@@ -375,57 +608,40 @@ export function EmailToTaskPanel({
         <div
           className="grid h-[calc(100%-54px)] min-h-0"
           style={{
-            gridTemplateColumns: draftCollapsed ? '290px minmax(0,1fr) 42px' : '290px minmax(320px,1fr) 260px',
-            gridTemplateRows: 'auto minmax(0,1fr)',
+            gridTemplateColumns: '256px minmax(460px,1fr) 312px',
           }}
         >
-          <div className="col-start-3 row-start-1 flex flex-col gap-2 border-l border-[var(--color-popover-border)]/65 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-accent)_10%,transparent),color-mix(in_srgb,var(--color-accent)_2%,transparent))] px-4 pt-3 pb-2">
-            <div className="flex items-center justify-between gap-2 h-7">
-              {!draftCollapsed && <span className="ui-section-label text-[var(--color-accent)]">Draft</span>}
-              <button
-                type="button"
-                onClick={() => setDraftCollapsed((value) => !value)}
-                className="ui-icon-button"
-                title={draftCollapsed ? 'Expand task draft' : 'Collapse task draft'}
-              >
-                {draftCollapsed ? <ChevronLeft size={14} strokeWidth={2.2} /> : <ChevronRight size={14} strokeWidth={2.2} />}
-              </button>
-            </div>
-            {!draftCollapsed && (
-              <div className="grid grid-cols-2 gap-2">
+          <div className="flex min-h-0 flex-col border-r border-[var(--color-popover-border)]/65 bg-[var(--color-surface-secondary)]/42">
+            <div className="flex items-center justify-between gap-2 px-5 pt-3 pb-2">
+              <PaneLabel>Inbox</PaneLabel>
+              <div className="flex items-center gap-1.5">
+                {archivedEmail && (
+                  <button
+                    type="button"
+                    onClick={() => void handleUndoArchive()}
+                    disabled={isUndoingArchive}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-2.5 text-[11px] font-medium text-[var(--color-text-secondary)] shadow-[0_2px_8px_rgba(19,23,38,0.04)] hover:bg-[var(--color-surface-raised)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isUndoingArchive ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} strokeWidth={2.1} />}
+                    Undo
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleQuickFollowUp}
-                  disabled={!selectedEmail}
-                  className="inline-flex h-8 items-center justify-center rounded-[0.95rem] border border-[var(--color-border-subtle)] bg-[var(--color-surface)]/92 px-3 text-[12px] font-medium text-[var(--color-text-secondary)] shadow-[0_2px_8px_rgba(19,23,38,0.04)] hover:bg-[var(--color-surface-raised)] disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                  onClick={() => void handleArchive()}
+                  disabled={!selectedListItem || isArchiving}
+                  title="Archive selected email"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)] text-[var(--color-text-muted)] shadow-[0_2px_8px_rgba(19,23,38,0.04)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Follow-up
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSuggest()}
-                  disabled={!selectedEmailId || isSuggesting}
-                  className="relative inline-flex h-8 items-center justify-center gap-1.5 overflow-hidden rounded-[0.95rem] border border-[var(--color-accent)]/25 bg-[var(--color-surface)]/94 px-3 text-[12px] font-semibold text-[var(--color-accent)] shadow-[0_8px_18px_rgba(93,109,244,0.08)] hover:brightness-[0.99] disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_0%,rgba(93,109,244,0.00)_35%,rgba(93,109,244,0.16)_50%,rgba(93,109,244,0.00)_65%,transparent_100%)] opacity-70 [background-size:220%_100%] animate-[emailSuggestShimmer_2.8s_linear_infinite]" />
-                  <span className="relative inline-flex items-center gap-1.5">
-                    {isSuggesting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} strokeWidth={2} />}
-                    Suggest
-                  </span>
+                  {isArchiving ? <Loader2 size={12} className="animate-spin" /> : <Archive size={13} strokeWidth={2.1} />}
                 </button>
               </div>
-            )}
-          </div>
-
-          <div className="col-start-1 row-span-2 flex min-h-0 flex-col bg-[var(--color-surface-secondary)]/56">
-            <div className="px-6 pt-3 pb-2">
-              <span className="ui-section-label">Inbox</span>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 pt-1 pb-4">
+            <div className="flex-1 overflow-y-auto px-4 pt-1 pb-4">
               {isLoadingEmails ? (
                 <div className="space-y-3">
                   {[0, 1, 2].map((index) => (
-                    <div key={index} className="rounded-[1.05rem] bg-[var(--color-surface)]/96 px-4 py-3 shadow-[0_18px_36px_rgba(19,23,38,0.14)]">
+                    <div key={index} className={`${CARD_SURFACE} px-4 py-3.5`}>
                       <div className="h-4 w-3/4 rounded bg-[var(--color-surface-raised)] animate-pulse" />
                       <div className="mt-2 h-3 w-1/3 rounded bg-[var(--color-surface-raised)] animate-pulse" />
                       <div className="mt-3 h-3 w-full rounded bg-[var(--color-surface-raised)] animate-pulse" />
@@ -436,36 +652,15 @@ export function EmailToTaskPanel({
               ) : emails.length === 0 ? (
                 <div className="px-2 py-3 text-sm text-[var(--color-text-muted)]">No recent inbox emails found.</div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {emails.map((email) => {
-                    const active = email.id === selectedEmailId;
                     return (
-                      <button
+                      <EmailPreviewCard
                         key={email.id}
-                        type="button"
+                        email={email}
+                        active={email.id === selectedEmailId}
                         onClick={() => setSelectedEmailId(email.id)}
-                        className={[
-                          'w-full text-left rounded-[1.05rem] border border-[var(--color-border-subtle)] px-4 py-3 transition-all shadow-[0_18px_36px_rgba(19,23,38,0.08)]',
-                          active
-                            ? 'bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface)_92%,white_8%),color-mix(in_srgb,var(--color-surface-secondary)_88%,var(--color-canvas)_12%))] border-[var(--color-accent)] ring-1 ring-[var(--color-accent)] shadow-[0_22px_42px_rgba(93,109,244,0.16)]'
-                            : 'bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface)_96%,transparent),color-mix(in_srgb,var(--color-surface-secondary)_92%,var(--color-canvas)_8%))] hover:border-[var(--color-border)] hover:shadow-[0_20px_38px_rgba(19,23,38,0.14)]',
-                        ].join(' ')}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-[13px] font-medium leading-5 text-[var(--color-text-primary)] line-clamp-2">
-                            {email.subject || '(No subject)'}
-                          </span>
-                          <span className="text-[11px] whitespace-nowrap text-[var(--color-text-muted)]">
-                            {format(parseISO(email.receivedAt), 'p')}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-[11px] text-[var(--color-text-muted)] line-clamp-1">
-                          {email.sender || email.receivers[0] || 'Unknown sender'}
-                        </div>
-                        <div className="mt-1.5 text-[12px] leading-5 text-[var(--color-text-muted)] line-clamp-2">
-                          {email.snippet}
-                        </div>
-                      </button>
+                      />
                     );
                   })}
                 </div>
@@ -473,7 +668,7 @@ export function EmailToTaskPanel({
             </div>
           </div>
 
-          <div className="col-start-2 row-span-2 min-h-0 flex flex-col px-6 pt-5 pb-4">
+          <div className="min-h-0 flex flex-col px-6 pt-3 pb-4">
             {isLoadingEmail ? (
               <div className="space-y-3">
                 <div>
@@ -496,20 +691,22 @@ export function EmailToTaskPanel({
             ) : selectedEmail ? (
               <div className="flex min-h-0 flex-1 flex-col gap-3">
                 <div>
-                  <span className="ui-section-label">Focus</span>
-                  <input
-                    type="text"
-                    value={extraInstruction}
-                    onChange={(event) => setExtraInstruction(event.target.value)}
-                    placeholder="Optional: focus on one specific action, deadline, or follow-up..."
-                    className={`mt-2 w-full rounded-[1rem] border border-[color-mix(in_srgb,var(--color-border)_78%,white_22%)] bg-[color-mix(in_srgb,var(--color-surface)_84%,var(--color-surface-secondary)_16%)] px-3 py-1.5 text-[13px] text-[var(--color-text-primary)] shadow-[0_8px_20px_rgba(19,23,38,0.06)] transition-all duration-150 placeholder:text-[var(--color-text-muted)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)] focus:outline-none focus:border-[var(--color-accent)] focus:bg-[var(--color-surface)] focus:shadow-[0_0_0_3px_var(--color-focus-ring)]`}
-                  />
+                  <PaneLabel>Focus</PaneLabel>
+                  <div className="mt-2 flex items-center gap-2 rounded-[1rem] border border-[color-mix(in_srgb,var(--color-border)_72%,white_28%)] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface)_88%,white_12%),color-mix(in_srgb,var(--color-surface-secondary)_90%,var(--color-canvas)_10%))] px-3 py-2 shadow-[0_10px_24px_rgba(19,23,38,0.06)]">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-accent)_12%,white_88%)] text-[var(--color-accent)]">
+                      <Sparkles size={13} strokeWidth={2} />
+                    </div>
+                    <input
+                      type="text"
+                      value={extraInstruction}
+                      onChange={(event) => setExtraInstruction(event.target.value)}
+                      placeholder="Optional: focus on one specific action, deadline, or follow-up..."
+                      className="w-full bg-transparent text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none"
+                    />
+                  </div>
                 </div>
                 <div className="min-h-0 flex-1 rounded-[1.2rem] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface)_94%,white_6%),color-mix(in_srgb,var(--color-surface-secondary)_88%,var(--color-canvas)_12%))] px-5 py-4 shadow-[0_20px_44px_rgba(19,23,38,0.16)] ring-1 ring-[color-mix(in_srgb,var(--color-border)_72%,white_28%)] backdrop-blur-[12px]">
-                  <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
-                    Cleaned body
-                  </div>
-                  <div className="mt-3 min-h-0 h-[calc(100%-1.75rem)] overflow-y-auto">
+                  <div className="min-h-0 h-full overflow-y-auto">
                     <div className="text-[14px] font-semibold tracking-tight text-[var(--color-text-primary)]">
                       {selectedEmail.subject || selectedListItem?.subject || '(No subject)'}
                     </div>
@@ -529,63 +726,138 @@ export function EmailToTaskPanel({
             )}
           </div>
 
-          <div className="col-start-3 row-start-2 min-h-0 border-l border-[var(--color-popover-border)]/65 flex flex-col bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface)_96%,white_4%),color-mix(in_srgb,var(--color-surface-secondary)_92%,var(--color-canvas)_8%))]">
-            {draftCollapsed ? (
-              <div className="flex-1" />
-            ) : (
-              <>
+          <div className="min-h-0 border-l border-[var(--color-popover-border)]/65 flex flex-col bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-surface)_96%,white_4%),color-mix(in_srgb,var(--color-surface-secondary)_92%,var(--color-canvas)_8%))]">
+            <div className="border-b border-[var(--color-popover-border)]/55 px-4 pt-3 pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <PaneLabel accent>{draftMode === 'event' ? 'Event Draft' : 'Task Draft'}</PaneLabel>
+                <div className="inline-flex rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-0.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+                  {(['event', 'task'] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setDraftMode(value)}
+                      className={[
+                        'rounded-full px-2.5 py-1 text-[11px] font-medium capitalize transition-all',
+                        draftMode === value
+                          ? 'bg-[var(--color-canvas)] text-[var(--color-text-primary)] shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
+                          : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]',
+                      ].join(' ')}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-[7px] flex items-center gap-1.5">
+                {draftMode === 'task' && (
+                  <DraftActionButton onClick={handleQuickFollowUp} disabled={!selectedEmail}>
+                    Follow-up
+                  </DraftActionButton>
+                )}
+                <DraftActionButton onClick={() => void handleSuggest()} active disabled={!selectedEmailId || isSuggesting}>
+                  {isSuggesting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} strokeWidth={2} />}
+                  Suggest
+                </DraftActionButton>
+              </div>
+            </div>
+            <>
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-3 flex flex-col gap-3 relative">
                   <PopoverField label="Title">
                     <PopoverInput
                       value={draft.title}
                       onChange={(value) => setDraft((prev) => ({ ...prev, title: value }))}
-                        placeholder="Suggested task title"
-                        className={GHOST_INPUT}
-                      />
+                      placeholder={draftMode === 'event' ? 'Suggested event title' : 'Suggested task title'}
+                      className={DRAFT_CONTROL}
+                    />
                   </PopoverField>
                   <PopoverField label="Notes">
                     <PopoverInput
                       value={draft.notes}
                       onChange={(value) => setDraft((prev) => ({ ...prev, notes: value }))}
-                      placeholder="Optional task notes"
+                      placeholder={draftMode === 'event' ? 'Optional event notes' : 'Optional task notes'}
                       multiline
-                      minHeight={86}
-                      className={GHOST_TEXTAREA}
+                      minHeight={124}
+                      className={`${DRAFT_CONTROL} min-h-[124px]`}
                     />
                   </PopoverField>
-                  <div className="grid grid-cols-1 gap-2.5">
+                  <div className={`grid ${draftMode === 'event' ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_122px]'} gap-2.5`}>
                     <PopoverField label="Date">
                       <input
                         type="date"
                         value={draft.taskDate}
                         onChange={(event) => setDraft((prev) => ({ ...prev, taskDate: event.target.value }))}
-                        className={DRAFT_CONTROL}
+                        className={`${INLINE_CONTROL} w-full`}
                       />
                     </PopoverField>
-                    <PopoverField label="Create In">
-                      <select
-                        value={draft.targetLocation}
+                    {draftMode === 'task' && (
+                      <PopoverField label="Create In">
+                        <select
+                          value={draft.targetLocation}
+                          onChange={(event) =>
+                            setDraft((prev) => ({
+                              ...prev,
+                              targetLocation: event.target.value as DraftTask['targetLocation'],
+                            }))}
+                          className={`${INLINE_CONTROL} w-full`}
+                        >
+                          <option value="today">Today</option>
+                          <option value="myday">My Day</option>
+                          <option value="backlog">Backlog</option>
+                          <option value="project">Project</option>
+                        </select>
+                      </PopoverField>
+                    )}
+                  </div>
+                  {showTimeFields ? (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <input
+                        type="time"
+                        aria-label="Start time"
+                        value={draft.startTime}
                         onChange={(event) =>
                           setDraft((prev) => ({
                             ...prev,
-                            targetLocation: event.target.value as DraftTask['targetLocation'],
+                            startTime: event.target.value,
+                            allDay: false,
                           }))}
-                        className={DRAFT_CONTROL}
-                      >
-                        <option value="today">Today</option>
-                        <option value="myday">My Day</option>
-                        <option value="backlog">Backlog</option>
-                        <option value="project">Project</option>
-                      </select>
-                    </PopoverField>
-                  </div>
-                  <div className="grid grid-cols-[minmax(0,1fr)_44px] gap-2 items-end">
+                        className={`${INLINE_CONTROL} w-full`}
+                      />
+                      <input
+                        type="time"
+                        aria-label="End time"
+                        value={draft.endTime}
+                        onChange={(event) =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            endTime: event.target.value,
+                            allDay: false,
+                          }))}
+                        className={`${INLINE_CONTROL} w-full`}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraft((prev) => ({
+                          ...prev,
+                          allDay: false,
+                          startTime: prev.startTime || '09:00',
+                          endTime: prev.endTime || '10:00',
+                        }))}
+                      className="self-start rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)]/92 px-3 py-1.5 text-[12px] font-medium text-[var(--color-text-muted)] shadow-[0_2px_8px_rgba(19,23,38,0.04)] hover:bg-[var(--color-surface-secondary)]"
+                    >
+                      Add time
+                    </button>
+                  )}
+                  {draftMode === 'task' && (
                     <PopoverField label="Project">
-                      <div className="relative">
+                    <div className={`${INLINE_CONTROL} flex items-center gap-2 px-2.5`} ref={tagPickerRef}>
+                      <div className="relative min-w-0 flex-1">
                         <button
                           type="button"
                           onClick={() => setTagPickerOpen(false)}
-                          className={`${DRAFT_CONTROL} flex items-center gap-2 text-left`}
+                          className="flex w-full items-center gap-2 rounded-[0.8rem] px-1 py-0.5 text-left"
                         >
                           <span
                             className="inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-[12px] font-medium shadow-[0_1px_2px_rgba(15,23,42,0.03)] truncate"
@@ -601,7 +873,7 @@ export function EmailToTaskPanel({
                               color: 'var(--color-text-primary)',
                             }}
                           >
-                            <span className="truncate">{selectedProject ? selectedProject.title : 'No project'}</span>
+                            <span className={`truncate ${selectedProject ? '' : 'text-[var(--color-text-muted)] font-normal'}`}>{selectedProject ? selectedProject.title : 'Select'}</span>
                           </span>
                           <ChevronRight size={12} strokeWidth={2} className="ml-auto text-[var(--color-text-muted)]" />
                         </button>
@@ -618,15 +890,13 @@ export function EmailToTaskPanel({
                           ))}
                         </select>
                       </div>
-                    </PopoverField>
-                    <div className="flex flex-col gap-1.5" ref={tagPickerRef}>
-                      <span className="ui-section-label opacity-0 pointer-events-none select-none">Tag</span>
-                      <div className="relative">
+                      <div className="h-7 w-px bg-[var(--color-border-subtle)]" />
+                      <div className="relative shrink-0">
                         <button
                           type="button"
                           title="Tag"
                           onClick={() => setTagPickerOpen((open) => !open)}
-                          className={`${DRAFT_CONTROL} flex h-[38px] items-center justify-center px-0`}
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-surface-secondary)]/72 hover:bg-[var(--color-surface-secondary)]"
                         >
                           {selectedTag ? (
                             <span
@@ -671,34 +941,7 @@ export function EmailToTaskPanel({
                         )}
                       </div>
                     </div>
-                  </div>
-                  {showTimeFields ? (
-                    <div className="grid grid-cols-1 gap-2.5">
-                      <PopoverField label="Start Time">
-                        <input
-                          type="time"
-                          value={draft.startTime}
-                          onChange={(event) => setDraft((prev) => ({ ...prev, startTime: event.target.value }))}
-                          className={DRAFT_CONTROL}
-                        />
-                      </PopoverField>
-                      <PopoverField label="End Time">
-                        <input
-                          type="time"
-                          value={draft.endTime}
-                          onChange={(event) => setDraft((prev) => ({ ...prev, endTime: event.target.value }))}
-                          className={DRAFT_CONTROL}
-                        />
-                      </PopoverField>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setDraft((prev) => ({ ...prev, startTime: prev.startTime || '09:00', endTime: prev.endTime || '10:00' }))}
-                      className="self-start rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)]/92 px-3 py-1.5 text-[12px] font-medium text-[var(--color-text-muted)] shadow-[0_2px_8px_rgba(19,23,38,0.04)] hover:bg-[var(--color-surface-secondary)]"
-                    >
-                      Add time
-                    </button>
+                  </PopoverField>
                   )}
 
                   {error && (
@@ -723,7 +966,7 @@ export function EmailToTaskPanel({
                     </div>
                   )}
                 </div>
-                <div className="mt-auto border-t border-[var(--color-popover-border)]/45 px-4 pt-3 pb-4">
+                <div className="mt-auto border-t border-[var(--color-popover-border)]/45 bg-[var(--color-surface-secondary)]/22 px-4 pt-3.5 pb-4">
                   <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"
@@ -739,12 +982,11 @@ export function EmailToTaskPanel({
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/15 text-[12px] font-semibold hover:brightness-[0.985] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {isSaving && <Loader2 size={13} className="animate-spin" />}
-                      Save task
+                      {draftMode === 'event' ? 'Save event' : 'Save task'}
                     </button>
                   </div>
                 </div>
               </>
-            )}
           </div>
         </div>
 

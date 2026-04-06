@@ -314,6 +314,7 @@ function MonthDayCell({
   onTaskDoubleClick,
   onGoogleEntryDoubleClick,
   onEventCellDoubleClick,
+  onBirthdayClick,
 }: {
   day: MonthDayData;
   todayString: string;
@@ -356,6 +357,7 @@ function MonthDayCell({
     <div
       className={[
         'relative min-h-0 border-l first:border-l-0 border-[var(--color-border-grid)] transition-colors',
+        monthTaskLayout === 'grid' ? 'overflow-hidden' : '',
         cellTone,
         monthViewMode === 'tasks' && isTaskOver
           ? 'bg-[color-mix(in_srgb,var(--color-accent-subtle)_42%,var(--color-center-col)_58%)]'
@@ -391,7 +393,9 @@ function MonthDayCell({
             ref={setTaskDropRef}
             className={[
               'month-cell-scroll flex-1 px-1.5 pb-1.5 space-y-0.5',
-              monthTaskLayout === 'grid' ? 'min-h-0 overflow-y-auto overflow-x-hidden' : 'overflow-visible',
+              monthTaskLayout === 'grid'
+                ? 'min-h-0 overflow-y-auto overflow-x-hidden'
+                : 'overflow-visible min-h-fit',
             ].join(' ')}
             onDoubleClick={(e) => {
               if ((e.target as HTMLElement) !== e.currentTarget) return;
@@ -420,7 +424,12 @@ function MonthDayCell({
         ) : (
           <div
             ref={setEventDropRef}
-            className="month-cell-scroll flex-1 min-h-0 overflow-y-auto px-1.5 pb-1.5 space-y-0.5"
+            className={[
+              'month-cell-scroll flex-1 px-1.5 pb-1.5 space-y-0.5',
+              monthTaskLayout === 'grid'
+                ? 'min-h-0 overflow-y-auto overflow-x-hidden'
+                : 'overflow-visible min-h-fit',
+            ].join(' ')}
             onDoubleClick={handleEventDoubleClick}
           >
             {day.allDayEvents.map((event) => (
@@ -522,16 +531,22 @@ export function MonthViewColumnView({
 
       <div className={monthTaskLayout === 'expanded' ? 'flex-1 min-h-0 overflow-y-auto' : 'flex-1 min-h-0 overflow-hidden'}>
         <div
-          className="grid min-h-full"
+          className={monthTaskLayout === 'expanded' ? 'grid min-h-full' : 'grid h-full min-h-0'}
           style={{
             gridTemplateRows:
               monthTaskLayout === 'expanded'
-                ? `repeat(${weeks.length}, minmax(136px, 1fr))`
+                ? `repeat(${weeks.length}, auto)`
                 : `repeat(${weeks.length}, minmax(0, 1fr))`,
           }}
         >
           {weeks.map((week, weekIndex) => (
-            <div key={weekIndex} className="grid grid-cols-7 min-h-0 border-b border-[var(--color-border)] last:border-b-0">
+            <div
+              key={weekIndex}
+              className={[
+                'grid grid-cols-7 border-b border-[var(--color-border)] last:border-b-0 items-stretch',
+                monthTaskLayout === 'expanded' ? 'auto-rows-auto' : 'min-h-0 overflow-hidden',
+              ].join(' ')}
+            >
               {week.map((day) => (
                 <MonthDayCell
                   key={day.dateString}

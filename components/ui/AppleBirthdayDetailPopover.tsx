@@ -6,7 +6,7 @@ import { Cake, Check, Loader2 } from 'lucide-react';
 import * as api from '@/lib/api';
 import type { AllDayEvent } from '@/types';
 import { DetailPopover } from './DetailPopover';
-import { PopoverField, PopoverInput } from './PopoverField';
+import { PopoverInput } from './PopoverField';
 
 interface AppleBirthdayDetailPopoverProps {
   event: AllDayEvent;
@@ -19,16 +19,19 @@ export function AppleBirthdayDetailPopover({
   anchor,
   onClose,
 }: AppleBirthdayDetailPopoverProps) {
+  const EMOJIS = ['🎂', '🎈', '☀️', '🤗', '💛', '❤️', '🥳', '🎉'];
   const birthdayId = event.birthdayContactId;
   const [messageText, setMessageText] = useState('');
   const [initialMessageText, setInitialMessageText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!birthdayId) {
-      setError('Birthday message is unavailable');
+      setMessageText('');
+      setInitialMessageText('');
       setIsLoading(false);
       return;
     }
@@ -55,6 +58,12 @@ export function AppleBirthdayDetailPopover({
     };
   }, [birthdayId]);
 
+  useEffect(() => {
+    if (!saveNotice) return;
+    const timer = window.setTimeout(() => setSaveNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [saveNotice]);
+
   const displayDate = useMemo(() => {
     try {
       return format(parseISO(event.date), 'EEEE, MMMM d');
@@ -74,7 +83,7 @@ export function AppleBirthdayDetailPopover({
       const next = saved.messageText ?? '';
       setMessageText(next);
       setInitialMessageText(next);
-      onClose();
+      setSaveNotice(next ? 'Saved to birthday message' : 'Birthday message cleared');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save birthday message');
     } finally {
@@ -82,12 +91,16 @@ export function AppleBirthdayDetailPopover({
     }
   };
 
+  const appendEmoji = (emoji: string) => {
+    setMessageText((current) => `${current}${current ? ' ' : ''}${emoji}`);
+  };
+
   return (
     <DetailPopover
       anchor={anchor}
       onClose={onClose}
       className="w-[22rem]"
-      title="Birthday"
+      title={undefined}
       headerActions={
         hasChanges ? (
           <button
@@ -101,8 +114,8 @@ export function AppleBirthdayDetailPopover({
         ) : undefined
       }
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex items-start gap-3">
+      <div className="flex flex-col gap-3.5 pt-2">
+        <div className="flex items-start gap-3 pr-9">
           <div className="w-9 h-9 rounded-2xl bg-[color-mix(in_srgb,#f97316_14%,white_86%)] text-[#b45309] flex items-center justify-center shadow-[0_10px_24px_rgba(249,115,22,0.12)]">
             <Cake size={16} strokeWidth={2} />
           </div>
@@ -116,23 +129,44 @@ export function AppleBirthdayDetailPopover({
           </div>
         </div>
 
-        <PopoverField label="Birthday Message">
-          {isLoading ? (
-            <div className="rounded-[1rem] bg-[var(--color-surface-secondary)]/72 p-3">
-              <div className="h-3 w-1/3 rounded bg-[var(--color-surface-raised)] animate-pulse" />
-              <div className="mt-2 h-3 w-full rounded bg-[var(--color-surface-raised)] animate-pulse" />
-              <div className="mt-2 h-3 w-4/5 rounded bg-[var(--color-surface-raised)] animate-pulse" />
-            </div>
-          ) : (
-            <PopoverInput
-              value={messageText}
-              onChange={setMessageText}
-              placeholder="Write a birthday message…"
-              multiline
-              minHeight={120}
-            />
-          )}
-        </PopoverField>
+        {isLoading ? (
+          <div className="rounded-[1rem] bg-[var(--color-surface-secondary)]/72 p-3">
+            <div className="h-3 w-1/3 rounded bg-[var(--color-surface-raised)] animate-pulse" />
+            <div className="mt-2 h-3 w-full rounded bg-[var(--color-surface-raised)] animate-pulse" />
+            <div className="mt-2 h-3 w-4/5 rounded bg-[var(--color-surface-raised)] animate-pulse" />
+          </div>
+        ) : (
+          <PopoverInput
+            value={messageText}
+            onChange={setMessageText}
+            placeholder="Write a birthday message…"
+            multiline
+            minHeight={120}
+          />
+        )}
+
+        {!isLoading && (
+          <div className="flex flex-wrap gap-1.5">
+            {EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => appendEmoji(emoji)}
+                className="inline-flex h-8 min-w-8 items-center justify-center rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)]/92 px-2 text-[15px] shadow-[0_2px_8px_rgba(19,23,38,0.04)] hover:bg-[var(--color-surface-raised)]"
+                title={`Add ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {saveNotice && (
+          <div className="inline-flex self-start items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[12px] font-medium text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/20 dark:text-emerald-300">
+            <Check size={12} strokeWidth={2.4} />
+            {saveNotice}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300">

@@ -95,7 +95,7 @@ export function SmartCaptureBar({ autoFocusToken = 0 }: { autoFocusToken?: numbe
         mode,
         currentDate,
         currentDateTime: new Date().toISOString(),
-        currentView: viewMode,
+        currentView: api.normalizeExecutionView(viewMode),
         timezone,
       });
 

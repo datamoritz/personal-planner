@@ -8,10 +8,11 @@ interface ViewToggleProps {
 }
 
 const OPTIONS = [
+  { label: 'Plan',  value: 'planner' as const, enabled: true  },
   { label: 'Day',   value: 'day'   as const, enabled: true  },
   { label: 'Week',  value: 'week'  as const, enabled: true  },
   { label: 'Month', value: 'month' as const, enabled: true  },
-  { label: 'Year',  value: null,              enabled: false },
+  { label: 'Year',  value: 'year'  as const, enabled: true  },
 ] as const;
 
 export function ViewToggle({ value, onChange }: ViewToggleProps) {

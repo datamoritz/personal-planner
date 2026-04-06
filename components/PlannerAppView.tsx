@@ -17,10 +17,12 @@ import { TasksTodayColumn } from './columns/TasksTodayColumn';
 import { SidebarColumn } from './columns/SidebarColumn';
 import { WeekViewColumn } from './columns/WeekViewColumn';
 import { MonthViewColumn } from './columns/MonthViewColumn';
+import { YearViewColumn } from './columns/YearViewColumn';
+import { PlannerView } from './planner/PlannerView';
 import { ViewToggle } from './ui/ViewToggle';
 import { TagsDropdown } from './ui/TagsDropdown';
 import { DetailPopover } from './ui/DetailPopover';
-import { EmailToTaskPanel } from './ui/EmailToTaskPanel';
+import { EmailToTaskPanelV2 } from './ui/EmailToTaskPanelV2';
 import { SmartCaptureBar } from './ui/SmartCaptureBar';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
@@ -129,6 +131,8 @@ export function PlannerAppView({
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
   const [smartCaptureOpen, setSmartCaptureOpen] = useState(true);
   const [smartCaptureFocusToken, setSmartCaptureFocusToken] = useState(0);
+  const isPlannerView = viewMode === 'planner';
+  const isYearView = viewMode === 'year';
   const showLeftPanel = viewMode === 'week' || viewMode === 'month' ? weekProjectsVisible : !leftCollapsed;
   const showMonthEventTimes = !(viewMode === 'month' && showLeftPanel && !rightCollapsed);
 
@@ -185,7 +189,7 @@ export function PlannerAppView({
                   type="button"
                   onClick={() => setEmailPanelOpen(true)}
                   title="Recent emails"
-                  className="ui-icon-button text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10"
+                  className="ui-icon-button text-[var(--color-accent)] hover:text-[var(--color-accent)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10"
                 >
                   <Mail size={14} strokeWidth={2.1} />
                 </button>
@@ -248,7 +252,16 @@ export function PlannerAppView({
           </div>
 
           <div className="flex flex-col flex-1 rounded-[2rem] overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] ui-raised-surface min-w-0">
-            <DayHeader />
+            {isPlannerView ? (
+              <PlannerView />
+            ) : (
+              <>
+                <DayHeader />
+                {isYearView ? (
+                  <div className="flex-1 min-h-0">
+                    <YearViewColumn />
+                  </div>
+                ) : (
             <div className="flex flex-1 min-h-0">
               {!focusMode && (
                 <div style={{ width: showLeftPanel ? '23%' : COLLAPSED_W, flexShrink: 0 }} className="h-full min-w-0">
@@ -320,10 +333,13 @@ export function PlannerAppView({
                         triggerBacklogAdd={triggerBacklogAdd}
                         onBacklogAddHandled={() => setTriggerBacklogAdd(false)}
                       />
-                    )}
+                  )}
                 </div>
               )}
             </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -332,7 +348,7 @@ export function PlannerAppView({
           {activeDrag?.type === 'recurrent' && <RecurrentGhost task={activeDrag.item} />}
         </DragOverlay>
 
-        <EmailToTaskPanel open={emailPanelOpen} onClose={() => setEmailPanelOpen(false)} />
+        <EmailToTaskPanelV2 open={emailPanelOpen} onClose={() => setEmailPanelOpen(false)} />
       </DndContext>
     </div>
   );

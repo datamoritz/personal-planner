@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { addDays, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from 'date-fns';
+import { addDays, addYears, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { AllDayEvent, CalendarEntry } from '@/types';
 
@@ -26,6 +26,10 @@ export function useGoogleCalendar(): { refresh: () => void } {
       const base  = new Date(currentDate + 'T00:00:00');
       start = format(startOfWeek(base, { weekStartsOn: 1 }), 'yyyy-MM-dd');
       end   = format(addDays(endOfWeek(base, { weekStartsOn: 1 }), 1), 'yyyy-MM-dd');
+    } else if (viewMode === 'year') {
+      const base = new Date(currentDate + 'T00:00:00');
+      start = format(startOfYear(base), 'yyyy-MM-dd');
+      end = format(addYears(startOfYear(base), 1), 'yyyy-MM-dd');
     } else if (viewMode === 'month') {
       const base = new Date(currentDate + 'T00:00:00');
       start = format(startOfWeek(startOfMonth(base), { weekStartsOn: 1 }), 'yyyy-MM-dd');

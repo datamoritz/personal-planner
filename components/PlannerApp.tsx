@@ -134,7 +134,25 @@ export function PlannerApp() {
     const overData   = over.data.current   as { type: string; containerId: string } | undefined;
 
     const sourceContainer = sourceData?.containerId ?? '';
-    const destContainer   = overData?.containerId ?? overId.replace(/^drop-/, '');
+    let destContainer = overData?.containerId ?? overId.replace(/^drop-/, '');
+    if (!overData?.containerId) {
+      const overTask = tasks.find((task) => task.id === overId);
+      if (overTask) {
+        if (overTask.location === 'backlog') {
+          destContainer = 'backlog';
+        } else if (overTask.location === 'project' && overTask.projectId) {
+          destContainer = `project-${overTask.projectId}`;
+        } else if (overTask.location === 'today' || overTask.location === 'upcoming' || overTask.location === 'myday') {
+          if (viewMode === 'week' && overTask.date) {
+            destContainer = `week-today-${overTask.date}`;
+          } else if (viewMode === 'month' && overTask.date) {
+            destContainer = `month-day-${overTask.date}`;
+          } else {
+            destContainer = 'today';
+          }
+        }
+      }
+    }
 
     if (sourceData?.type === 'project') {
       if (activeId !== overId) reorderProject(activeId, overId);

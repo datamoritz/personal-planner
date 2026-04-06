@@ -284,6 +284,7 @@ interface PlannerStore extends PlannerState {
   viewMode: PlannerViewMode;
   monthViewMode: MonthViewMode;
   monthTaskLayout: MonthTaskLayout;
+  yearPreviewEnabled: boolean;
   uncertaintyNotes: string;
   expandedProjectIds: string[];
   setUncertaintyNotes: (text: string) => void;
@@ -295,9 +296,11 @@ interface PlannerStore extends PlannerState {
   navigateDay: (direction: 'prev' | 'next') => void;
   navigateWeek: (direction: 'prev' | 'next') => void;
   navigateMonth: (direction: 'prev' | 'next') => void;
+  navigateYear: (direction: 'prev' | 'next') => void;
   setViewMode: (mode: PlannerViewMode) => void;
   setMonthViewMode: (mode: MonthViewMode) => void;
   setMonthTaskLayout: (mode: MonthTaskLayout) => void;
+  setYearPreviewEnabled: (enabled: boolean) => void;
   /** Hydrate the store with data fetched from the backend on boot. */
   hydrateFromBackend: (data: BootData) => void;
   // Tasks
@@ -358,7 +361,8 @@ export const usePlannerStore = create<PlannerStore>()(
       theme:                      'light',
       viewMode:                   'day' as PlannerViewMode,
       monthViewMode:              'events' as MonthViewMode,
-      monthTaskLayout:            'expanded' as MonthTaskLayout,
+      monthTaskLayout:            'grid' as MonthTaskLayout,
+      yearPreviewEnabled:         true,
       uncertaintyNotes:           '',
       expandedProjectIds:         [],
       selectedProjectIdForNotes:  null,
@@ -404,9 +408,17 @@ export const usePlannerStore = create<PlannerStore>()(
         set({ currentDate: format(next, 'yyyy-MM-dd') });
       },
 
+      navigateYear: (direction) => {
+        const { currentDate } = get();
+        const current = new Date(currentDate + 'T00:00:00');
+        const next = direction === 'next' ? addMonths(current, 12) : subMonths(current, 12);
+        set({ currentDate: format(next, 'yyyy-MM-dd') });
+      },
+
       setViewMode: (mode) => set({ viewMode: mode }),
       setMonthViewMode: (mode) => set({ monthViewMode: mode }),
       setMonthTaskLayout: (mode) => set({ monthTaskLayout: mode }),
+      setYearPreviewEnabled: (enabled) => set({ yearPreviewEnabled: enabled }),
 
       hydrateFromBackend: (data) => {
         // Derive subtaskIds from tasks (backend stores FK on task, not on project)
@@ -1242,13 +1254,34 @@ export const usePlannerStore = create<PlannerStore>()(
     }),
     {
       name: 'planner-ui',
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState: unknown) => {
+        const state = (persistedState ?? {}) as Record<string, unknown>;
+        const viewMode = state.viewMode;
+        return {
+          ...state,
+          viewMode:
+            viewMode === 'day' ||
+            viewMode === 'week' ||
+            viewMode === 'month' ||
+            viewMode === 'year' ||
+            viewMode === 'planner'
+              ? viewMode
+              : 'day',
+          yearPreviewEnabled:
+            typeof state.yearPreviewEnabled === 'boolean'
+              ? state.yearPreviewEnabled
+              : true,
+        };
+      },
       // Only persist UI preferences — entities are owned by the backend now
       partialize: (s) => ({
         theme:            s.theme,
         viewMode:         s.viewMode,
         monthViewMode:    s.monthViewMode,
         monthTaskLayout:  s.monthTaskLayout,
+        yearPreviewEnabled: s.yearPreviewEnabled,
         uncertaintyNotes: s.uncertaintyNotes,
         expandedProjectIds: s.expandedProjectIds,
       }),

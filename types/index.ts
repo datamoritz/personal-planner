@@ -133,12 +133,39 @@ export interface Project {
   id: string;           // UUID — used as client_id in backend
   /** Backend integer PK — populated after first successful API sync */
   backendId?: number;
+  goalId?: number;
   sortOrder?: number;
   title: string;
   /** Derived from tasks on hydration — not stored in backend */
   subtaskIds: string[];
   status: 'active' | 'finished';
   tagId?: string;        // FK → tags.id (not yet synced to backend)
+  startDate?: string;
+  endDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Planner ───────────────────────────────────────────────────────────────
+
+export interface Milestone {
+  id: string;
+  backendId?: number;
+  goalId: number;
+  name: string;
+  date: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Goal {
+  id: string;
+  backendId?: number;
+  name: string;
+  color: string;
+  startDate: string;
+  endDate: string;
+  milestones: Milestone[];
   createdAt: string;
   updatedAt: string;
 }
@@ -155,9 +182,10 @@ export interface PlannerState {
   tags: Tag[];
 }
 
-export type PlannerViewMode = 'day' | 'week' | 'month';
+export type PlannerViewMode = 'day' | 'week' | 'month' | 'year' | 'planner';
 export type MonthViewMode = 'events' | 'tasks';
 export type MonthTaskLayout = 'grid' | 'expanded';
+export type PlannerZoom = 'week' | 'month' | 'quarter';
 
 export interface RecentEmail {
   id: string;

@@ -15,6 +15,8 @@ import { addDays, format, startOfMonth, addMonths } from 'date-fns';
 import type {
   Task,
   Project,
+  Goal,
+  Milestone,
   RecurrentTask,
   RecurrenceFrequency,
   CalendarEntry,
@@ -29,6 +31,13 @@ import type {
 } from '@/types';
 
 export const API_BASE = 'https://planner-api.moritzknodler.com';
+
+export function normalizeExecutionView(
+  view: string | null | undefined,
+): 'day' | 'week' | 'month' | 'year' {
+  if (view === 'week' || view === 'month' || view === 'year') return view;
+  return 'day';
+}
 
 // ─── HTTP helpers ───────────────────────────────────────────────────────────
 
@@ -183,6 +192,10 @@ type BackendTask             = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BackendProject          = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+type BackendGoal             = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type BackendMilestone        = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BackendRecurrentTask    = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type BackendTag              = any;
@@ -216,13 +229,42 @@ function toProject(b: BackendProject, tagIdMap: Map<number, string>): Project {
   return {
     id:          b.client_id ?? String(b.id),
     backendId:   b.id,
+    goalId:      b.goal_id ?? undefined,
     sortOrder:   b.sort_order ?? 0,
     title:       b.title,
     subtaskIds:  [],  // derived from tasks after full fetch
     status:      b.is_finished ? 'finished' : 'active',
     tagId:       b.tag_id != null ? tagIdMap.get(b.tag_id) : undefined,
+    startDate:   b.start_date ?? undefined,
+    endDate:     b.end_date ?? undefined,
     createdAt:   b.created_at,
     updatedAt:   b.updated_at,
+  };
+}
+
+function toMilestone(b: BackendMilestone): Milestone {
+  return {
+    id:         b.client_id ?? String(b.id),
+    backendId:  b.id,
+    goalId:     b.goal_id,
+    name:       b.name,
+    date:       b.date,
+    createdAt:  b.created_at,
+    updatedAt:  b.updated_at,
+  };
+}
+
+function toGoal(b: BackendGoal): Goal {
+  return {
+    id:         b.client_id ?? String(b.id),
+    backendId:  b.id,
+    name:       b.name,
+    color:      b.color,
+    startDate:  b.start_date,
+    endDate:    b.end_date,
+    milestones: Array.isArray(b.milestones) ? b.milestones.map(toMilestone) : [],
+    createdAt:  b.created_at,
+    updatedAt:  b.updated_at,
   };
 }
 
@@ -295,6 +337,11 @@ export interface BootData {
   tags:            Tag[];
 }
 
+export interface PlannerData {
+  goals: Goal[];
+  projects: Project[];
+}
+
 export async function fetchAll(): Promise<BootData> {
   const [
     backendProjects,
@@ -325,6 +372,22 @@ export async function fetchAll(): Promise<BootData> {
   const tasks           = backendTasks.map((t) => toTask(t, projectIdMap, recurrentTaskIdMap, tagIdMap));
 
   return { projects, tags, recurrentTasks, tasks };
+}
+
+export async function fetchPlanner(): Promise<PlannerData> {
+  const [backendPlanner, backendTags] = await Promise.all([
+    get<{ goals: BackendGoal[]; projects: BackendProject[] }>('/planner'),
+    get<BackendTag[]>('/tags'),
+  ]);
+
+  const tagIdMap = new Map<number, string>(
+    backendTags.map((t) => [t.id, t.client_id ?? String(t.id)]),
+  );
+
+  return {
+    goals: backendPlanner.goals.map(toGoal),
+    projects: backendPlanner.projects.map((project) => toProject(project, tagIdMap)),
+  };
 }
 
 // ─── Task mutations ─────────────────────────────────────────────────────────
@@ -416,12 +479,30 @@ export async function getEmailContent(messageId: string): Promise<EmailContent> 
   return get<EmailContent>(`/email/${messageId}`);
 }
 
+export async function archiveEmail(messageId: string): Promise<void> {
+  await post<void>(`/email/${messageId}/archive`, {});
+}
+
+export async function unarchiveEmail(messageId: string): Promise<void> {
+  await post<void>(`/email/${messageId}/unarchive`, {});
+}
+
 export async function suggestTaskFromEmail(
   messageId: string,
-  promptAddition?: string,
+  input: {
+    promptAddition?: string;
+    currentDate: string;
+    currentDateTime: string;
+    currentView: 'day' | 'week' | 'month' | 'year';
+    timezone: string;
+  },
 ): Promise<EmailTaskSuggestion> {
   return post<EmailTaskSuggestion>(`/email/${messageId}/task-suggestion`, {
-    promptAddition: promptAddition?.trim() || undefined,
+    promptAddition: input.promptAddition?.trim() || undefined,
+    currentDate: input.currentDate,
+    currentDateTime: input.currentDateTime,
+    currentView: input.currentView,
+    timezone: input.timezone,
   });
 }
 
@@ -430,7 +511,7 @@ export async function suggestTextDraft(input: {
   mode: TextDraftMode;
   currentDate: string;
   currentDateTime: string;
-  currentView: 'day' | 'week' | 'month';
+  currentView: 'day' | 'week' | 'month' | 'year';
   timezone: string;
 }): Promise<TextDraftResponse> {
   return post<TextDraftResponse>('/ai/text-draft', input);
