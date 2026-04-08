@@ -1,7 +1,7 @@
 """Add recurrent task cycle state fields
 
 Revision ID: 0010_recurrent_task_cycle_state
-Revises: 0009_planner_goals_and_milestones
+Revises: 0009_planner_goals_milestones
 Create Date: 2026-04-08
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "0010_recurrent_task_cycle_state"
-down_revision = "0009_planner_goals_and_milestones"
+down_revision = "0009_planner_goals_milestones"
 branch_labels = None
 depends_on = None
 
