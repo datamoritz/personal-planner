@@ -94,6 +94,8 @@ class RecurrentTask(Base):
     location: Mapped[str] = mapped_column(String(50), nullable=False, default="backlog")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     recurrence_rule: Mapped[str] = mapped_column(String(255), nullable=False)
+    anchor_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    completed_through_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     default_start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     default_end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

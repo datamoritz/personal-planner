@@ -27,6 +27,8 @@ class RecurrentTaskBase(BaseModel):
     location: str = "backlog"
     notes: Optional[str] = None
     recurrence_rule: str
+    anchor_date: Optional[date] = None
+    completed_through_date: Optional[date] = None
     default_start_time: Optional[time] = None
     default_end_time: Optional[time] = None
     is_active: bool = True
@@ -43,6 +45,8 @@ class RecurrentTaskUpdate(BaseModel):
     location: Optional[str] = None
     notes: Optional[str] = None
     recurrence_rule: Optional[str] = None
+    anchor_date: Optional[date] = None
+    completed_through_date: Optional[date] = None
     default_start_time: Optional[time] = None
     default_end_time: Optional[time] = None
     is_active: Optional[bool] = None

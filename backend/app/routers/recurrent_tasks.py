@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -49,6 +49,8 @@ def create_recurrent_task(payload: schemas.RecurrentTaskCreate, db: Session = De
         location=payload.location,
         notes=payload.notes,
         recurrence_rule=payload.recurrence_rule,
+        anchor_date=payload.anchor_date or datetime.utcnow().date(),
+        completed_through_date=payload.completed_through_date,
         default_start_time=payload.default_start_time,
         default_end_time=payload.default_end_time,
         is_active=payload.is_active,
