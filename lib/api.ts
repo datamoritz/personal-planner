@@ -11,12 +11,13 @@
  * No React / Zustand imports — this is a pure data layer.
  */
 
-import { addDays, format, startOfMonth, addMonths } from 'date-fns';
+import { addDays, addMonths, format, startOfDay, startOfMonth } from 'date-fns';
 import type {
   Task,
   Project,
   Goal,
   Milestone,
+  MilestoneType,
   RecurrentTask,
   RecurrenceFrequency,
   CalendarEntry,
@@ -28,6 +29,7 @@ import type {
   TextDraftMode,
   TextDraftResponse,
   AppleBirthdayMessage,
+  WatchSearchResult,
 } from '@/types';
 
 export const API_BASE = 'https://planner-api.moritzknodler.com';
@@ -118,43 +120,178 @@ export function ruleToFrequency(rule: string): RecurrenceFrequency {
   return { type: 'daily' };
 }
 
-/** Compute the next occurrence date for a recurrence rule, relative to today. */
-export function computeNextDueDate(freq: RecurrenceFrequency): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+function parseLocalDate(value: string | Date): Date {
+  return value instanceof Date ? startOfDay(value) : new Date(`${value}T00:00:00`);
+}
+
+function isoDate(value: Date): string {
+  return format(value, 'yyyy-MM-dd');
+}
+
+function isSameLocalDate(a: Date, b: Date): boolean {
+  return isoDate(a) === isoDate(b);
+}
+
+function createMonthDay(year: number, monthIndex: number, dayOfMonth: number): Date | null {
+  const candidate = new Date(year, monthIndex, dayOfMonth);
+  return candidate.getMonth() === monthIndex ? startOfDay(candidate) : null;
+}
+
+function firstWeeklyOnOrAfter(anchor: Date, dayOfWeek: number): Date {
+  const offset = (dayOfWeek - anchor.getDay() + 7) % 7;
+  return addDays(anchor, offset);
+}
+
+function firstMonthlyOnOrAfter(anchor: Date, dayOfMonth: number): Date {
+  const sameMonth = createMonthDay(anchor.getFullYear(), anchor.getMonth(), dayOfMonth);
+  if (sameMonth && sameMonth >= anchor) return sameMonth;
+  let cursor = addMonths(startOfMonth(anchor), 1);
+  while (true) {
+    const candidate = createMonthDay(cursor.getFullYear(), cursor.getMonth(), dayOfMonth);
+    if (candidate) return candidate;
+    cursor = addMonths(cursor, 1);
+  }
+}
+
+function addMonthlyCycle(from: Date, intervalMonths: number, dayOfMonth: number): Date {
+  let cursor = addMonths(startOfMonth(from), intervalMonths);
+  while (true) {
+    const candidate = createMonthDay(cursor.getFullYear(), cursor.getMonth(), dayOfMonth);
+    if (candidate) return candidate;
+    cursor = addMonths(cursor, 1);
+  }
+}
+
+export function getCurrentRecurrentCycleDueDate(
+  freq: RecurrenceFrequency,
+  anchorDate: string,
+  referenceDate: string | Date = new Date(),
+): string {
+  const anchor = parseLocalDate(anchorDate);
+  const reference = parseLocalDate(referenceDate);
 
   switch (freq.type) {
     case 'daily':
-      return format(today, 'yyyy-MM-dd');
+      return isoDate(reference < anchor ? anchor : reference);
 
     case 'weekly': {
-      const todayNum = today.getDay(); // 0=Sun
-      const daysUntil = (freq.dayOfWeek - todayNum + 7) % 7;
-      return format(addDays(today, daysUntil), 'yyyy-MM-dd');
+      let current = firstWeeklyOnOrAfter(anchor, freq.dayOfWeek);
+      while (addDays(current, 7) <= reference) current = addDays(current, 7);
+      return isoDate(current);
     }
 
     case 'monthly': {
-      const thisMonth = new Date(today.getFullYear(), today.getMonth(), freq.dayOfMonth);
-      if (thisMonth >= today) return format(thisMonth, 'yyyy-MM-dd');
-      const nextMonth = addMonths(startOfMonth(today), 1);
-      nextMonth.setDate(freq.dayOfMonth);
-      return format(nextMonth, 'yyyy-MM-dd');
+      let current = firstMonthlyOnOrAfter(anchor, freq.dayOfMonth);
+      while (addMonthlyCycle(current, 1, freq.dayOfMonth) <= reference) {
+        current = addMonthlyCycle(current, 1, freq.dayOfMonth);
+      }
+      return isoDate(current);
     }
 
-    case 'custom-days':
-      return format(today, 'yyyy-MM-dd');
-    case 'custom-weeks': {
-      const daysUntil = (freq.dayOfWeek - today.getDay() + 7) % 7;
-      return format(addDays(today, daysUntil), 'yyyy-MM-dd');
+    case 'custom-days': {
+      const interval = Math.max(1, freq.intervalDays);
+      let current = anchor;
+      while (addDays(current, interval) <= reference) current = addDays(current, interval);
+      return isoDate(current);
     }
+
+    case 'custom-weeks': {
+      const intervalDays = Math.max(1, freq.intervalWeeks) * 7;
+      let current = firstWeeklyOnOrAfter(anchor, freq.dayOfWeek);
+      while (addDays(current, intervalDays) <= reference) current = addDays(current, intervalDays);
+      return isoDate(current);
+    }
+
     case 'custom-months': {
-      const thisMonth = new Date(today.getFullYear(), today.getMonth(), freq.dayOfMonth);
-      if (thisMonth >= today) return format(thisMonth, 'yyyy-MM-dd');
-      const nextMonth = addMonths(startOfMonth(today), 1);
-      nextMonth.setDate(freq.dayOfMonth);
-      return format(nextMonth, 'yyyy-MM-dd');
+      let current = firstMonthlyOnOrAfter(anchor, freq.dayOfMonth);
+      while (addMonthlyCycle(current, Math.max(1, freq.intervalMonths), freq.dayOfMonth) <= reference) {
+        current = addMonthlyCycle(current, Math.max(1, freq.intervalMonths), freq.dayOfMonth);
+      }
+      return isoDate(current);
     }
   }
+}
+
+export function getNextRecurrentCycleDueDate(
+  freq: RecurrenceFrequency,
+  dueDate: string,
+): string {
+  const base = parseLocalDate(dueDate);
+  switch (freq.type) {
+    case 'daily':
+      return isoDate(addDays(base, 1));
+    case 'weekly':
+      return isoDate(addDays(base, 7));
+    case 'monthly':
+      return isoDate(addMonthlyCycle(base, 1, freq.dayOfMonth));
+    case 'custom-days':
+      return isoDate(addDays(base, Math.max(1, freq.intervalDays)));
+    case 'custom-weeks':
+      return isoDate(addDays(base, Math.max(1, freq.intervalWeeks) * 7));
+    case 'custom-months':
+      return isoDate(addMonthlyCycle(base, Math.max(1, freq.intervalMonths), freq.dayOfMonth));
+  }
+}
+
+export function getPreviousRecurrentCycleDueDate(
+  freq: RecurrenceFrequency,
+  dueDate: string,
+  anchorDate: string,
+): string | undefined {
+  const anchor = parseLocalDate(anchorDate);
+  const due = parseLocalDate(dueDate);
+  if (isSameLocalDate(anchor, due) || due < anchor) return undefined;
+
+  switch (freq.type) {
+    case 'daily':
+      return isoDate(addDays(due, -1));
+    case 'weekly':
+      return isoDate(addDays(due, -7));
+    case 'monthly': {
+      let current = firstMonthlyOnOrAfter(anchor, freq.dayOfMonth);
+      let previous: Date | undefined;
+      while (current < due) {
+        previous = current;
+        current = addMonthlyCycle(current, 1, freq.dayOfMonth);
+      }
+      return previous ? isoDate(previous) : undefined;
+    }
+    case 'custom-days':
+      return isoDate(addDays(due, -Math.max(1, freq.intervalDays)));
+    case 'custom-weeks':
+      return isoDate(addDays(due, -Math.max(1, freq.intervalWeeks) * 7));
+    case 'custom-months': {
+      let current = firstMonthlyOnOrAfter(anchor, freq.dayOfMonth);
+      let previous: Date | undefined;
+      while (current < due) {
+        previous = current;
+        current = addMonthlyCycle(current, Math.max(1, freq.intervalMonths), freq.dayOfMonth);
+      }
+      return previous ? isoDate(previous) : undefined;
+    }
+  }
+}
+
+export function isRecurrentCycleComplete(
+  freq: RecurrenceFrequency,
+  anchorDate: string,
+  completedThroughDate: string | undefined,
+  referenceDate: string | Date = new Date(),
+): boolean {
+  if (!completedThroughDate) return false;
+  return completedThroughDate >= getCurrentRecurrentCycleDueDate(freq, anchorDate, referenceDate);
+}
+
+/** Compute the next due date shown in UI for a recurrence rule, relative to today and cycle completion. */
+export function computeNextDueDate(
+  freq: RecurrenceFrequency,
+  anchorDate: string,
+  completedThroughDate?: string,
+): string {
+  const currentDueDate = getCurrentRecurrentCycleDueDate(freq, anchorDate);
+  return completedThroughDate && completedThroughDate >= currentDueDate
+    ? getNextRecurrentCycleDueDate(freq, currentDueDate)
+    : currentDueDate;
 }
 
 // ─── Time format helpers ────────────────────────────────────────────────────
@@ -248,6 +385,7 @@ function toMilestone(b: BackendMilestone): Milestone {
     backendId:  b.id,
     goalId:     b.goal_id,
     name:       b.name,
+    type:       (b.type as MilestoneType | undefined) ?? 'major',
     date:       b.date,
     createdAt:  b.created_at,
     updatedAt:  b.updated_at,
@@ -270,16 +408,20 @@ function toGoal(b: BackendGoal): Goal {
 
 function toRecurrentTask(b: BackendRecurrentTask, tagIdMap: Map<number, string>): RecurrentTask {
   const frequency = ruleToFrequency(b.recurrence_rule);
+  const anchorDate = b.anchor_date ?? b.created_at?.slice(0, 10) ?? format(new Date(), 'yyyy-MM-dd');
+  const completedThroughDate = b.completed_through_date ?? undefined;
   return {
-    id:          b.client_id ?? String(b.id),
-    backendId:   b.id,
-    title:       b.title,
-    tagId:       b.tag_id != null ? tagIdMap.get(b.tag_id) : undefined,
+    id:                   b.client_id ?? String(b.id),
+    backendId:            b.id,
+    title:                b.title,
+    tagId:                b.tag_id != null ? tagIdMap.get(b.tag_id) : undefined,
     frequency,
-    nextDueDate: computeNextDueDate(frequency),
-    notes:       b.notes ?? undefined,
-    createdAt:   b.created_at,
-    updatedAt:   b.updated_at,
+    anchorDate,
+    completedThroughDate,
+    nextDueDate:          computeNextDueDate(frequency, anchorDate, completedThroughDate),
+    notes:                b.notes ?? undefined,
+    createdAt:            b.created_at,
+    updatedAt:            b.updated_at,
   };
 }
 
@@ -388,6 +530,48 @@ export async function fetchPlanner(): Promise<PlannerData> {
     goals: backendPlanner.goals.map(toGoal),
     projects: backendPlanner.projects.map((project) => toProject(project, tagIdMap)),
   };
+}
+
+export async function createGoal(input: {
+  name: string;
+  color: string;
+  startDate: string;
+  endDate: string;
+}): Promise<Goal> {
+  const goal = await post<BackendGoal>('/goals', {
+    name: input.name,
+    color: input.color,
+    start_date: input.startDate,
+    end_date: input.endDate,
+  });
+  return toGoal(goal);
+}
+
+export async function patchGoal(backendId: number, fields: Record<string, unknown>): Promise<void> {
+  await patch<unknown>(`/goals/${backendId}`, fields);
+}
+
+export async function createMilestone(input: {
+  goalId: number;
+  name: string;
+  type: MilestoneType;
+  date: string;
+}): Promise<Milestone> {
+  const milestone = await post<BackendMilestone>('/milestones', {
+    goal_id: input.goalId,
+    name: input.name,
+    type: input.type,
+    date: input.date,
+  });
+  return toMilestone(milestone);
+}
+
+export async function patchMilestone(backendId: number, fields: Record<string, unknown>): Promise<void> {
+  await patch<unknown>(`/milestones/${backendId}`, fields);
+}
+
+export async function deleteMilestone(backendId: number): Promise<void> {
+  await del(`/milestones/${backendId}`);
 }
 
 // ─── Task mutations ─────────────────────────────────────────────────────────
@@ -528,14 +712,31 @@ export async function patchAppleBirthdayMessage(
   return patch<AppleBirthdayMessage>(`/apple-birthdays/${birthdayId}/message`, { messageText });
 }
 
+export async function searchWatchTitles(query: string): Promise<WatchSearchResult[]> {
+  return post<WatchSearchResult[]>('/media/watch/search', { query });
+}
+
+export async function getWatchStreamingSources(
+  watchmodeId: number,
+  region = 'US',
+): Promise<string[]> {
+  const response = await get<{ providers: Array<{ name: string }> }>(
+    `/media/watch/${watchmodeId}/sources?region=${encodeURIComponent(region)}`,
+  );
+  return Array.isArray(response.providers) ? response.providers.map((provider) => provider.name) : [];
+}
+
 // ─── Project mutations ──────────────────────────────────────────────────────
 
 export async function createProject(project: Project): Promise<{ id: number }> {
   return post<{ id: number }>('/projects', {
     client_id: project.id,
+    goal_id:   project.goalId ?? null,
     tag_id:    null,
     title:     project.title,
     color:     null,
+    start_date: project.startDate ?? null,
+    end_date:   project.endDate ?? null,
   });
 }
 
@@ -551,13 +752,15 @@ export async function deleteProject(backendId: number): Promise<void> {
 
 export async function createRecurrentTask(rt: RecurrentTask, tags: Tag[]): Promise<{ id: number }> {
   return post<{ id: number }>('/recurrent-tasks', {
-    client_id:       rt.id,
-    tag_id:          resolveTagBackendId(rt.tagId, tags),
-    title:           rt.title,
-    notes:           rt.notes ?? null,
-    recurrence_rule: frequencyToRule(rt.frequency),
-    location:        'backlog',
-    is_active:       true,
+    client_id:              rt.id,
+    tag_id:                 resolveTagBackendId(rt.tagId, tags),
+    title:                  rt.title,
+    notes:                  rt.notes ?? null,
+    recurrence_rule:        frequencyToRule(rt.frequency),
+    anchor_date:            rt.anchorDate,
+    completed_through_date: rt.completedThroughDate ?? null,
+    location:               'backlog',
+    is_active:              true,
   });
 }
 

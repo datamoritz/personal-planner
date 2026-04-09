@@ -37,6 +37,7 @@ const REORDERABLE_CONTAINERS = new Set(['today', 'backlog']);
  */
 function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
   const { active, pointerCoordinates, droppableRects, droppableContainers } = args;
+  const activeContainerId = String(active?.data?.current?.containerId ?? '');
 
   // 1. week-cal columns: always use exact pointer containment (unchanged)
   const translated = active?.rect.current.translated;
@@ -52,12 +53,31 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
         return [{ id: container.id }];
       }
     }
+
+    const preferredIds = ['drop-trash'];
+    if (activeContainerId !== 'today') preferredIds.push('drop-today-column', 'drop-today');
+    if (activeContainerId !== 'backlog') preferredIds.push('drop-backlog');
+    if (activeContainerId !== 'upcoming') preferredIds.push('drop-upcoming');
+
+    for (const preferredId of preferredIds) {
+      const rect = droppableRects.get(preferredId);
+      if (!rect) continue;
+      if (px >= rect.left && px <= rect.right && py >= rect.top && py <= rect.bottom) {
+        return [{ id: preferredId }];
+      }
+    }
   }
 
   // 2. For all other drops: pointer-within first so sidebar→center drops register
   //    on whichever droppable the pointer is physically over, not the nearest center.
   const within = pointerWithin(args);
-  if (within.length > 0) return within;
+  if (within.length > 0) {
+    if (activeContainerId === 'today' || activeContainerId === 'backlog' || activeContainerId === 'upcoming') {
+      const itemHits = within.filter((hit) => !String(hit.id).startsWith('drop-'));
+      if (itemHits.length > 0) return itemHits;
+    }
+    return within;
+  }
 
   return closestCenter(args);
 }
@@ -189,7 +209,6 @@ export function PlannerApp() {
       deleteTask(activeId);
       return;
     }
-
     const tomorrow = format(addDays(new Date(currentDate + 'T00:00:00'), 1), 'yyyy-MM-dd');
 
     if (destContainer === 'today') {

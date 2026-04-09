@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { FolderClosed, RefreshCw } from 'lucide-react';
 import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 import type { Task } from '@/types';
@@ -208,8 +208,15 @@ export function TimedTaskBlock({
         ].join(' ')}>
           {task.title}
         </span>
-        {task.recurrentTaskId && (
-          <RefreshCw size={9} className="flex-shrink-0 text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />
+        {(task.recurrentTaskId || (task.projectId && task.location !== 'project')) && (
+          <span className="flex flex-shrink-0 items-center gap-1">
+            {task.recurrentTaskId && (
+              <RefreshCw size={9} className="text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />
+            )}
+            {task.projectId && task.location !== 'project' && (
+              <FolderClosed size={9} className="text-[var(--color-text-muted)] opacity-80" strokeWidth={2.2} />
+            )}
+          </span>
         )}
       </div>
 

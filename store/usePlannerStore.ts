@@ -13,6 +13,9 @@ import type {
   RecurrenceFrequency,
   Project,
   Tag,
+  MediaItem,
+  MediaKind,
+  MediaStatus,
   PlannerState,
   PlannerViewMode,
   MonthViewMode,
@@ -30,6 +33,41 @@ function uid(): string {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function inferMediaKindFromTitle(title: string): MediaKind | null {
+  const normalized = title.trim().toLowerCase();
+  if (/^read(?:\s|:|-)/i.test(normalized) || normalized === 'read') return 'read';
+  if (/^watch(?:\s|:|-)/i.test(normalized) || normalized === 'watch') return 'watch';
+  return null;
+}
+
+function normalizeMediaTitle(title: string, kind?: MediaKind): string {
+  const trimmed = title.trim();
+  if (!kind) return trimmed;
+  const pattern = kind === 'read'
+    ? /^read(?:\s*[:\-]\s*|\s+)/i
+    : /^watch(?:\s*[:\-]\s*|\s+)/i;
+  return trimmed.replace(pattern, '').trim() || trimmed;
+}
+
+function sortMediaItems(items: MediaItem[]): MediaItem[] {
+  const statusRank: Record<MediaStatus, number> = {
+    in_progress: 0,
+    queued: 1,
+    finished: 2,
+  };
+  return [...items].sort((a, b) => {
+    const statusDiff = statusRank[a.status] - statusRank[b.status];
+    if (statusDiff !== 0) return statusDiff;
+    const orderDiff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    if (orderDiff !== 0) return orderDiff;
+    return a.dateAdded.localeCompare(b.dateAdded);
+  });
+}
+
+function nextMediaSortOrder(items: MediaItem[], kind: MediaKind): number {
+  return items.filter((item) => item.kind === kind).length;
 }
 
 function taskBucketKey(task: Pick<Task, 'location' | 'date' | 'projectId'>): string {
@@ -66,6 +104,23 @@ function nextTaskSortOrder(tasks: Task[], bucket: Pick<Task, 'location' | 'date'
 
 function parseIsoDate(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00`);
+}
+
+function getRecurrentCycleDueDate(task: RecurrentTask, referenceDate: string): string {
+  return api.getCurrentRecurrentCycleDueDate(task.frequency, task.anchorDate, referenceDate);
+}
+
+function isRecurrentTaskCompleted(task: RecurrentTask, referenceDate: string = today): boolean {
+  return api.isRecurrentCycleComplete(
+    task.frequency,
+    task.anchorDate,
+    task.completedThroughDate,
+    referenceDate,
+  );
+}
+
+function deriveNextDueDate(task: RecurrentTask): string {
+  return api.computeNextDueDate(task.frequency, task.anchorDate, task.completedThroughDate);
 }
 
 function enumerateRecurringDates(
@@ -287,6 +342,7 @@ interface PlannerStore extends PlannerState {
   yearPreviewEnabled: boolean;
   uncertaintyNotes: string;
   expandedProjectIds: string[];
+  mediaItems: MediaItem[];
   setUncertaintyNotes: (text: string) => void;
   toggleProjectExpanded: (projectId: string) => void;
   selectedProjectIdForNotes: string | null;
@@ -308,6 +364,15 @@ interface PlannerStore extends PlannerState {
   addTask: (data: { title: string; location: Task['location']; date?: string; projectId?: string }) => string;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime'>>) => void;
   deleteTask: (id: string) => void;
+  // Read / Watch
+  addMediaItem: (data: { title: string; kind: MediaKind; recommendedBy?: string; status?: MediaStatus }) => string;
+  updateMediaItem: (
+    id: string,
+    updates: Partial<Pick<MediaItem, 'title' | 'recommendedBy' | 'status' | 'watchmodeId' | 'streamingOn' | 'streamingCheckedAt'>>,
+  ) => void;
+  deleteMediaItem: (id: string) => void;
+  reorderMediaItems: (kind: MediaKind, activeId: string, overId: string) => void;
+  convertTaskToMedia: (taskId: string, kind: MediaKind) => boolean;
   // Recurrent tasks
   addRecurrentTask: (data: { title: string; frequency: RecurrenceFrequency }) => void;
   updateRecurrentTask: (id: string, updates: Partial<Pick<RecurrentTask, 'title' | 'notes' | 'frequency'>>) => void;
@@ -365,6 +430,7 @@ export const usePlannerStore = create<PlannerStore>()(
       yearPreviewEnabled:         true,
       uncertaintyNotes:           '',
       expandedProjectIds:         [],
+      mediaItems:                 [],
       selectedProjectIdForNotes:  null,
       activeTagFilter:            null,
       // Entities start empty — populated by usePlannerData on boot
@@ -424,7 +490,7 @@ export const usePlannerStore = create<PlannerStore>()(
         // Derive subtaskIds from tasks (backend stores FK on task, not on project)
         const subtaskMap = new Map<string, string[]>();
         for (const task of data.tasks) {
-          if (task.location === 'project' && task.projectId) {
+          if (task.projectId) {
             const existing = subtaskMap.get(task.projectId) ?? [];
             existing.push(task.id);
             subtaskMap.set(task.projectId, existing);
@@ -449,28 +515,75 @@ export const usePlannerStore = create<PlannerStore>()(
         if (!prevTask) return;
         const newStatus: Task['status'] = prevTask.status === 'done' ? 'pending' : 'done';
         const ts = now();
+        const prevTasks = get().tasks;
+        const prevRecurrentTasks = get().recurrentTasks;
 
-        set((s) => {
-          const tasks = s.tasks.map((t) =>
-            t.id === id ? { ...t, status: newStatus, updatedAt: ts } : t
+        if (prevTask.recurrentTaskId) {
+          const recurrentTask = prevRecurrentTasks.find((task) => task.id === prevTask.recurrentTaskId);
+          if (!recurrentTask) return;
+
+          const cycleReferenceDate = prevTask.date ?? today;
+          const cycleDueDate = getRecurrentCycleDueDate(recurrentTask, cycleReferenceDate);
+          const linkedTasks = prevTasks.filter(
+            (task) =>
+              task.recurrentTaskId === recurrentTask.id &&
+              getRecurrentCycleDueDate(recurrentTask, task.date ?? cycleReferenceDate) === cycleDueDate,
           );
-          if (newStatus === 'done' && prevTask.recurrentTaskId) {
-            const recurrentTasks = s.recurrentTasks.map((r) => {
-              if (r.id !== prevTask.recurrentTaskId) return r;
-              return { ...r, nextDueDate: computeNextDueDate(r.frequency, r.nextDueDate), updatedAt: ts };
-            });
-            return { tasks, recurrentTasks };
-          }
-          return { tasks };
-        });
+
+          const nextCompletedThroughDate = newStatus === 'done'
+            ? cycleDueDate
+            : recurrentTask.completedThroughDate === cycleDueDate
+              ? api.getPreviousRecurrentCycleDueDate(
+                  recurrentTask.frequency,
+                  cycleDueDate,
+                  recurrentTask.anchorDate,
+                )
+              : recurrentTask.completedThroughDate;
+
+          const nextRecurrentTask: RecurrentTask = {
+            ...recurrentTask,
+            completedThroughDate: nextCompletedThroughDate,
+            updatedAt: ts,
+          };
+          nextRecurrentTask.nextDueDate = deriveNextDueDate(nextRecurrentTask);
+
+          set((s) => ({
+            tasks: s.tasks.map((task) =>
+              linkedTasks.some((linkedTask) => linkedTask.id === task.id)
+                ? { ...task, status: newStatus, updatedAt: ts }
+                : task
+            ),
+            recurrentTasks: s.recurrentTasks.map((task) =>
+              task.id === recurrentTask.id ? nextRecurrentTask : task
+            ),
+          }));
+
+          const patchTasks = linkedTasks
+            .filter((task) => task.backendId)
+            .map((task) => api.patchTask(task.backendId!, { status: newStatus }));
+          const patchRecurrent = recurrentTask.backendId
+            ? api.patchRecurrentTask(recurrentTask.backendId, {
+                completed_through_date: nextCompletedThroughDate ?? null,
+              })
+            : Promise.resolve();
+
+          Promise.all([...patchTasks, patchRecurrent]).catch((err) => {
+            console.error('[toggleTask]', err);
+            set({ tasks: prevTasks, recurrentTasks: prevRecurrentTasks });
+          });
+          return;
+        }
+
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === id ? { ...t, status: newStatus, updatedAt: ts } : t
+          ),
+        }));
 
         if (prevTask.backendId) {
           api.patchTask(prevTask.backendId, { status: newStatus }).catch((err) => {
             console.error('[toggleTask]', err);
-            // Rollback
-            set((s) => ({
-              tasks: s.tasks.map((t) => (t.id === id ? prevTask : t)),
-            }));
+            set({ tasks: prevTasks });
           });
         }
       },
@@ -499,7 +612,7 @@ export const usePlannerStore = create<PlannerStore>()(
 
         set((s) => {
           const tasks = [...s.tasks, newTask];
-          if (data.location === 'project' && data.projectId) {
+          if (data.projectId) {
             const projects = s.projects.map((p) =>
               p.id === data.projectId
                 ? { ...p, subtaskIds: [...p.subtaskIds, newTask.id], updatedAt: ts }
@@ -523,8 +636,8 @@ export const usePlannerStore = create<PlannerStore>()(
               tasks:    s.tasks.filter((t) => t.id !== newTask.id),
               projects: s.projects.map((p) =>
                 p.id === data.projectId
-                  ? { ...p, subtaskIds: p.subtaskIds.filter((sid) => sid !== newTask.id) }
-                  : p
+                ? { ...p, subtaskIds: p.subtaskIds.filter((sid) => sid !== newTask.id) }
+                : p
               ),
             }));
           });
@@ -546,7 +659,7 @@ export const usePlannerStore = create<PlannerStore>()(
             (task.location === 'today' || task.location === 'upcoming');
           const merged = { ...task, ...updates, updatedAt: now() };
           if (clearingDate) {
-            merged.location  = 'backlog';
+            merged.location  = task.projectId ? 'project' : 'backlog';
             merged.date      = undefined;
             merged.startTime = undefined;
             merged.endTime   = undefined;
@@ -595,18 +708,88 @@ export const usePlannerStore = create<PlannerStore>()(
         }
       },
 
+      addMediaItem: (data) => {
+        const item: MediaItem = {
+          id: uid(),
+          title: data.title.trim(),
+          kind: data.kind,
+          status: data.status ?? 'queued',
+          recommendedBy: data.recommendedBy?.trim() || undefined,
+          dateAdded: now(),
+          finishedAt: data.status === 'finished' ? now() : undefined,
+          sortOrder: nextMediaSortOrder(get().mediaItems, data.kind),
+        };
+        set((s) => ({ mediaItems: [...s.mediaItems, item] }));
+        return item.id;
+      },
+
+      updateMediaItem: (id, updates) =>
+        set((s) => ({
+          mediaItems: s.mediaItems.map((item) => {
+            if (item.id !== id) return item;
+            const nextStatus = updates.status ?? item.status;
+            const nextRecommendedBy = updates.recommendedBy === undefined
+              ? item.recommendedBy
+              : (updates.recommendedBy.trim().length ? updates.recommendedBy : undefined);
+            return {
+              ...item,
+              ...updates,
+              recommendedBy: nextRecommendedBy,
+              finishedAt:
+                nextStatus === 'finished'
+                  ? item.finishedAt ?? now()
+                  : undefined,
+            };
+          }),
+        })),
+
+      deleteMediaItem: (id) =>
+        set((s) => ({ mediaItems: s.mediaItems.filter((item) => item.id !== id) })),
+
+      reorderMediaItems: (kind, activeId, overId) =>
+        set((s) => {
+          const items = sortMediaItems(s.mediaItems.filter((item) => item.kind === kind));
+          const from = items.findIndex((item) => item.id === activeId);
+          const to = items.findIndex((item) => item.id === overId);
+          if (from === -1 || to === -1) return {};
+          const nextItems = [...items];
+          nextItems.splice(to, 0, nextItems.splice(from, 1)[0]);
+          const reordered = nextItems.map((item, index) => ({ ...item, sortOrder: index }));
+          return {
+            mediaItems: s.mediaItems.map((item) =>
+              item.kind === kind
+                ? reordered.find((next) => next.id === item.id) ?? item
+                : item
+            ),
+          };
+        }),
+
+      convertTaskToMedia: (taskId, kind) => {
+        const task = get().tasks.find((item) => item.id === taskId);
+        if (!task) return false;
+        const normalizedTitle = normalizeMediaTitle(task.title, inferMediaKindFromTitle(task.title) ?? kind);
+        get().addMediaItem({
+          title: normalizedTitle,
+          kind,
+        });
+        get().deleteTask(taskId);
+        return true;
+      },
+
       // ── Recurrent tasks ────────────────────────────────────────────────
 
       addRecurrentTask: (data) => {
         const ts = now();
         const rt: RecurrentTask = {
-          id:          uid(),
-          title:       data.title,
-          tagId:       undefined,
-          frequency:   data.frequency,
-          nextDueDate: today,
-          createdAt:   ts,
-          updatedAt:   ts,
+          id:                   uid(),
+          title:                data.title,
+          tagId:                undefined,
+          frequency:            data.frequency,
+          anchorDate:           today,
+          completedThroughDate: undefined,
+          nextDueDate:          api.computeNextDueDate(data.frequency, today),
+          createdAt:            ts,
+          updatedAt:            ts,
         };
         set((s) => ({ recurrentTasks: [...s.recurrentTasks, rt] }));
 
@@ -629,9 +812,14 @@ export const usePlannerStore = create<PlannerStore>()(
       updateRecurrentTask: (id, updates) => {
         const prevRt = get().recurrentTasks.find((r) => r.id === id);
         set((s) => ({
-          recurrentTasks: s.recurrentTasks.map((r) =>
-            r.id === id ? { ...r, ...updates, updatedAt: now() } : r
-          ),
+          recurrentTasks: s.recurrentTasks.map((r) => {
+            if (r.id !== id) return r;
+            const updatedTask = { ...r, ...updates, updatedAt: now() };
+            return {
+              ...updatedTask,
+              nextDueDate: deriveNextDueDate(updatedTask),
+            };
+          }),
         }));
         const updated = get().recurrentTasks.find((r) => r.id === id);
         if (updated?.backendId) {
@@ -676,13 +864,63 @@ export const usePlannerStore = create<PlannerStore>()(
         }
       },
 
-      advanceRecurrentTask: (id) =>
+      advanceRecurrentTask: (id) => {
+        const prevRecurrentTasks = get().recurrentTasks;
+        const prevTasks = get().tasks;
+        const recurrentTask = prevRecurrentTasks.find((task) => task.id === id);
+        if (!recurrentTask) return;
+
+        const cycleDueDate = getRecurrentCycleDueDate(recurrentTask, today);
+        const currentlyCompleted = isRecurrentTaskCompleted(recurrentTask, today);
+        const nextStatus: Task['status'] = currentlyCompleted ? 'pending' : 'done';
+        const nextCompletedThroughDate = currentlyCompleted
+          ? api.getPreviousRecurrentCycleDueDate(
+              recurrentTask.frequency,
+              cycleDueDate,
+              recurrentTask.anchorDate,
+            )
+          : cycleDueDate;
+        const ts = now();
+
+        const linkedTasks = prevTasks.filter(
+          (task) =>
+            task.recurrentTaskId === recurrentTask.id &&
+            task.date &&
+            getRecurrentCycleDueDate(recurrentTask, task.date) === cycleDueDate,
+        );
+
+        const nextRecurrentTask: RecurrentTask = {
+          ...recurrentTask,
+          completedThroughDate: nextCompletedThroughDate,
+          updatedAt: ts,
+        };
+        nextRecurrentTask.nextDueDate = deriveNextDueDate(nextRecurrentTask);
+
         set((s) => ({
-          recurrentTasks: s.recurrentTasks.map((r) => {
-            if (r.id !== id) return r;
-            return { ...r, nextDueDate: computeNextDueDate(r.frequency, r.nextDueDate), updatedAt: now() };
-          }),
-        })),
+          recurrentTasks: s.recurrentTasks.map((task) =>
+            task.id === recurrentTask.id ? nextRecurrentTask : task
+          ),
+          tasks: s.tasks.map((task) =>
+            linkedTasks.some((linkedTask) => linkedTask.id === task.id)
+              ? { ...task, status: nextStatus, updatedAt: ts }
+              : task
+          ),
+        }));
+
+        const patchTasks = linkedTasks
+          .filter((task) => task.backendId)
+          .map((task) => api.patchTask(task.backendId!, { status: nextStatus }));
+        const patchRecurrent = recurrentTask.backendId
+          ? api.patchRecurrentTask(recurrentTask.backendId, {
+              completed_through_date: nextCompletedThroughDate ?? null,
+            })
+          : Promise.resolve();
+
+        Promise.all([...patchTasks, patchRecurrent]).catch((err) => {
+          console.error('[advanceRecurrentTask]', err);
+          set({ recurrentTasks: prevRecurrentTasks, tasks: prevTasks });
+        });
+      },
 
       spawnRecurrentTasksForNextMonths: (id) => {
         const rt = get().recurrentTasks.find((r) => r.id === id);
@@ -704,7 +942,9 @@ export const usePlannerStore = create<PlannerStore>()(
           id: uid(),
           sortOrder: nextTaskSortOrder(get().tasks, { location: 'today', date }),
           title: rt.title,
-          status: 'pending',
+          status: api.isRecurrentCycleComplete(rt.frequency, rt.anchorDate, rt.completedThroughDate, date)
+            ? 'done'
+            : 'pending',
           location: 'today',
           date,
           recurrentTaskId: id,
@@ -1029,6 +1269,20 @@ export const usePlannerStore = create<PlannerStore>()(
         const prevTasks = get().tasks;
         const prevProjects = get().projects;
         const ts = now();
+        const nextProjectId =
+          dest.location === 'project'
+            ? dest.projectId
+            : prevTask.projectId;
+        const preservedRecurringDate =
+          prevTask.recurrentTaskId && dest.location === 'backlog'
+            ? prevTask.date ?? getRecurrentCycleDueDate(
+                get().recurrentTasks.find((task) => task.id === prevTask.recurrentTaskId)!,
+                today,
+              )
+            : undefined;
+        const nextDate = dest.location === 'project' ? undefined : (dest.date ?? preservedRecurringDate);
+        const nextStartTime = dest.location === 'myday' ? dest.startTime : undefined;
+        const nextEndTime = dest.location === 'myday' ? dest.endTime : undefined;
 
         const destTagId =
           dest.location === 'project' && dest.projectId
@@ -1041,10 +1295,10 @@ export const usePlannerStore = create<PlannerStore>()(
               ? {
                   ...t,
                   location:  dest.location,
-                  date:      dest.date,
-                  projectId: dest.projectId,
-                  startTime: dest.startTime,
-                  endTime:   dest.endTime,
+                  date:      nextDate,
+                  projectId: nextProjectId,
+                  startTime: nextStartTime,
+                  endTime:   nextEndTime,
                   sortOrder: 0,
                   tagId:     dest.location === 'project' ? destTagId : t.tagId,
                   updatedAt: ts,
@@ -1054,8 +1308,8 @@ export const usePlannerStore = create<PlannerStore>()(
           const sourceBucket = taskBucketKey(prevTask);
           const destBucket = taskBucketKey({
             location: dest.location,
-            date: dest.date,
-            projectId: dest.projectId,
+            date: nextDate,
+            projectId: nextProjectId,
           });
           const rebalanceBucket = (bucketKey: string) => {
             const bucketTasks = assignSequentialSortOrders(updatedTasks.filter((task) => taskBucketKey(task) === bucketKey));
@@ -1067,16 +1321,16 @@ export const usePlannerStore = create<PlannerStore>()(
           rebalanceBucket(sourceBucket);
           if (destBucket !== sourceBucket) rebalanceBucket(destBucket);
           let projects = s.projects;
-          if (prevTask.location === 'project' && prevTask.projectId) {
+          if (prevTask.projectId && prevTask.projectId !== nextProjectId) {
             projects = projects.map((p) =>
               p.id === prevTask.projectId
                 ? { ...p, subtaskIds: p.subtaskIds.filter((id) => id !== taskId), updatedAt: ts }
                 : p
             );
           }
-          if (dest.location === 'project' && dest.projectId) {
+          if (nextProjectId && prevTask.projectId !== nextProjectId) {
             projects = projects.map((p) =>
-              p.id === dest.projectId && !p.subtaskIds.includes(taskId)
+              p.id === nextProjectId && !p.subtaskIds.includes(taskId)
                 ? { ...p, subtaskIds: [...p.subtaskIds, taskId], updatedAt: ts }
                 : p
             );
@@ -1090,8 +1344,8 @@ export const usePlannerStore = create<PlannerStore>()(
           const sourceBucket = taskBucketKey(prevTask);
           const destBucket = taskBucketKey({
             location: dest.location,
-            date: dest.date,
-            projectId: dest.projectId,
+            date: nextDate,
+            projectId: nextProjectId,
           });
           const affectedTasks = updatedTasks.filter((task) => {
             const key = taskBucketKey(task);
@@ -1126,17 +1380,20 @@ export const usePlannerStore = create<PlannerStore>()(
         const rt = get().recurrentTasks.find((r) => r.id === recId);
         if (!rt) return;
         const ts = now();
+        const cycleDate = dest.date ?? getRecurrentCycleDueDate(rt, today);
         const newTask: Task = {
           id:              uid(),
           sortOrder:       nextTaskSortOrder(get().tasks, {
             location: dest.location,
-            date: dest.date,
+            date: cycleDate,
             projectId: undefined,
           }),
           title:           rt.title,
-          status:          'pending',
+          status:          api.isRecurrentCycleComplete(rt.frequency, rt.anchorDate, rt.completedThroughDate, cycleDate)
+            ? 'done'
+            : 'pending',
           location:        dest.location,
-          date:            dest.date,
+          date:            cycleDate,
           recurrentTaskId: recId,
           tagId:           rt.tagId,
           notes:           rt.notes,
@@ -1254,7 +1511,7 @@ export const usePlannerStore = create<PlannerStore>()(
     }),
     {
       name: 'planner-ui',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
@@ -1273,6 +1530,10 @@ export const usePlannerStore = create<PlannerStore>()(
             typeof state.yearPreviewEnabled === 'boolean'
               ? state.yearPreviewEnabled
               : true,
+          mediaItems:
+            Array.isArray(state.mediaItems)
+              ? state.mediaItems
+              : [],
         };
       },
       // Only persist UI preferences — entities are owned by the backend now
@@ -1284,24 +1545,11 @@ export const usePlannerStore = create<PlannerStore>()(
         yearPreviewEnabled: s.yearPreviewEnabled,
         uncertaintyNotes: s.uncertaintyNotes,
         expandedProjectIds: s.expandedProjectIds,
+        mediaItems: s.mediaItems,
       }),
     }
   )
 );
-
-// ─── Recurrence helper ─────────────────────────────────────────────────────
-
-function computeNextDueDate(freq: RecurrenceFrequency, fromDate: string): string {
-  const base = new Date(fromDate + 'T00:00:00');
-  switch (freq.type) {
-    case 'daily':   return format(addDays(base, 1),                'yyyy-MM-dd');
-    case 'weekly':  return format(addDays(base, 7),                'yyyy-MM-dd');
-    case 'monthly': return format(addDays(base, 30),               'yyyy-MM-dd');
-    case 'custom-days':   return format(addDays(base, freq.intervalDays), 'yyyy-MM-dd');
-    case 'custom-weeks':  return format(addDays(base, freq.intervalWeeks * 7), 'yyyy-MM-dd');
-    case 'custom-months': return format(addMonths(base, freq.intervalMonths), 'yyyy-MM-dd');
-  }
-}
 
 // ─── Selectors ─────────────────────────────────────────────────────────────
 
@@ -1348,7 +1596,7 @@ export function selectUpcomingTasks(tasks: Task[], currentDate: string) {
 }
 
 export function selectProjectTasks(tasks: Task[], projectId: string) {
-  return sortBySortOrder(tasks.filter((t) => t.location === 'project' && t.projectId === projectId));
+  return sortBySortOrder(tasks.filter((t) => t.projectId === projectId));
 }
 
 export function selectActiveProjects(projects: Project[]) {
@@ -1360,7 +1608,14 @@ export function selectFinishedProjects(projects: Project[]) {
 }
 
 export function selectRecurrentTasksSorted(recurrentTasks: RecurrentTask[]) {
-  return [...recurrentTasks].sort((a, b) => (a.nextDueDate > b.nextDueDate ? 1 : -1));
+  return [...recurrentTasks].sort((a, b) => {
+    const aCompleted = isRecurrentTaskCompleted(a);
+    const bCompleted = isRecurrentTaskCompleted(b);
+    if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
+    const dueDiff = a.nextDueDate.localeCompare(b.nextDueDate);
+    if (dueDiff !== 0) return dueDiff;
+    return a.title.localeCompare(b.title);
+  });
 }
 
 export function selectGoogleCalendarEntriesForDate(entries: CalendarEntry[], date: string) {

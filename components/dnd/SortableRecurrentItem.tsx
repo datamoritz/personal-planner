@@ -7,16 +7,20 @@ import type { RecurrentTask } from '@/types';
 
 interface SortableRecurrentItemProps {
   task: RecurrentTask;
-  hasActiveInstance?: boolean;
+  isCompleted?: boolean;
+  accentColor?: string;
+  accentColorDark?: string;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
-  onAdvance?: (id: string) => void;
+  onToggle?: (id: string) => void;
 }
 
 export function SortableRecurrentItem({
   task,
-  hasActiveInstance,
+  isCompleted,
+  accentColor,
+  accentColorDark,
   onDoubleClick,
-  onAdvance,
+  onToggle,
 }: SortableRecurrentItemProps) {
   const {
     attributes,
@@ -43,9 +47,11 @@ export function SortableRecurrentItem({
     >
       <RecurrentTaskPill
         task={task}
-        hasActiveInstance={hasActiveInstance}
+        isCompleted={isCompleted}
+        accentColor={accentColor}
+        accentColorDark={accentColorDark}
         onDoubleClick={onDoubleClick}
-        onAdvance={onAdvance}
+        onToggle={onToggle}
       />
     </div>
   );

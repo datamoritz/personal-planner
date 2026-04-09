@@ -25,24 +25,33 @@ function ordinal(n: number) {
 
 interface RecurrentTaskPillProps {
   task: RecurrentTask;
-  hasActiveInstance?: boolean; // true if a spawned pending instance exists for today or future
+  isCompleted?: boolean;
+  accentColor?: string;
+  accentColorDark?: string;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
-  onAdvance?: (id: string) => void;
+  onToggle?: (id: string) => void;
 }
 
 export function RecurrentTaskPill({
   task,
-  hasActiveInstance = false,
+  isCompleted = false,
+  accentColor,
+  accentColorDark,
   onDoubleClick,
-  onAdvance,
+  onToggle,
 }: RecurrentTaskPillProps) {
   const today = useSyncExternalStore(
     () => () => {},
     () => format(new Date(), 'yyyy-MM-dd'),
     () => '',
   );
-  // Highlight only when due AND no pending instance has been placed yet
-  const isDue = today !== '' && task.nextDueDate <= today && !hasActiveInstance;
+  const isDue = today !== '' && task.nextDueDate <= today && !isCompleted;
+  const styles = accentColor
+    ? {
+        backgroundColor: isCompleted ? `${accentColor}55` : accentColor,
+        borderColor: accentColorDark ?? accentColor,
+      }
+    : undefined;
 
   return (
     <div
@@ -50,32 +59,33 @@ export function RecurrentTaskPill({
       className={[
         'item-enter group flex items-center gap-2 px-2.5 py-2 rounded-[1rem] cursor-pointer select-none',
         'border transition-all duration-150',
-        isDue
+        !accentColor && (isDue
           ? 'bg-[var(--color-accent-subtle)] border-[var(--color-accent)]'
-          : 'border-[var(--color-border)] bg-[var(--color-surface-raised)]',
+          : isCompleted
+            ? 'border-[var(--color-border)] bg-[var(--color-surface-raised)] opacity-75'
+            : 'border-[var(--color-border)] bg-[var(--color-surface-raised)]'),
       ].join(' ')}
+      style={styles}
     >
       <button
         type="button"
-        disabled={hasActiveInstance}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
-          if (hasActiveInstance) return;
-          onAdvance?.(task.id);
+          onToggle?.(task.id);
         }}
         className={[
           'flex-shrink-0 w-[15px] h-[15px] rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer',
-          hasActiveInstance
-            ? 'bg-[var(--color-accent)]/12 border-[var(--color-accent)] opacity-60 cursor-default'
+          isCompleted
+            ? 'bg-[var(--color-accent)]/12 border-[var(--color-accent)] text-[var(--color-accent)]'
             : isDue
             ? 'border-[var(--color-accent)]'
             : 'border-[var(--color-text-muted)]',
         ].join(' ')}
-        aria-label={hasActiveInstance ? 'Recurrent task already has an active instance' : 'Mark recurrent task complete for this cycle'}
-        title={hasActiveInstance ? 'Recurrent task already has an active instance' : 'Mark recurrent task complete for this cycle'}
+        aria-label={isCompleted ? 'Mark recurrent task pending for this cycle' : 'Mark recurrent task complete for this cycle'}
+        title={isCompleted ? 'Mark recurrent task pending for this cycle' : 'Mark recurrent task complete for this cycle'}
       >
-        {hasActiveInstance && (
+        {isCompleted && (
           <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
             <path d="M1 3L3 5L7 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -89,7 +99,7 @@ export function RecurrentTaskPill({
       <div className="flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center">
         <RefreshCw
           size={12}
-          className={isDue ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
+          className={isDue ? 'text-[var(--color-accent)]' : isCompleted ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-text-muted)]'}
           strokeWidth={2.5}
         />
       </div>

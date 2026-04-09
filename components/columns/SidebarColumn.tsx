@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronsRight, Trash2 } from 'lucide-react';
+import { ChevronsRight, FolderClosed, Trash2 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import * as api from '@/lib/api';
 import {
   usePlannerStore,
   selectOverdueTasks,
@@ -61,7 +62,7 @@ function TrashDropTarget() {
 }
 
 export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandled }: SidebarColumnProps) {
-  const { currentDate, tasks, recurrentTasks, addTask, toggleTask, addRecurrentTask, advanceRecurrentTask, activeTagFilter } = usePlannerStore();
+  const { currentDate, tasks, recurrentTasks, tags, addTask, toggleTask, addRecurrentTask, advanceRecurrentTask, activeTagFilter } = usePlannerStore();
 
   const overdue  = activeTagFilter
     ? selectOverdueTasks(tasks).filter((t) => t.tagId === activeTagFilter)
@@ -80,6 +81,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
   const [addingRecurrent, setAddingRecurrent] = useState(false);
   const [popover, setPopover]                 = useState<PopoverState>(null);
   const backlogInputOpen = addingBacklog || !!triggerBacklogAdd;
+  const linkedProjectMarker = <FolderClosed size={11} className="text-[var(--color-text-muted)] opacity-75" strokeWidth={2.2} />;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -119,6 +121,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                         task={task}
                         containerId="overdue"
                         isOverdue
+                        suffix={task.projectId && task.location !== 'project' ? linkedProjectMarker : undefined}
                         onToggle={toggleTask}
                         onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
                       />
@@ -157,6 +160,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                     key={task.id}
                     task={task}
                     containerId="backlog"
+                    suffix={task.projectId && task.location !== 'project' ? linkedProjectMarker : undefined}
                     onToggle={toggleTask}
                     onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
                   />
@@ -203,6 +207,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                     task={task}
                     containerId="upcoming"
                     topLabel={task.date ? formatUpcomingDate(task.date) : undefined}
+                    suffix={task.projectId && task.location !== 'project' ? linkedProjectMarker : undefined}
                     onToggle={toggleTask}
                     onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
                   />
@@ -234,20 +239,20 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                   <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-4">No recurrent tasks</p>
                 )}
                 {recurrent.map((rt) => {
-                  const today = new Date().toISOString().slice(0, 10);
-                  const hasActive = tasks.some(
-                    (t) =>
-                      t.recurrentTaskId === rt.id &&
-                      t.status === 'pending' &&
-                      (t.location === 'today' || t.location === 'myday' || t.location === 'upcoming') &&
-                      (!t.date || t.date >= today)
+                  const tag = rt.tagId ? tags.find((candidate) => candidate.id === rt.tagId) : undefined;
+                  const isCompleted = api.isRecurrentCycleComplete(
+                    rt.frequency,
+                    rt.anchorDate,
+                    rt.completedThroughDate,
                   );
                   return (
                     <SortableRecurrentItem
                       key={rt.id}
                       task={rt}
-                      hasActiveInstance={hasActive}
-                      onAdvance={advanceRecurrentTask}
+                      isCompleted={isCompleted}
+                      accentColor={tag?.color}
+                      accentColorDark={tag?.colorDark}
+                      onToggle={advanceRecurrentTask}
                       onDoubleClick={(id, anchor) => setPopover({ type: 'recurrent', id, anchor })}
                     />
                   );

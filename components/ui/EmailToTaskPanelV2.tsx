@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
-import { Archive, ChevronRight, Loader2, Mail, RefreshCw, Sparkles, Tag as TagIcon, Undo2, X } from 'lucide-react';
+import { Archive, CheckCircle2, ChevronRight, Loader2, Mail, RefreshCw, Sparkles, Tag as TagIcon, Undo2, X } from 'lucide-react';
 import * as api from '@/lib/api';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type {
@@ -216,6 +216,7 @@ export function EmailToTaskPanelV2({
   const [isArchiving, setIsArchiving] = useState(false);
   const [isUndoingArchive, setIsUndoingArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [archivedEmail, setArchivedEmail] = useState<ArchivedEmailState | null>(null);
 
@@ -259,6 +260,7 @@ export function EmailToTaskPanelV2({
   const loadEmails = useCallback(async () => {
     setIsLoadingEmails(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       const recent = await api.getRecentEmails();
       setEmails(recent);
@@ -283,6 +285,7 @@ export function EmailToTaskPanelV2({
     let cancelled = false;
     setIsLoadingEmail(true);
     setError(null);
+    setSuccessMessage(null);
     api.getEmailContent(selectedEmailId)
       .then((email) => {
         if (cancelled) return;
@@ -359,6 +362,7 @@ export function EmailToTaskPanelV2({
     if (!selectedEmailId) return;
     setIsSuggesting(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       if (draftMode === 'task') {
         const suggestion = await api.suggestTaskFromEmail(selectedEmailId, {
@@ -409,6 +413,7 @@ export function EmailToTaskPanelV2({
       allDay: false,
     }));
     setError(null);
+    setSuccessMessage(null);
   }, [selectedEmail]);
 
   const handleSave = useCallback(async () => {
@@ -420,6 +425,7 @@ export function EmailToTaskPanelV2({
 
     setIsSaving(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       if (draftMode === 'event') {
         const eventDate = draft.taskDate || currentDate;
@@ -432,6 +438,7 @@ export function EmailToTaskPanelV2({
             notes,
           });
           applyOptimisticGoogleAllDayEvent(created);
+          setSuccessMessage('Event created');
           return;
         }
 
@@ -444,6 +451,7 @@ export function EmailToTaskPanelV2({
           tz: timezone,
         });
         applyOptimisticGoogleEntry(created);
+        setSuccessMessage('Event created');
         return;
       }
 
@@ -493,6 +501,7 @@ export function EmailToTaskPanelV2({
       }
 
       if (tag) setTaskTag(taskId, tag.id);
+      setSuccessMessage('Task created');
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to save ${draftMode}`);
     } finally {
@@ -516,6 +525,7 @@ export function EmailToTaskPanelV2({
     if (!selectedListItem || isArchiving) return;
     setIsArchiving(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       await api.archiveEmail(selectedListItem.id);
 
@@ -546,6 +556,7 @@ export function EmailToTaskPanelV2({
     if (!archivedEmail || isUndoingArchive) return;
     setIsUndoingArchive(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       await api.unarchiveEmail(archivedEmail.email.id);
       setEmails((prev) => {
@@ -967,7 +978,16 @@ export function EmailToTaskPanelV2({
                   )}
                 </div>
                 <div className="mt-auto border-t border-[var(--color-popover-border)]/45 bg-[var(--color-surface-secondary)]/22 px-4 pt-3.5 pb-4">
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-h-[18px] text-[12px] text-[var(--color-text-muted)]">
+                      {successMessage && !error ? (
+                        <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle2 size={14} />
+                          {successMessage}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={onClose}
@@ -981,9 +1001,16 @@ export function EmailToTaskPanelV2({
                       disabled={isSaving || !draft.title.trim()}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/15 text-[12px] font-semibold hover:brightness-[0.985] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {isSaving && <Loader2 size={13} className="animate-spin" />}
-                      {draftMode === 'event' ? 'Save event' : 'Save task'}
+                      {isSaving ? <Loader2 size={13} className="animate-spin" /> : successMessage && !error ? <CheckCircle2 size={13} /> : null}
+                      {successMessage && !error
+                        ? draftMode === 'event'
+                          ? 'Event created'
+                          : 'Task created'
+                        : draftMode === 'event'
+                          ? 'Save event'
+                          : 'Save task'}
                     </button>
+                    </div>
                   </div>
                 </div>
               </>

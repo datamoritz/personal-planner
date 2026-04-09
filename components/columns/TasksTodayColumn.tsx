@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Plus } from 'lucide-react';
+import { FolderClosed, Plus } from 'lucide-react';
 import { usePlannerStore, selectTasksToday } from '@/store/usePlannerStore';
 
 import { SortableTaskItem } from '@/components/dnd/SortableTaskItem';
@@ -24,6 +24,7 @@ export function TasksTodayColumn() {
     : allTodayTasks;
   const [adding, setAdding] = useState(false);
   const [popover, setPopover] = useState<PopoverState>(null);
+  const linkedProjectMarker = <FolderClosed size={11} className="text-[var(--color-text-muted)] opacity-75" strokeWidth={2.2} />;
 
   useEffect(() => {
     if (viewMode !== 'day') return;
@@ -77,6 +78,7 @@ export function TasksTodayColumn() {
             task={task}
             containerId="today"
             showRecurrenceIcon={!!task.recurrentTaskId}
+            suffix={task.projectId && task.location !== 'project' ? linkedProjectMarker : undefined}
             onToggle={toggleTask}
             onDoubleClick={(id, anchor) => setPopover({ id, anchor })}
           />

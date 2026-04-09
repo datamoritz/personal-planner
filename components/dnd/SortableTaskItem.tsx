@@ -59,11 +59,11 @@ return (
         task={task} 
         className="flex-1 min-w-0" 
         topLabel={topLabel} 
+        rightAdornment={suffix}
         /* Pass noHover to the pill if the pill also has hover styles */
         noHover={noHover} 
         {...pillProps} 
       />
-      {suffix}
     </div>
   );
 }

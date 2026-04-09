@@ -7,7 +7,7 @@ export type TaskLocation =
   | 'backlog'
   | 'upcoming'
   | 'myday'        // timed task placed on the time grid
-  | 'project';     // subtask inside a project
+  | 'project';     // unscheduled task living only inside a project
 
 export type RecurrenceFrequency =
   | { type: 'daily' }
@@ -41,17 +41,18 @@ export interface Task {
   sortOrder?: number;
   title: string;
   status: TaskStatus;
+  /** Current placement. Project-linked tasks may still have projectId while living in backlog/today/myday. */
   location: TaskLocation;
 
-  // Date this task belongs to (ISO date string: 'YYYY-MM-DD')
-  // undefined = backlog (no date)
+  // Date this task belongs to in execution views (ISO date string: 'YYYY-MM-DD')
+  // undefined = backlog / unscheduled project task
   date?: string;
 
   // If location === 'myday', the task has been placed on the time grid
   startTime?: string;  // 'HH:MM'
   endTime?: string;    // 'HH:MM'
 
-  // FK → projects.id (frontend UUID)
+  // FK → projects.id (frontend UUID). A task may keep projectId even when scheduled out.
   projectId?: string;
 
   // FK → recurrent_tasks.id (frontend UUID — set on spawned instances only)
@@ -120,6 +121,8 @@ export interface RecurrentTask {
   title: string;
   tagId?: string;
   frequency: RecurrenceFrequency;
+  anchorDate: string;
+  completedThroughDate?: string;
   /** Client-only: computed from frequency on load, not stored in backend */
   nextDueDate: string;  // 'YYYY-MM-DD'
   notes?: string;
@@ -148,11 +151,14 @@ export interface Project {
 
 // ─── Planner ───────────────────────────────────────────────────────────────
 
+export type MilestoneType = 'major' | 'project';
+
 export interface Milestone {
   id: string;
   backendId?: number;
   goalId: number;
   name: string;
+  type: MilestoneType;
   date: string;
   createdAt: string;
   updatedAt: string;
@@ -170,6 +176,33 @@ export interface Goal {
   updatedAt: string;
 }
 
+// ─── Read / Watch ──────────────────────────────────────────────────────────
+
+export type MediaKind = 'read' | 'watch';
+export type MediaStatus = 'queued' | 'in_progress' | 'finished';
+
+export interface MediaItem {
+  id: string;
+  title: string;
+  kind: MediaKind;
+  status: MediaStatus;
+  recommendedBy?: string;
+  watchmodeId?: number;
+  streamingOn?: string[];
+  streamingCheckedAt?: string;
+  dateAdded: string;
+  finishedAt?: string;
+  sortOrder?: number;
+}
+
+export interface WatchSearchResult {
+  id: number;
+  name: string;
+  year?: number | null;
+  type: 'movie' | 'tv_series' | string;
+  displayTitle: string;
+}
+
 // ─── Day State (convenience shape for the store) ───────────────────────────
 
 export interface PlannerState {
@@ -185,7 +218,7 @@ export interface PlannerState {
 export type PlannerViewMode = 'day' | 'week' | 'month' | 'year' | 'planner';
 export type MonthViewMode = 'events' | 'tasks';
 export type MonthTaskLayout = 'grid' | 'expanded';
-export type PlannerZoom = 'week' | 'month' | 'quarter';
+export type PlannerZoom = 'detail' | 'week' | 'month' | 'quarter';
 
 export interface RecentEmail {
   id: string;

@@ -52,6 +52,7 @@ export function SmartCaptureBar({ autoFocusToken = 0 }: { autoFocusToken?: numbe
   const [mode, setMode] = useState<TextDraftMode>('task');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
   const [popover, setPopover] = useState<PopoverState>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -59,6 +60,7 @@ export function SmartCaptureBar({ autoFocusToken = 0 }: { autoFocusToken?: numbe
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     [],
   );
+  const isExpanded = isFocused || text.trim().length > 0;
 
   const closePopover = useCallback(() => {
     setPopover((current) => {
@@ -150,8 +152,19 @@ export function SmartCaptureBar({ autoFocusToken = 0 }: { autoFocusToken?: numbe
 
   return (
     <>
-      <div className="relative flex w-full max-w-[430px] min-w-0 items-center">
-        <div className="flex w-full min-w-0 items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
+      <div
+        className={[
+          'relative flex min-w-0 items-center transition-[width] duration-300 ease-out',
+        ].join(' ')}
+        style={{ width: isExpanded ? 'min(38vw, 520px)' : 'min(27vw, 430px)' }}
+      >
+        <div
+          className={[
+            'flex w-full min-w-0 items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]',
+            'transition-[box-shadow,transform] duration-300 ease-out',
+            isExpanded ? 'shadow-[0_10px_30px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.15)]' : '',
+          ].join(' ')}
+        >
           <div className="inline-flex rounded-full bg-transparent p-0.5">
               {(['task', 'event'] as const).map((value) => (
                 <button
@@ -175,6 +188,8 @@ export function SmartCaptureBar({ autoFocusToken = 0 }: { autoFocusToken?: numbe
             type="text"
             value={text}
             onChange={(event) => setText(event.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
@@ -182,7 +197,11 @@ export function SmartCaptureBar({ autoFocusToken = 0 }: { autoFocusToken?: numbe
               }
             }}
             placeholder={mode === 'event' ? 'Create an event…' : 'Create a task…'}
-            className="h-7 min-w-0 flex-1 rounded-full border border-transparent bg-transparent px-1.5 py-1 text-left text-[11px] leading-5 text-[var(--color-text-primary)] transition-all placeholder:text-[var(--color-text-muted)] focus:border-transparent focus:outline-none focus:ring-0"
+            className={[
+              'h-7 min-w-0 flex-1 rounded-full border border-transparent bg-transparent py-1 text-left text-[11px] leading-5 text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-transparent focus:outline-none focus:ring-0',
+              'transition-[padding,max-width] duration-300 ease-out',
+              isExpanded ? 'px-2.5' : 'px-1.5',
+            ].join(' ')}
           />
 
           <button

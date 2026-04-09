@@ -8,8 +8,10 @@ import {
   endOfYear,
   format,
   parseISO,
+  startOfDay,
   startOfMonth,
   startOfQuarter,
+  startOfWeek,
   startOfYear,
 } from 'date-fns';
 import type { PlannerZoom } from '@/types';
@@ -32,6 +34,22 @@ export function getPlannerYearBounds(year: number): { start: Date; end: Date } {
 
 export function buildPlannerSegments(year: number, zoom: PlannerZoom): PlannerTimelineSegment[] {
   const { start, end } = getPlannerYearBounds(year);
+
+  if (zoom === 'detail') {
+    return eachWeekOfInterval({ start, end }, { weekStartsOn: 1 }).map((weekStart, index) => {
+      const inYearStart = weekStart < start ? start : weekStart;
+      const weekEnd = addDays(weekStart, 6);
+      const inYearEnd = weekEnd > end ? end : weekEnd;
+      return {
+        key: `detail-${format(weekStart, "yyyy-'W'II")}`,
+        label: index === 0 || format(inYearStart, 'MMM') !== format(addDays(inYearStart, -7), 'MMM')
+          ? format(inYearStart, 'MMM d')
+          : format(inYearStart, 'd'),
+        startDate: format(inYearStart, 'yyyy-MM-dd'),
+        endDate: format(inYearEnd, 'yyyy-MM-dd'),
+      };
+    });
+  }
 
   if (zoom === 'month') {
     return eachMonthOfInterval({ start, end }).map((monthStart) => ({
@@ -90,4 +108,32 @@ export function rangeToPercent(startDate: string, endDate: string, year: number)
     left: Math.max(0, startOffset / totalDays),
     width: Math.max(spanDays / totalDays, 6 / 1200),
   };
+}
+
+export function snapDateToZoom(date: string | Date, zoom: PlannerZoom): Date {
+  const value = startOfDay(toDate(date));
+  if (zoom === 'quarter') {
+    return startOfWeek(value, { weekStartsOn: 1 });
+  }
+  return value;
+}
+
+export function clampDateToYear(date: string | Date, year: number): Date {
+  const value = startOfDay(toDate(date));
+  const { start, end } = getPlannerYearBounds(year);
+  if (value < start) return start;
+  if (value > end) return end;
+  return value;
+}
+
+export function dateToX(date: string | Date, width: number, year: number): number {
+  return dateToPercent(date, year) * width;
+}
+
+export function xToDate(x: number, width: number, year: number, zoom: PlannerZoom): Date {
+  const { start, end } = getPlannerYearBounds(year);
+  const totalDays = Math.max(1, differenceInCalendarDays(end, start));
+  const percent = Math.max(0, Math.min(1, x / Math.max(width, 1)));
+  const raw = addDays(start, Math.round(percent * totalDays));
+  return clampDateToYear(snapDateToZoom(raw, zoom), year);
 }

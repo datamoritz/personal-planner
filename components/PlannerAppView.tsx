@@ -9,7 +9,7 @@ import {
   type DragStartEvent,
   type SensorDescriptor,
 } from '@dnd-kit/core';
-import { ChevronLeft, ChevronRight, Mail, Moon, RefreshCw, Sparkles, Sun, Tag } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Clapperboard, Mail, Moon, RefreshCw, Sparkles, Sun, Tag } from 'lucide-react';
 import { DayHeader } from './DayHeader';
 import { ProjectsColumn } from './columns/ProjectsColumn';
 import { MyDayColumn } from './columns/MyDayColumn';
@@ -23,6 +23,7 @@ import { ViewToggle } from './ui/ViewToggle';
 import { TagsDropdown } from './ui/TagsDropdown';
 import { DetailPopover } from './ui/DetailPopover';
 import { EmailToTaskPanelV2 } from './ui/EmailToTaskPanelV2';
+import { ReadWatchPopover } from './ui/ReadWatchPopover';
 import { SmartCaptureBar } from './ui/SmartCaptureBar';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
@@ -129,6 +130,8 @@ export function PlannerAppView({
   handleDragEnd,
 }: PlannerAppViewProps) {
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [mediaPopoverOpen, setMediaPopoverOpen] = useState(false);
+  const [mediaAnchor, setMediaAnchor] = useState<HTMLElement | null>(null);
   const [smartCaptureOpen, setSmartCaptureOpen] = useState(true);
   const [smartCaptureFocusToken, setSmartCaptureFocusToken] = useState(0);
   const isPlannerView = viewMode === 'planner';
@@ -155,7 +158,7 @@ export function PlannerAppView({
             </div>
 
             {smartCaptureOpen && (
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 flex w-full -translate-x-1/2 -translate-y-[7px] items-center justify-center px-48">
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 flex w-full -translate-x-1/2 -translate-y-[7px] items-center justify-center px-24">
                 <div className="pointer-events-auto">
                   <SmartCaptureBar autoFocusToken={smartCaptureFocusToken} />
                 </div>
@@ -183,6 +186,26 @@ export function PlannerAppView({
                 >
                   <Sparkles size={14} strokeWidth={2.1} />
                 </button>
+              </div>
+              <div className="relative inline-flex">
+                <button
+                  ref={setMediaAnchor}
+                  type="button"
+                  onClick={() => setMediaPopoverOpen(true)}
+                  title="Read & Watch"
+                  className="ui-icon-button text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10"
+                >
+                  <div className="relative h-4 w-4">
+                    <BookOpen size={13} strokeWidth={2.1} className="absolute left-[-1px] top-[1px]" />
+                    <Clapperboard size={11} strokeWidth={2.1} className="absolute bottom-[-1px] right-[-2px]" />
+                  </div>
+                </button>
+                {mediaPopoverOpen && mediaAnchor && (
+                  <ReadWatchPopover
+                    anchor={mediaAnchor}
+                    onClose={() => setMediaPopoverOpen(false)}
+                  />
+                )}
               </div>
               <div className="relative inline-flex">
                 <button

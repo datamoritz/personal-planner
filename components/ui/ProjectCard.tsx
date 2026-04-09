@@ -1,12 +1,13 @@
 'use client';
 
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Project, Tag, Task } from '@/types';
 import { SortableTaskItem } from '@/components/dnd/SortableTaskItem';
 import { DroppableSection } from '@/components/dnd/DroppableSection';
 import { InlineTaskInput } from './InlineTaskInput';
+import { TaskPill } from './TaskPill';
 
 interface ProjectCardProps {
   project: Project;
@@ -37,12 +38,14 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [showFinishedTasks, setShowFinishedTasks] = useState(false);
   const tagBtnRef = useRef<HTMLButtonElement>(null);
   const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
 
   const doneCount = tasks.filter((t) => t.status === 'done').length;
   const total = tasks.length;
   const progressPct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+  const visibleTasks = showFinishedTasks ? tasks : tasks.filter((t) => t.status !== 'done');
 
   const projectTag = project.tagId ? tags.find((t) => t.id === project.tagId) : undefined;
 
@@ -126,20 +129,30 @@ export function ProjectCard({
 
       {/* Subtasks */}
       {expanded && (
-        <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={visibleTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <DroppableSection
             containerId={`project-${project.id}`}
-            itemIds={tasks.map((t) => t.id)}
+            itemIds={visibleTasks.map((t) => t.id)}
             className="px-2.5 pb-3 flex flex-col gap-1.5"
           >
-            {tasks.map((task) => (
-              <SortableTaskItem
-                key={task.id}
-                task={task}
-                containerId={`project-${project.id}`}
-                onToggle={onToggleTask}
-                onDoubleClick={onDoubleClickTask}
-              />
+            {visibleTasks.map((task) => (
+              task.location === 'project' ? (
+                <SortableTaskItem
+                  key={task.id}
+                  task={task}
+                  containerId={`project-${project.id}`}
+                  onToggle={onToggleTask}
+                  onDoubleClick={onDoubleClickTask}
+                />
+              ) : (
+                <TaskPill
+                  key={task.id}
+                  task={task}
+                  onToggle={onToggleTask}
+                  onDoubleClick={onDoubleClickTask}
+                  rightAdornment={<ArrowUpRight size={11} className="text-[var(--color-text-muted)] opacity-75" strokeWidth={2.3} />}
+                />
+              )
             ))}
             {addingSubtask && (
               <InlineTaskInput
@@ -151,8 +164,17 @@ export function ProjectCard({
                 onCancel={() => setAddingSubtask(false)}
               />
             )}
-            {tasks.length === 0 && !addingSubtask && (
+            {visibleTasks.length === 0 && !addingSubtask && (
               <p className="px-1 py-2 text-xs text-[var(--color-text-muted)] italic">No subtasks yet</p>
+            )}
+            {doneCount > 0 && !addingSubtask && (
+              <button
+                type="button"
+                onClick={() => setShowFinishedTasks((value) => !value)}
+                className="px-1 pt-1 text-left text-[10px] font-medium tracking-[0.02em] text-[var(--color-text-muted)] opacity-55 hover:opacity-85 transition-opacity cursor-pointer"
+              >
+                {showFinishedTasks ? 'Hide finished tasks' : 'Show finished tasks'}
+              </button>
             )}
           </DroppableSection>
         </SortableContext>

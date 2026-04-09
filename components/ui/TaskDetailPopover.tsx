@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Sparkles, Trash2 } from 'lucide-react';
+import { BookOpen, Check, Clapperboard, Sparkles, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { X } from 'lucide-react';
 import { DetailPopover } from './DetailPopover';
@@ -17,7 +17,7 @@ interface TaskDetailPopoverProps {
 }
 
 export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: TaskDetailPopoverProps) {
-  const { tasks, tags, updateTask, deleteTask, setTaskTag } = usePlannerStore();
+  const { tasks, tags, updateTask, deleteTask, setTaskTag, convertTaskToMedia } = usePlannerStore();
   const task = tasks.find((t) => t.id === taskId);
 
   const [title,     setTitle]     = useState(task?.title     ?? '');
@@ -60,6 +60,13 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
 
   if (!task) return null;
 
+  const normalizedTitle = task.title.trim().toLowerCase();
+  const mediaKind =
+    /^read(?:\s|:|-)/i.test(normalizedTitle) || normalizedTitle === 'read'
+      ? 'read'
+      : /^watch(?:\s|:|-)/i.test(normalizedTitle) || normalizedTitle === 'watch'
+        ? 'watch'
+        : null;
   const showTime = task.location === 'myday' || !!task.startTime;
   const hasChanges =
     title.trim() !== task.title ||
@@ -99,6 +106,22 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
           >
             <Sparkles size={12} strokeWidth={2.2} />
           </button>
+          {mediaKind && (
+            <button
+              type="button"
+              onClick={() => {
+                const converted = convertTaskToMedia(taskId, mediaKind);
+                if (converted) onClose();
+              }}
+              className="ui-icon-button text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
+              aria-label={mediaKind === 'read' ? 'Add to Read' : 'Add to Watch'}
+              title={mediaKind === 'read' ? 'Add to Read' : 'Add to Watch'}
+            >
+              {mediaKind === 'read'
+                ? <BookOpen size={12} strokeWidth={2.2} />
+                : <Clapperboard size={12} strokeWidth={2.2} />}
+            </button>
+          )}
           <button
             onClick={() => { deleteTask(taskId); onClose(); }}
             className="ui-icon-button ui-icon-button--danger"

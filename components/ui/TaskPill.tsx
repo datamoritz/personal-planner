@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { Task } from '@/types';
@@ -12,6 +13,7 @@ interface TaskPillProps {
   topLabel?: string;       // small label shown above title inside the pill (e.g. date for upcoming)
   onToggle?: (id: string) => void;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
+  rightAdornment?: ReactNode;
   className?: string;
 }
 
@@ -23,6 +25,7 @@ export function TaskPill({
   noHover = false,
   onToggle,
   onDoubleClick,
+  rightAdornment,
   className = '',
 }: TaskPillProps) {
   const isDone = task.status === 'done';
@@ -93,8 +96,13 @@ export function TaskPill({
         </span>
       </span>
 
-      {showRecurrenceIcon && (
-        <RefreshCw size={11} className="flex-shrink-0 text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />
+      {(showRecurrenceIcon || rightAdornment) && (
+        <span className="flex flex-shrink-0 items-center gap-1.5">
+          {showRecurrenceIcon && (
+            <RefreshCw size={11} className="text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />
+          )}
+          {rightAdornment}
+        </span>
       )}
     </div>
   );
