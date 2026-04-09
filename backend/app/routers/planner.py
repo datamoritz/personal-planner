@@ -107,6 +107,7 @@ def create_milestone(payload: schemas.MilestoneCreate, db: Session = Depends(get
         client_id=payload.client_id or uuid.uuid4(),
         goal_id=payload.goal_id,
         name=payload.name,
+        type=payload.type,
         date=payload.date,
     )
     db.add(milestone)

@@ -271,6 +271,31 @@ class TextDraftResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Watchmode / streaming
+# ---------------------------------------------------------------------------
+
+class WatchmodeSearchRequest(BaseModel):
+    query: str
+
+
+class WatchmodeSearchResult(BaseModel):
+    id: int
+    name: str
+    year: int | None = None
+    type: str
+    displayTitle: str
+
+
+class WatchmodeSourceOut(BaseModel):
+    name: str
+    webUrl: str | None = None
+
+
+class WatchmodeSourcesResponse(BaseModel):
+    providers: list[WatchmodeSourceOut]
+
+
+# ---------------------------------------------------------------------------
 # Projects
 # ---------------------------------------------------------------------------
 
@@ -319,6 +344,7 @@ class ProjectOut(BaseModel):
 class MilestoneBase(BaseModel):
     goal_id: int
     name: str
+    type: Literal["major", "project"] = "major"
     date: date_value
 
 
@@ -329,6 +355,7 @@ class MilestoneCreate(MilestoneBase):
 class MilestoneUpdate(BaseModel):
     goal_id: Optional[int] = None
     name: Optional[str] = None
+    type: Optional[Literal["major", "project"]] = None
     date: Optional[date_value] = None
 
 
