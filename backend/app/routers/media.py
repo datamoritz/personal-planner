@@ -48,7 +48,7 @@ def search_watch_titles(payload: schemas.WatchmodeSearchRequest):
         {
             "search_field": "name",
             "search_value": query,
-            "types": "movie,tv_series",
+            "types": "movie,tv",
         },
     )
 
