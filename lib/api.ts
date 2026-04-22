@@ -23,6 +23,7 @@ import type {
   WorkloadDaySummary,
   WorkloadProjectRollup,
   WorkloadTaskRow,
+  WeeklyCapacityTemplate,
   RecurrentTask,
   RecurrenceFrequency,
   CalendarEntry,
@@ -614,6 +615,23 @@ export async function upsertTaskAllocation(input: {
 
 export async function deleteTaskAllocation(taskId: number, allocationDate: string): Promise<void> {
   await del(`/workload/allocations?task_id=${encodeURIComponent(String(taskId))}&allocation_date=${encodeURIComponent(allocationDate)}`);
+}
+
+export async function upsertWeeklyCapacity(input: {
+  weekday: number;
+  capacityHours: number;
+}): Promise<WeeklyCapacityTemplate> {
+  const payload = await post<Record<string, unknown>>('/workload/capacity', {
+    weekday: input.weekday,
+    capacity_hours: input.capacityHours,
+  });
+  return {
+    id: Number(payload.id),
+    weekday: Number(payload.weekday),
+    capacityHours: Number(payload.capacity_hours ?? 0),
+    createdAt: String(payload.created_at),
+    updatedAt: String(payload.updated_at),
+  };
 }
 
 export async function createGoal(input: {

@@ -216,6 +216,29 @@ def upsert_task_allocation(payload: schemas.TaskAllocationUpsert, db: Session = 
     return allocation
 
 
+@router.post("/capacity", response_model=schemas.WeeklyCapacityTemplateOut)
+def upsert_weekly_capacity(payload: schemas.WeeklyCapacityTemplateUpsert, db: Session = Depends(get_db)):
+    template = (
+        db.query(models.WeeklyCapacityTemplate)
+        .filter(models.WeeklyCapacityTemplate.weekday == payload.weekday)
+        .first()
+    )
+
+    if template:
+        template.capacity_hours = payload.capacity_hours
+        template.updated_at = datetime.utcnow()
+    else:
+        template = models.WeeklyCapacityTemplate(
+            weekday=payload.weekday,
+            capacity_hours=payload.capacity_hours,
+        )
+        db.add(template)
+
+    db.commit()
+    db.refresh(template)
+    return template
+
+
 @router.delete("/allocations", status_code=204)
 def delete_task_allocation(
     task_id: int = Query(...),

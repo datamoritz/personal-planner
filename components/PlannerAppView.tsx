@@ -20,6 +20,7 @@ import { WeekViewColumn } from './columns/WeekViewColumn';
 import { MonthViewColumn } from './columns/MonthViewColumn';
 import { YearViewColumn } from './columns/YearViewColumn';
 import { GoalsView } from './planner/GoalsView';
+import { WorkloadView } from './planner/WorkloadView';
 import { ViewToggle } from './ui/ViewToggle';
 import { TagsDropdown } from './ui/TagsDropdown';
 import { DetailPopover } from './ui/DetailPopover';
@@ -277,7 +278,7 @@ export function PlannerAppView({
 
           <div className="flex flex-col flex-1 rounded-[2rem] overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] ui-raised-surface min-w-0">
             {isPlannerView ? (
-              <GoalsView initialSubview={viewMode === 'planner' ? 'timeline' : 'workload'} />
+              viewMode === 'workload' ? <WorkloadView /> : <GoalsView />
             ) : (
               <>
                 <DayHeader />

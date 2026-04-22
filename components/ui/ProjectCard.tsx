@@ -95,17 +95,18 @@ export function ProjectCard({
           </div>
         )}
 
-        {/* Tag color circle */}
-        <button
-          ref={tagBtnRef}
-          onClick={openTagPicker}
-          title="Set project color"
-          className="flex-shrink-0 w-4 h-4 rounded-full border-2 cursor-pointer transition-colors"
-          style={{
-            background: projectTag ? projectTag.color : 'transparent',
-            borderColor: projectTag ? projectTag.colorDark : 'var(--color-border)',
-          }}
-        />
+        {total === 0 && (
+          <button
+            ref={tagBtnRef}
+            onClick={openTagPicker}
+            title="Set project color"
+            className="flex-shrink-0 h-4 w-4 rounded-full border-2 cursor-pointer transition-colors"
+            style={{
+              background: projectTag ? projectTag.color : 'transparent',
+              borderColor: projectTag ? projectTag.colorDark : 'var(--color-border)',
+            }}
+          />
+        )}
 
         <button
           onClick={() => setAddingSubtask(true)}
@@ -177,14 +178,30 @@ export function ProjectCard({
                 <p className="text-xs text-[var(--color-text-muted)] italic">Drop a task here or add a subtask</p>
               </div>
             )}
-            {doneCount > 0 && !addingSubtask && (
-              <button
-                type="button"
-                onClick={() => setShowFinishedTasks((value) => !value)}
-                className="px-1 pt-1 text-left text-[10px] font-medium tracking-[0.02em] text-[var(--color-text-muted)] opacity-55 hover:opacity-85 transition-opacity cursor-pointer"
-              >
-                {showFinishedTasks ? 'Hide finished tasks' : 'Show finished tasks'}
-              </button>
+            {total > 0 && !addingSubtask && (
+              <div className="flex items-center justify-between px-1 pt-1">
+                {doneCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowFinishedTasks((value) => !value)}
+                    className="text-left text-[10px] font-medium tracking-[0.02em] text-[var(--color-text-muted)] opacity-55 hover:opacity-85 transition-opacity cursor-pointer"
+                  >
+                    {showFinishedTasks ? 'Hide finished tasks' : 'Show finished tasks'}
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <button
+                  ref={tagBtnRef}
+                  type="button"
+                  onClick={openTagPicker}
+                  title="Set project color"
+                  className="h-2.5 w-2.5 flex-shrink-0 rounded-full cursor-pointer transition-transform hover:scale-110"
+                  style={{
+                    background: projectTag ? projectTag.color : 'var(--color-border)',
+                  }}
+                />
+              </div>
             )}
           </DroppableSection>
         </SortableContext>

@@ -29,6 +29,10 @@ export function TaskPill({
   className = '',
 }: TaskPillProps) {
   const isDone = task.status === 'done';
+  const hasEstimate = typeof task.estimateHours === 'number' && task.estimateHours > 0;
+  const estimateLabel = hasEstimate
+    ? `${Number.isInteger(task.estimateHours) ? task.estimateHours : task.estimateHours.toFixed(1)}h`
+    : null;
   const tags = usePlannerStore((s) => s.tags);
   const tag = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
   // Use colorDark at low opacity so the tint works on both dark and light backgrounds
@@ -96,12 +100,17 @@ export function TaskPill({
         </span>
       </span>
 
-      {(showRecurrenceIcon || rightAdornment) && (
+      {(estimateLabel || showRecurrenceIcon || rightAdornment) && (
         <span className="flex flex-shrink-0 items-center gap-1.5">
           {showRecurrenceIcon && (
             <RefreshCw size={11} className="text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />
           )}
           {rightAdornment}
+          {estimateLabel && (
+            <span className="text-[10px] font-medium text-[var(--color-text-muted)]">
+              {estimateLabel}
+            </span>
+          )}
         </span>
       )}
     </div>

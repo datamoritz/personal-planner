@@ -242,6 +242,14 @@ export interface WorkloadDaySummary {
   remainingHours: number;
 }
 
+export interface WeeklyCapacityTemplate {
+  id: number;
+  weekday: number;
+  capacityHours: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WorkloadData {
   startDate: string;
   endDate: string;

@@ -611,6 +611,11 @@ class WeeklyCapacityTemplateOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class WeeklyCapacityTemplateUpsert(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    capacity_hours: float = Field(ge=0)
+
+
 class WorkloadTaskRowOut(BaseModel):
     task_id: int
     title: str

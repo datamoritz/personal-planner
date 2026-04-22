@@ -2,8 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, format, startOfWeek } from 'date-fns';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
-import { deleteTaskAllocation, fetchWorkload, upsertTaskAllocation } from '@/lib/api';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, Plus } from 'lucide-react';
+import { deleteTaskAllocation, fetchWorkload, upsertTaskAllocation, upsertWeeklyCapacity } from '@/lib/api';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { WorkloadData, WorkloadProjectRollup, WorkloadTaskRow } from '@/types';
 
@@ -19,6 +19,10 @@ function cellKey(taskId: number, date: string): string {
   return `${taskId}:${date}`;
 }
 
+function dayCapacityKey(weekday: number): string {
+  return `capacity:${weekday}`;
+}
+
 export function WorkloadView() {
   const projects = usePlannerStore((state) => state.projects);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -26,6 +30,7 @@ export function WorkloadView() {
   const [expandedProjectIds, setExpandedProjectIds] = useState<number[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
+  const [savingCapacityWeekday, setSavingCapacityWeekday] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const startDate = format(weekStart, 'yyyy-MM-dd');
@@ -167,10 +172,10 @@ export function WorkloadView() {
     );
   };
 
-  const commitCell = async (taskId: number, date: string) => {
+  const commitCell = async (taskId: number, date: string, overrideValue?: number) => {
     const key = cellKey(taskId, date);
-    if (!Object.prototype.hasOwnProperty.call(drafts, key)) return;
-    const raw = drafts[key].trim();
+    if (overrideValue == null && !Object.prototype.hasOwnProperty.call(drafts, key)) return;
+    const raw = overrideValue == null ? drafts[key].trim() : String(overrideValue);
     const nextValue = raw === '' ? 0 : Number.parseFloat(raw);
     if (!Number.isFinite(nextValue) || nextValue < 0) return;
 
@@ -222,6 +227,55 @@ export function WorkloadView() {
     }
   };
 
+  const commitCapacity = async (weekday: number, overrideValue?: number) => {
+    const key = dayCapacityKey(weekday);
+    if (overrideValue == null && !Object.prototype.hasOwnProperty.call(drafts, key)) return;
+    const raw = overrideValue == null ? drafts[key].trim() : String(overrideValue);
+    const nextValue = raw === '' ? 0 : Number.parseFloat(raw);
+    if (!Number.isFinite(nextValue) || nextValue < 0) return;
+
+    const nextHours = roundHours(nextValue);
+    setSavingCapacityWeekday(weekday);
+    try {
+      await upsertWeeklyCapacity({ weekday, capacityHours: nextHours });
+      setWorkload((current) => current ? {
+        ...current,
+        daySummaries: current.daySummaries.map((day) =>
+          day.weekday === weekday
+            ? {
+                ...day,
+                capacityHours: nextHours,
+                remainingHours: roundHours(nextHours - day.allocatedHours),
+              }
+            : day,
+        ),
+      } : current);
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save daily capacity.');
+    } finally {
+      setSavingCapacityWeekday(null);
+    }
+  };
+
+  const adjustCapacity = async (weekday: number, delta: number) => {
+    const summary = displayedDaySummaries.find((day) => day.weekday === weekday);
+    if (!summary) return;
+    const next = Math.max(0, roundHours(summary.capacityHours + delta));
+    setDrafts((current) => ({ ...current, [dayCapacityKey(weekday)]: String(next) }));
+    await commitCapacity(weekday, next);
+  };
+
+  const valueTone = (value: number) =>
+    value < 0 ? 'text-red-600' : 'text-[var(--color-text-primary)]';
+
+  const totalColumnClass = 'w-[5.25rem] min-w-[5.25rem] border-b border-l border-[var(--color-border)] px-2 py-2 text-right text-[12px]';
+  const dayColumnClass = 'w-[8.25rem] min-w-[8.25rem] border-b border-[var(--color-border)] px-2 py-2 text-center';
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[1.9rem] border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-[var(--shadow-app)]">
       <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-3">
@@ -255,10 +309,18 @@ export function WorkloadView() {
               <th className="sticky left-0 z-30 w-[22rem] border-b border-r border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
                 Task / Project
               </th>
+              {['Est', 'Plan', 'Left'].map((label) => (
+                <th
+                  key={label}
+                  className="w-[5.25rem] min-w-[5.25rem] border-b border-l border-[var(--color-border)] px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]"
+                >
+                  {label}
+                </th>
+              ))}
               {displayedDaySummaries.map((day) => (
                 <th
                   key={day.date}
-                  className="border-b border-[var(--color-border)] px-2 py-2 text-center"
+                  className="w-[8.25rem] min-w-[8.25rem] border-b border-[var(--color-border)] px-2 py-2 text-center"
                 >
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
                     {format(new Date(`${day.date}T00:00:00`), 'EEE')}
@@ -266,26 +328,45 @@ export function WorkloadView() {
                   <div className="mt-0.5 text-[12px] font-semibold text-[var(--color-text-primary)]">
                     {format(new Date(`${day.date}T00:00:00`), 'MMM d')}
                   </div>
-                  <div
-                    className={[
-                      'mt-1 text-[10px] font-medium',
-                      day.remainingHours < 0
-                        ? 'text-red-600'
-                        : day.remainingHours === 0
-                          ? 'text-[var(--color-text-muted)]'
-                          : 'text-emerald-600',
-                    ].join(' ')}
-                  >
-                    {hoursText(day.allocatedHours)} / {hoursText(day.capacityHours)}
+                  <div className="group mt-1 flex items-center justify-center gap-1 text-[10px]">
+                    <span className={day.remainingHours < 0 ? 'text-red-600 font-medium' : day.remainingHours === 0 ? 'text-[var(--color-text-muted)] font-medium' : 'text-emerald-600 font-medium'}>
+                      {hoursText(day.allocatedHours)} / 
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void adjustCapacity(day.weekday, -0.5)}
+                      className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                      title="Decrease available time"
+                    >
+                      <Minus size={11} strokeWidth={2.3} />
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={Object.prototype.hasOwnProperty.call(drafts, dayCapacityKey(day.weekday)) ? drafts[dayCapacityKey(day.weekday)] : String(day.capacityHours)}
+                      onChange={(event) => setDrafts((current) => ({ ...current, [dayCapacityKey(day.weekday)]: event.target.value }))}
+                      onBlur={() => void commitCapacity(day.weekday)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') event.currentTarget.blur();
+                      }}
+                      className={[
+                        'w-9 bg-transparent text-center font-medium outline-none text-[inherit]',
+                        savingCapacityWeekday === day.weekday ? 'opacity-70' : '',
+                      ].join(' ')}
+                    />
+                    <span className={day.remainingHours < 0 ? 'text-red-600 font-medium' : day.remainingHours === 0 ? 'text-[var(--color-text-muted)] font-medium' : 'text-emerald-600 font-medium'}>
+                      h
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void adjustCapacity(day.weekday, 0.5)}
+                      className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                      title="Increase available time"
+                    >
+                      <Plus size={11} strokeWidth={2.3} />
+                    </button>
                   </div>
-                </th>
-              ))}
-              {['Est', 'Planned', 'Remain'].map((label) => (
-                <th
-                  key={label}
-                  className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]"
-                >
-                  {label}
                 </th>
               ))}
             </tr>
@@ -315,20 +396,20 @@ export function WorkloadView() {
                         </span>
                       </button>
                     </td>
+                    <td className={`${totalColumnClass} font-semibold text-[var(--color-text-primary)]`}>
+                      {hoursText(roundHours(projectTotals.totalEstimatedHours))}
+                    </td>
+                    <td className={`${totalColumnClass} font-semibold text-[var(--color-text-primary)]`}>
+                      {hoursText(roundHours(projectTotals.totalAllocatedHours))}
+                    </td>
+                    <td className={`${totalColumnClass} font-semibold ${valueTone(roundHours(projectTotals.totalRemainingHours))}`}>
+                      {hoursText(roundHours(projectTotals.totalRemainingHours))}
+                    </td>
                     {displayedDaySummaries.map((day) => (
-                      <td key={`project-${projectId}-${day.date}`} className="border-b border-[var(--color-border)] px-2 py-2 text-center text-[12px] font-medium text-[var(--color-text-secondary)]">
+                      <td key={`project-${projectId}-${day.date}`} className={`${dayColumnClass} text-[12px] font-medium text-[var(--color-text-secondary)]`}>
                         {getDisplayedProjectDayHours(projectId, day.date) > 0 ? hoursText(getDisplayedProjectDayHours(projectId, day.date)) : '—'}
                       </td>
                     ))}
-                    <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-semibold text-[var(--color-text-primary)]">
-                      {hoursText(roundHours(projectTotals.totalEstimatedHours))}
-                    </td>
-                    <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-semibold text-[var(--color-text-primary)]">
-                      {hoursText(roundHours(projectTotals.totalAllocatedHours))}
-                    </td>
-                    <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-semibold text-[var(--color-text-primary)]">
-                      {hoursText(roundHours(projectTotals.totalRemainingHours))}
-                    </td>
                   </tr>
                   {isExpanded && projectTasks.map((task) => {
                     const taskTotals = getDisplayedTaskTotals(task);
@@ -340,6 +421,15 @@ export function WorkloadView() {
                             <span className="truncate text-[13px] text-[var(--color-text-primary)]">{task.title}</span>
                           </div>
                         </td>
+                        <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
+                          {hoursText(task.estimateHours)}
+                        </td>
+                        <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
+                          {hoursText(taskTotals.totalAllocatedHours)}
+                        </td>
+                        <td className={`${totalColumnClass} font-medium ${valueTone(taskTotals.remainingHours)}`}>
+                          {hoursText(taskTotals.remainingHours)}
+                        </td>
                         {displayedDaySummaries.map((day) => {
                           const key = cellKey(task.taskId, day.date);
                           const value = Object.prototype.hasOwnProperty.call(drafts, key)
@@ -349,41 +439,56 @@ export function WorkloadView() {
                                 return allocation ? String(allocation.hours) : '';
                               })();
                           return (
-                            <td key={key} className="border-b border-[var(--color-border)] px-2 py-1.5">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.5"
-                                value={value}
-                                onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
-                                onBlur={() => void commitCell(task.taskId, day.date)}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    event.currentTarget.blur();
-                                  }
-                                }}
-                                className={[
-                                  'ui-input h-9 text-center text-[12px]',
-                                  savingCellKey === key ? 'opacity-70' : '',
-                                ].join(' ')}
-                              />
+                            <td key={key} className={`${dayColumnClass} py-1.5`}>
+                              <div className="group flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentHours = getDisplayedCellHours(task.taskId, day.date);
+                                    const nextHours = Math.max(0, roundHours(currentHours - 0.5));
+                                    setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
+                                    void commitCell(task.taskId, day.date, nextHours);
+                                  }}
+                                  className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                                  title="Decrease hours"
+                                >
+                                  <Minus size={12} strokeWidth={2.3} />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.5"
+                                  value={value}
+                                  onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                                  onBlur={() => void commitCell(task.taskId, day.date)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.currentTarget.blur();
+                                    }
+                                  }}
+                                  className={[
+                                    'w-14 bg-transparent text-center text-[12px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                                    savingCellKey === key ? 'opacity-70' : '',
+                                  ].join(' ')}
+                                  placeholder="—"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentHours = getDisplayedCellHours(task.taskId, day.date);
+                                    const nextHours = roundHours(currentHours + 0.5);
+                                    setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
+                                    void commitCell(task.taskId, day.date, nextHours);
+                                  }}
+                                  className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                                  title="Increase hours"
+                                >
+                                  <Plus size={12} strokeWidth={2.3} />
+                                </button>
+                              </div>
                             </td>
                           );
                         })}
-                        <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] text-[var(--color-text-primary)]">
-                          {hoursText(task.estimateHours)}
-                        </td>
-                        <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] text-[var(--color-text-primary)]">
-                          {hoursText(taskTotals.totalAllocatedHours)}
-                        </td>
-                        <td
-                          className={[
-                            'border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-medium',
-                            taskTotals.remainingHours < 0 ? 'text-red-600' : taskTotals.remainingHours === 0 ? 'text-emerald-600' : 'text-[var(--color-text-primary)]',
-                          ].join(' ')}
-                        >
-                          {hoursText(taskTotals.remainingHours)}
-                        </td>
                       </tr>
                     );
                   })}
@@ -397,27 +502,27 @@ export function WorkloadView() {
                   <td className="sticky left-0 z-10 border-b border-r border-[var(--color-border)] bg-[var(--color-surface)]/80 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
                     Unassigned
                   </td>
-                  {displayedDaySummaries.map((day) => (
-                    <td key={`unassigned-${day.date}`} className="border-b border-[var(--color-border)] px-2 py-2 text-center text-[12px] font-medium text-[var(--color-text-secondary)]">
-                      {getDisplayedProjectDayHours(undefined, day.date) > 0 ? hoursText(getDisplayedProjectDayHours(undefined, day.date)) : '—'}
-                    </td>
-                  ))}
                   {(() => {
                     const totals = getDisplayedProjectTotals(undefined);
                     return (
                       <>
-                        <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-semibold text-[var(--color-text-primary)]">
+                        <td className={`${totalColumnClass} font-semibold text-[var(--color-text-primary)]`}>
                           {hoursText(roundHours(totals.totalEstimatedHours))}
                         </td>
-                        <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-semibold text-[var(--color-text-primary)]">
+                        <td className={`${totalColumnClass} font-semibold text-[var(--color-text-primary)]`}>
                           {hoursText(roundHours(totals.totalAllocatedHours))}
                         </td>
-                        <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-semibold text-[var(--color-text-primary)]">
+                        <td className={`${totalColumnClass} font-semibold ${valueTone(roundHours(totals.totalRemainingHours))}`}>
                           {hoursText(roundHours(totals.totalRemainingHours))}
                         </td>
                       </>
                     );
                   })()}
+                  {displayedDaySummaries.map((day) => (
+                    <td key={`unassigned-${day.date}`} className={`${dayColumnClass} text-[12px] font-medium text-[var(--color-text-secondary)]`}>
+                      {getDisplayedProjectDayHours(undefined, day.date) > 0 ? hoursText(getDisplayedProjectDayHours(undefined, day.date)) : '—'}
+                    </td>
+                  ))}
                 </tr>
                 {unassignedTasks.map((task) => {
                   const taskTotals = getDisplayedTaskTotals(task);
@@ -425,6 +530,15 @@ export function WorkloadView() {
                     <tr key={`task-${task.taskId}`}>
                       <td className="sticky left-0 z-10 border-b border-r border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-2.5">
                         <span className="truncate text-[13px] text-[var(--color-text-primary)]">{task.title}</span>
+                      </td>
+                      <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
+                        {hoursText(task.estimateHours)}
+                      </td>
+                      <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
+                        {hoursText(taskTotals.totalAllocatedHours)}
+                      </td>
+                      <td className={`${totalColumnClass} font-medium ${valueTone(taskTotals.remainingHours)}`}>
+                        {hoursText(taskTotals.remainingHours)}
                       </td>
                       {displayedDaySummaries.map((day) => {
                         const key = cellKey(task.taskId, day.date);
@@ -435,39 +549,54 @@ export function WorkloadView() {
                               return allocation ? String(allocation.hours) : '';
                             })();
                         return (
-                          <td key={key} className="border-b border-[var(--color-border)] px-2 py-1.5">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              value={value}
-                              onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
-                              onBlur={() => void commitCell(task.taskId, day.date)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') event.currentTarget.blur();
-                              }}
-                              className={[
-                                'ui-input h-9 text-center text-[12px]',
-                                savingCellKey === key ? 'opacity-70' : '',
-                              ].join(' ')}
-                            />
+                          <td key={key} className={`${dayColumnClass} py-1.5`}>
+                            <div className="group flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentHours = getDisplayedCellHours(task.taskId, day.date);
+                                  const nextHours = Math.max(0, roundHours(currentHours - 0.5));
+                                  setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
+                                  void commitCell(task.taskId, day.date, nextHours);
+                                }}
+                                className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                                title="Decrease hours"
+                              >
+                                <Minus size={12} strokeWidth={2.3} />
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={value}
+                                onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                                onBlur={() => void commitCell(task.taskId, day.date)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') event.currentTarget.blur();
+                                }}
+                                className={[
+                                  'w-14 bg-transparent text-center text-[12px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                                  savingCellKey === key ? 'opacity-70' : '',
+                                ].join(' ')}
+                                placeholder="—"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentHours = getDisplayedCellHours(task.taskId, day.date);
+                                  const nextHours = roundHours(currentHours + 0.5);
+                                  setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
+                                  void commitCell(task.taskId, day.date, nextHours);
+                                }}
+                                className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                                title="Increase hours"
+                              >
+                                <Plus size={12} strokeWidth={2.3} />
+                              </button>
+                            </div>
                           </td>
                         );
                       })}
-                      <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] text-[var(--color-text-primary)]">
-                        {hoursText(task.estimateHours)}
-                      </td>
-                      <td className="border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] text-[var(--color-text-primary)]">
-                        {hoursText(taskTotals.totalAllocatedHours)}
-                      </td>
-                      <td
-                        className={[
-                          'border-b border-l border-[var(--color-border)] px-3 py-2 text-right text-[12px] font-medium',
-                          taskTotals.remainingHours < 0 ? 'text-red-600' : taskTotals.remainingHours === 0 ? 'text-emerald-600' : 'text-[var(--color-text-primary)]',
-                        ].join(' ')}
-                      >
-                        {hoursText(taskTotals.remainingHours)}
-                      </td>
                     </tr>
                   );
                 })}
