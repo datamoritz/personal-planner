@@ -2,6 +2,7 @@ services:
   planner-backend:
     build: .
     container_name: planner-backend
+    command: /bin/sh -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       ENV: production
       API_SECRET: ${API_SECRET}
