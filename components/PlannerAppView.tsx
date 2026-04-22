@@ -8,6 +8,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
   type SensorDescriptor,
+  type SensorOptions,
 } from '@dnd-kit/core';
 import { BookOpen, ChevronLeft, ChevronRight, Clapperboard, Mail, Moon, RefreshCw, Sparkles, Sun, Tag } from 'lucide-react';
 import { DayHeader } from './DayHeader';
@@ -18,7 +19,7 @@ import { SidebarColumn } from './columns/SidebarColumn';
 import { WeekViewColumn } from './columns/WeekViewColumn';
 import { MonthViewColumn } from './columns/MonthViewColumn';
 import { YearViewColumn } from './columns/YearViewColumn';
-import { PlannerView } from './planner/PlannerView';
+import { GoalsView } from './planner/GoalsView';
 import { ViewToggle } from './ui/ViewToggle';
 import { TagsDropdown } from './ui/TagsDropdown';
 import { DetailPopover } from './ui/DetailPopover';
@@ -89,7 +90,7 @@ interface PlannerAppViewProps {
   setFocusMode: (value: boolean) => void;
   setNotesActionsVisible: (value: boolean) => void;
   activeDrag: ActiveDrag;
-  sensors: SensorDescriptor<unknown>[];
+  sensors: SensorDescriptor<SensorOptions>[];
   collisionDetection: CollisionDetection;
   handleDragStart: (event: DragStartEvent) => void;
   handleDragEnd: (event: DragEndEvent) => void;
@@ -134,7 +135,7 @@ export function PlannerAppView({
   const [mediaAnchor, setMediaAnchor] = useState<HTMLElement | null>(null);
   const [smartCaptureOpen, setSmartCaptureOpen] = useState(true);
   const [smartCaptureFocusToken, setSmartCaptureFocusToken] = useState(0);
-  const isPlannerView = viewMode === 'planner';
+  const isPlannerView = viewMode === 'planner' || viewMode === 'workload';
   const isYearView = viewMode === 'year';
   const showLeftPanel = viewMode === 'week' || viewMode === 'month' ? weekProjectsVisible : !leftCollapsed;
   const showMonthEventTimes = !(viewMode === 'month' && showLeftPanel && !rightCollapsed);
@@ -276,7 +277,7 @@ export function PlannerAppView({
 
           <div className="flex flex-col flex-1 rounded-[2rem] overflow-hidden border border-[var(--color-border)] bg-[var(--color-canvas)] ui-raised-surface min-w-0">
             {isPlannerView ? (
-              <PlannerView />
+              <GoalsView initialSubview={viewMode === 'planner' ? 'timeline' : 'workload'} />
             ) : (
               <>
                 <DayHeader />

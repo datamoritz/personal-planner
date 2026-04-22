@@ -313,7 +313,6 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       overflowTasks={overflowTasks}
       depths={depths}
       isYesterday={isYesterday}
-      isToday={isToday}
       timeOffset={timeOffset}
       timeLabel={timeLabel}
       popover={popover}

@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef } from 'react';
-import type { CalendarEntry } from '@/types';
 import {
   END_HOUR,
   SLOT_HEIGHT,
@@ -10,8 +9,16 @@ import {
   snapTo15Min,
 } from '@/lib/timeGrid';
 
+interface CalendarEntryLike {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  notes?: string | null;
+}
+
 interface CalendarEntryBlockProps {
-  entry: CalendarEntry;
+  entry: CalendarEntryLike;
   style?: React.CSSProperties;
   compact?: boolean;
   readOnly?: boolean;

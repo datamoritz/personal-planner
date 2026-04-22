@@ -47,6 +47,7 @@ def _build_task(payload: schemas.TaskCreate) -> models.Task:
         location=payload.location,
         start_time=payload.start_time,
         end_time=payload.end_time,
+        estimate_hours=payload.estimate_hours,
         project_id=payload.project_id,
         recurrent_task_id=payload.recurrent_task_id,
         tag_id=payload.tag_id,

@@ -25,6 +25,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
   const [date,      setDate]      = useState(task?.date);
   const [startTime, setStartTime] = useState(task?.startTime ?? '');
   const [endTime,   setEndTime]   = useState(task?.endTime   ?? '');
+  const [estimateHours, setEstimateHours] = useState(task?.estimateHours?.toString() ?? '');
   const [emojiLoading, setEmojiLoading] = useState(false);
 
   const handleClose = useCallback(() => {
@@ -39,9 +40,17 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
     if (date         !== task.date)                updates.date      = date;
     if (startTime    !== (task.startTime ?? ''))   updates.startTime = startTime || undefined;
     if (endTime      !== (task.endTime   ?? ''))   updates.endTime   = endTime   || undefined;
+    const normalizedEstimate = estimateHours.trim();
+    const nextEstimate = normalizedEstimate === '' ? undefined : Number.parseFloat(normalizedEstimate);
+    if (
+      (normalizedEstimate === '' && task.estimateHours !== undefined)
+      || (normalizedEstimate !== '' && Number.isFinite(nextEstimate) && nextEstimate !== task.estimateHours)
+    ) {
+      updates.estimateHours = normalizedEstimate === '' ? undefined : nextEstimate;
+    }
     if (Object.keys(updates).length) updateTask(taskId, updates);
     onClose();
-  }, [date, endTime, notes, onClose, startTime, task, taskId, title, updateTask]);
+  }, [date, endTime, estimateHours, notes, onClose, startTime, task, taskId, title, updateTask]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -73,7 +82,8 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
     notes !== (task.notes ?? '') ||
     date !== task.date ||
     startTime !== (task.startTime ?? '') ||
-    endTime !== (task.endTime ?? '');
+    endTime !== (task.endTime ?? '') ||
+    estimateHours.trim() !== (task.estimateHours == null ? '' : String(task.estimateHours));
   const handleSuggestEmoji = async () => {
     const baseTitle = title.trim();
     if (!baseTitle || emojiLoading) return;
@@ -172,17 +182,31 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
           <PopoverInput value={title} onChange={setTitle} placeholder="Task title" />
         </PopoverField>
 
-        <PopoverField label="Schedule">
-          <DateTimePicker
-            date={date}
-            startTime={startTime}
-            endTime={endTime}
-            showTime={showTime}
-            onDateChange={setDate}
-            onStartTimeChange={setStartTime}
-            onEndTimeChange={setEndTime}
-          />
-        </PopoverField>
+        <div className="grid grid-cols-2 gap-3">
+          <PopoverField label="Schedule">
+            <DateTimePicker
+              date={date}
+              startTime={startTime}
+              endTime={endTime}
+              showTime={showTime}
+              onDateChange={setDate}
+              onStartTimeChange={setStartTime}
+              onEndTimeChange={setEndTime}
+            />
+          </PopoverField>
+
+          <PopoverField label="Effort (hours)">
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={estimateHours}
+              onChange={(event) => setEstimateHours(event.target.value)}
+              placeholder="Optional"
+              className="ui-input h-full"
+            />
+          </PopoverField>
+        </div>
 
         <PopoverField label="Notes">
           <PopoverInput value={notes} onChange={setNotes} placeholder="Add notes…" multiline />

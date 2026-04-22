@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { format, startOfWeek, addDays } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, startOfWeek } from 'date-fns';
 import { useDndMonitor } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import {

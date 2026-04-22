@@ -2,10 +2,21 @@
 
 import { useDraggable } from '@dnd-kit/core';
 import { TimedTaskBlock } from '@/components/ui/TimedTaskBlock';
-import type { Task } from '@/types';
+
+interface DraggableTimedTaskLike {
+  id: string;
+  title: string;
+  status: string;
+  location?: string;
+  startTime?: string;
+  endTime?: string;
+  tagId?: string | null;
+  projectId?: string;
+  recurrentTaskId?: string;
+}
 
 interface DraggableTimedTaskBlockProps {
-  task: Task;
+  task: DraggableTimedTaskLike;
   style?: React.CSSProperties;
   compact?: boolean;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date, time
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, Time, Uuid
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -122,6 +122,7 @@ class Task(Base):
     task_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    estimate_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
@@ -129,6 +130,40 @@ class Task(Base):
 
     project: Mapped["Project | None"] = relationship(back_populates="tasks")
     recurrent_task: Mapped["RecurrentTask | None"] = relationship(back_populates="tasks")
+    allocations: Mapped[list["TaskAllocation"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="TaskAllocation.allocation_date",
+    )
+
+
+class TaskAllocation(Base):
+    __tablename__ = "task_allocations"
+    __table_args__ = (
+        UniqueConstraint("task_id", "allocation_date", name="uq_task_allocations_task_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    allocation_date: Mapped[date] = mapped_column(Date, nullable=False)
+    hours: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    task: Mapped["Task"] = relationship(back_populates="allocations")
+
+
+class WeeklyCapacityTemplate(Base):
+    __tablename__ = "weekly_capacity_templates"
+    __table_args__ = (
+        UniqueConstraint("weekday", name="uq_weekly_capacity_templates_weekday"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    weekday: Mapped[int] = mapped_column(Integer, nullable=False)
+    capacity_hours: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class TaskTag(Base):

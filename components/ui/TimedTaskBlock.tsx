@@ -4,7 +4,6 @@ import { useCallback, useRef } from 'react';
 import { FolderClosed, RefreshCw } from 'lucide-react';
 import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
-import type { Task } from '@/types';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import {
   END_HOUR,
@@ -14,8 +13,20 @@ import {
   snapTo15Min,
 } from '@/lib/timeGrid';
 
+interface TimedTaskLike {
+  id: string;
+  title: string;
+  status: string;
+  location?: string;
+  startTime?: string;
+  endTime?: string;
+  tagId?: string | null;
+  projectId?: string;
+  recurrentTaskId?: string;
+}
+
 interface TimedTaskBlockProps {
-  task: Task;
+  task: TimedTaskLike;
   style?: React.CSSProperties;
   compact?: boolean;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;

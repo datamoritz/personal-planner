@@ -362,7 +362,7 @@ interface PlannerStore extends PlannerState {
   // Tasks
   toggleTask: (id: string) => void;
   addTask: (data: { title: string; location: Task['location']; date?: string; projectId?: string }) => string;
-  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime'>>) => void;
+  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime' | 'estimateHours'>>) => void;
   deleteTask: (id: string) => void;
   // Read / Watch
   addMediaItem: (data: { title: string; kind: MediaKind; recommendedBy?: string; status?: MediaStatus }) => string;
@@ -677,6 +677,7 @@ export const usePlannerStore = create<PlannerStore>()(
           if ('date' in updates)      apiFields.task_date  = updates.date ?? null;
           if ('startTime' in updates) apiFields.start_time = updates.startTime ? `${updates.startTime}:00` : null;
           if ('endTime' in updates)   apiFields.end_time   = updates.endTime   ? `${updates.endTime}:00`   : null;
+          if ('estimateHours' in updates) apiFields.estimate_hours = updates.estimateHours ?? null;
           if (updated.location !== prevTask.location) apiFields.location = updated.location;
 
           api.patchTask(updated.backendId, apiFields).catch((err) => {
@@ -1523,7 +1524,8 @@ export const usePlannerStore = create<PlannerStore>()(
             viewMode === 'week' ||
             viewMode === 'month' ||
             viewMode === 'year' ||
-            viewMode === 'planner'
+            viewMode === 'planner' ||
+            viewMode === 'workload'
               ? viewMode
               : 'day',
           yearPreviewEnabled:

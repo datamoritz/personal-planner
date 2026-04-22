@@ -60,6 +60,7 @@ export interface Task {
 
   // FK → tags.id (single tag per task, not yet synced to backend)
   tagId?: string;
+  estimateHours?: number;
 
   notes?: string;
   createdAt: string;   // ISO datetime
@@ -203,6 +204,52 @@ export interface WatchSearchResult {
   displayTitle: string;
 }
 
+// ─── Workload ─────────────────────────────────────────────────────────────
+
+export interface WorkloadAllocation {
+  id: number;
+  taskId: number;
+  allocationDate: string;
+  hours: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkloadTaskRow {
+  taskId: number;
+  title: string;
+  projectId?: number;
+  estimateHours: number;
+  totalAllocatedHours: number;
+  remainingHours: number;
+  allocations: WorkloadAllocation[];
+}
+
+export interface WorkloadProjectRollup {
+  projectId?: number;
+  projectTitle: string;
+  totalEstimatedHours: number;
+  totalAllocatedHours: number;
+  totalRemainingHours: number;
+  taskCount: number;
+}
+
+export interface WorkloadDaySummary {
+  date: string;
+  weekday: number;
+  capacityHours: number;
+  allocatedHours: number;
+  remainingHours: number;
+}
+
+export interface WorkloadData {
+  startDate: string;
+  endDate: string;
+  tasks: WorkloadTaskRow[];
+  daySummaries: WorkloadDaySummary[];
+  projectRollups: WorkloadProjectRollup[];
+}
+
 // ─── Day State (convenience shape for the store) ───────────────────────────
 
 export interface PlannerState {
@@ -215,10 +262,11 @@ export interface PlannerState {
   tags: Tag[];
 }
 
-export type PlannerViewMode = 'day' | 'week' | 'month' | 'year' | 'planner';
+export type PlannerViewMode = 'day' | 'week' | 'month' | 'year' | 'planner' | 'workload';
 export type MonthViewMode = 'events' | 'tasks';
 export type MonthTaskLayout = 'grid' | 'expanded';
 export type PlannerZoom = 'detail' | 'week' | 'month' | 'quarter';
+export type GoalsSubview = 'timeline' | 'workload';
 
 export interface RecentEmail {
   id: string;

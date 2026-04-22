@@ -3,7 +3,7 @@ from datetime import datetime, date, time
 from datetime import date as date_value
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +417,7 @@ class TaskCreate(BaseModel):
     task_date: date | None = None
     start_time: time | None = None
     end_time: time | None = None
+    estimate_hours: float | None = Field(default=None, ge=0)
     project_id: int | None = None
     recurrent_task_id: int | None = None
     tag_id: int | None = None
@@ -433,6 +434,7 @@ class TaskRead(BaseModel):
     task_date: Optional[date] = None  # nullable in model — fixed from non-optional
     start_time: Optional[time] = None
     end_time: Optional[time] = None
+    estimate_hours: float | None = None
     project_id: Optional[int] = None
     recurrent_task_id: Optional[int] = None
     tag_id: Optional[int] = None
@@ -453,6 +455,7 @@ class TaskUpdate(BaseModel):
     task_date: date | None = None
     start_time: time | None = None
     end_time: time | None = None
+    estimate_hours: float | None = Field(default=None, ge=0)
     project_id: int | None = None
     recurrent_task_id: int | None = None
     tag_id: int | None = None
@@ -470,6 +473,7 @@ class TaskOut(BaseModel):
     task_date: date | None
     start_time: time | None
     end_time: time | None
+    estimate_hours: float | None
     project_id: int | None
     recurrent_task_id: int | None
     tag_id: int | None
@@ -572,3 +576,71 @@ class TagRead(BaseModel):
 class AgendaResponse(BaseModel):
     tasks: list[TaskRead]
     calendar_entries: list[CalendarEntryRead]
+
+
+# ---------------------------------------------------------------------------
+# Workload
+# ---------------------------------------------------------------------------
+
+
+class TaskAllocationBase(BaseModel):
+    task_id: int
+    allocation_date: date
+    hours: float = Field(ge=0)
+
+
+class TaskAllocationUpsert(TaskAllocationBase):
+    pass
+
+
+class TaskAllocationOut(TaskAllocationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class WeeklyCapacityTemplateOut(BaseModel):
+    id: int
+    weekday: int
+    capacity_hours: float
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class WorkloadTaskRowOut(BaseModel):
+    task_id: int
+    title: str
+    project_id: int | None = None
+    estimate_hours: float
+    total_allocated_hours: float
+    remaining_hours: float
+    allocations: list[TaskAllocationOut]
+
+
+class WorkloadProjectRollupOut(BaseModel):
+    project_id: int | None = None
+    project_title: str
+    total_estimated_hours: float
+    total_allocated_hours: float
+    total_remaining_hours: float
+    task_count: int
+
+
+class WorkloadDaySummaryOut(BaseModel):
+    date: date
+    weekday: int
+    capacity_hours: float
+    allocated_hours: float
+    remaining_hours: float
+
+
+class WorkloadReadOut(BaseModel):
+    start_date: date
+    end_date: date
+    tasks: list[WorkloadTaskRowOut]
+    day_summaries: list[WorkloadDaySummaryOut]
+    project_rollups: list[WorkloadProjectRollupOut]

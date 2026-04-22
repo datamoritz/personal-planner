@@ -18,6 +18,11 @@ import type {
   Goal,
   Milestone,
   MilestoneType,
+  WorkloadAllocation,
+  WorkloadData,
+  WorkloadDaySummary,
+  WorkloadProjectRollup,
+  WorkloadTaskRow,
   RecurrentTask,
   RecurrenceFrequency,
   CalendarEntry,
@@ -356,6 +361,7 @@ function toTask(
     projectId:        b.project_id != null ? projectIdMap.get(b.project_id) : undefined,
     recurrentTaskId:  b.recurrent_task_id != null ? recurrentTaskIdMap.get(b.recurrent_task_id) : undefined,
     tagId:            b.tag_id != null ? tagIdMap.get(b.tag_id) : undefined,
+    estimateHours:    b.estimate_hours ?? undefined,
     notes:            b.notes ?? undefined,
     createdAt:        b.created_at,
     updatedAt:        b.updated_at,
@@ -484,6 +490,50 @@ export interface PlannerData {
   projects: Project[];
 }
 
+function toWorkloadAllocation(b: Record<string, unknown>): WorkloadAllocation {
+  return {
+    id: Number(b.id),
+    taskId: Number(b.task_id),
+    allocationDate: String(b.allocation_date),
+    hours: Number(b.hours ?? 0),
+    createdAt: String(b.created_at),
+    updatedAt: String(b.updated_at),
+  };
+}
+
+function toWorkloadTaskRow(b: Record<string, unknown>): WorkloadTaskRow {
+  return {
+    taskId: Number(b.task_id),
+    title: String(b.title),
+    projectId: b.project_id == null ? undefined : Number(b.project_id),
+    estimateHours: Number(b.estimate_hours ?? 0),
+    totalAllocatedHours: Number(b.total_allocated_hours ?? 0),
+    remainingHours: Number(b.remaining_hours ?? 0),
+    allocations: Array.isArray(b.allocations) ? b.allocations.map((allocation) => toWorkloadAllocation(allocation as Record<string, unknown>)) : [],
+  };
+}
+
+function toWorkloadDaySummary(b: Record<string, unknown>): WorkloadDaySummary {
+  return {
+    date: String(b.date),
+    weekday: Number(b.weekday),
+    capacityHours: Number(b.capacity_hours ?? 0),
+    allocatedHours: Number(b.allocated_hours ?? 0),
+    remainingHours: Number(b.remaining_hours ?? 0),
+  };
+}
+
+function toWorkloadProjectRollup(b: Record<string, unknown>): WorkloadProjectRollup {
+  return {
+    projectId: b.project_id == null ? undefined : Number(b.project_id),
+    projectTitle: String(b.project_title),
+    totalEstimatedHours: Number(b.total_estimated_hours ?? 0),
+    totalAllocatedHours: Number(b.total_allocated_hours ?? 0),
+    totalRemainingHours: Number(b.total_remaining_hours ?? 0),
+    taskCount: Number(b.task_count ?? 0),
+  };
+}
+
 export async function fetchAll(): Promise<BootData> {
   const [
     backendProjects,
@@ -530,6 +580,40 @@ export async function fetchPlanner(): Promise<PlannerData> {
     goals: backendPlanner.goals.map(toGoal),
     projects: backendPlanner.projects.map((project) => toProject(project, tagIdMap)),
   };
+}
+
+export async function fetchWorkload(startDate: string, endDate: string): Promise<WorkloadData> {
+  const payload = await get<Record<string, unknown>>(
+    `/workload?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`,
+  );
+  return {
+    startDate: String(payload.start_date),
+    endDate: String(payload.end_date),
+    tasks: Array.isArray(payload.tasks) ? payload.tasks.map((task) => toWorkloadTaskRow(task as Record<string, unknown>)) : [],
+    daySummaries: Array.isArray(payload.day_summaries)
+      ? payload.day_summaries.map((summary) => toWorkloadDaySummary(summary as Record<string, unknown>))
+      : [],
+    projectRollups: Array.isArray(payload.project_rollups)
+      ? payload.project_rollups.map((rollup) => toWorkloadProjectRollup(rollup as Record<string, unknown>))
+      : [],
+  };
+}
+
+export async function upsertTaskAllocation(input: {
+  taskId: number;
+  allocationDate: string;
+  hours: number;
+}): Promise<WorkloadAllocation> {
+  const payload = await post<Record<string, unknown>>('/workload/allocations', {
+    task_id: input.taskId,
+    allocation_date: input.allocationDate,
+    hours: input.hours,
+  });
+  return toWorkloadAllocation(payload);
+}
+
+export async function deleteTaskAllocation(taskId: number, allocationDate: string): Promise<void> {
+  await del(`/workload/allocations?task_id=${encodeURIComponent(String(taskId))}&allocation_date=${encodeURIComponent(allocationDate)}`);
 }
 
 export async function createGoal(input: {
@@ -606,6 +690,7 @@ export async function createTask(
     task_date:           task.date ?? null,
     start_time:          toApiTime(task.startTime),
     end_time:            toApiTime(task.endTime),
+    estimate_hours:      task.estimateHours ?? null,
     project_id:          resolveProjectBackendId(task.projectId, projects),
     recurrent_task_id:   resolveRecurrentTaskBackendId(task.recurrentTaskId, recurrentTasks),
     tag_id:              resolveTagBackendId(task.tagId, tags),
@@ -631,6 +716,7 @@ export async function createTasksBulk(
       task_date: task.date ?? null,
       start_time: toApiTime(task.startTime),
       end_time: toApiTime(task.endTime),
+      estimate_hours: task.estimateHours ?? null,
       project_id: resolveProjectBackendId(task.projectId, projects),
       recurrent_task_id: resolveRecurrentTaskBackendId(task.recurrentTaskId, recurrentTasks),
       tag_id: resolveTagBackendId(task.tagId, tags),

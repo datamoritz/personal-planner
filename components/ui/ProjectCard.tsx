@@ -45,6 +45,7 @@ export function ProjectCard({
   const doneCount = tasks.filter((t) => t.status === 'done').length;
   const total = tasks.length;
   const progressPct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+  const totalEstimatedHours = tasks.reduce((sum, task) => sum + (task.estimateHours ?? 0), 0);
   const visibleTasks = showFinishedTasks ? tasks : tasks.filter((t) => t.status !== 'done');
 
   const projectTag = project.tagId ? tags.find((t) => t.id === project.tagId) : undefined;
@@ -82,9 +83,16 @@ export function ProjectCard({
         </span>
 
         {total > 0 && (
-          <span className="text-[11px] text-[var(--color-text-muted)] whitespace-nowrap">
-            {doneCount}/{total}
-          </span>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            {totalEstimatedHours > 0 && (
+              <span className="text-[10px] font-medium text-[var(--color-text-muted)]">
+                {Number.isInteger(totalEstimatedHours) ? totalEstimatedHours : totalEstimatedHours.toFixed(1)}h
+              </span>
+            )}
+            <span className="text-[11px] text-[var(--color-text-muted)]">
+              {doneCount}/{total}
+            </span>
+          </div>
         )}
 
         {/* Tag color circle */}
@@ -133,7 +141,7 @@ export function ProjectCard({
           <DroppableSection
             containerId={`project-${project.id}`}
             itemIds={visibleTasks.map((t) => t.id)}
-            className="px-2.5 pb-3 flex flex-col gap-1.5"
+            className={`px-2.5 pb-3 flex flex-col gap-1.5 ${visibleTasks.length === 0 ? 'min-h-[5.5rem]' : ''}`}
           >
             {visibleTasks.map((task) => (
               task.location === 'project' ? (
@@ -165,7 +173,9 @@ export function ProjectCard({
               />
             )}
             {visibleTasks.length === 0 && !addingSubtask && (
-              <p className="px-1 py-2 text-xs text-[var(--color-text-muted)] italic">No subtasks yet</p>
+              <div className="flex min-h-[4.5rem] items-center rounded-[0.9rem] border border-dashed border-[var(--color-border-subtle)] bg-[color-mix(in_srgb,var(--color-surface-secondary)_72%,transparent)] px-3">
+                <p className="text-xs text-[var(--color-text-muted)] italic">Drop a task here or add a subtask</p>
+              </div>
             )}
             {doneCount > 0 && !addingSubtask && (
               <button
