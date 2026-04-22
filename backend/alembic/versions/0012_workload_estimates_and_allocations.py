@@ -1,6 +1,6 @@
 """add workload estimates and allocations
 
-Revision ID: 0012_workload_estimates_and_allocations
+Revision ID: 0012_workload_allocs
 Revises: 0011_milestone_type
 Create Date: 2026-04-22
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from datetime import datetime
 
 
-revision = "0012_workload_estimates_and_allocations"
+revision = "0012_workload_allocs"
 down_revision = "0011_milestone_type"
 branch_labels = None
 depends_on = None
