@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, format, startOfWeek } from 'date-fns';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, Plus } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import { deleteTaskAllocation, fetchWorkload, upsertTaskAllocation, upsertWeeklyCapacity } from '@/lib/api';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { WorkloadData, WorkloadProjectRollup, WorkloadTaskRow } from '@/types';
@@ -25,9 +25,14 @@ function dayCapacityKey(weekday: number): string {
 
 export function WorkloadView() {
   const projects = usePlannerStore((state) => state.projects);
+  const plannerTasks = usePlannerStore((state) => state.tasks);
+  const toggleTask = usePlannerStore((state) => state.toggleTask);
+  const updateTask = usePlannerStore((state) => state.updateTask);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [workload, setWorkload] = useState<WorkloadData | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<number[]>([]);
+  const [editingCapacityWeekday, setEditingCapacityWeekday] = useState<number | null>(null);
+  const [editingEstimateTaskId, setEditingEstimateTaskId] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savingCellKey, setSavingCellKey] = useState<string | null>(null);
   const [savingCapacityWeekday, setSavingCapacityWeekday] = useState<number | null>(null);
@@ -53,6 +58,10 @@ export function WorkloadView() {
   const daySummaries = useMemo(() => workload?.daySummaries ?? [], [workload?.daySummaries]);
   const tasks = useMemo(() => workload?.tasks ?? [], [workload?.tasks]);
   const taskMap = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
+  const frontendTaskIdByBackendId = useMemo(
+    () => new Map(plannerTasks.filter((task) => task.backendId != null).map((task) => [task.backendId as number, task.id])),
+    [plannerTasks],
+  );
   const rollupsByProject = useMemo(
     () => new Map((workload?.projectRollups ?? []).map((rollup) => [rollup.projectId ?? -1, rollup])),
     [workload?.projectRollups],
@@ -262,19 +271,32 @@ export function WorkloadView() {
     }
   };
 
-  const adjustCapacity = async (weekday: number, delta: number) => {
-    const summary = displayedDaySummaries.find((day) => day.weekday === weekday);
-    if (!summary) return;
-    const next = Math.max(0, roundHours(summary.capacityHours + delta));
-    setDrafts((current) => ({ ...current, [dayCapacityKey(weekday)]: String(next) }));
-    await commitCapacity(weekday, next);
+  const commitEstimate = async (taskId: number, overrideValue?: number) => {
+    const key = `estimate:${taskId}`;
+    if (overrideValue == null && !Object.prototype.hasOwnProperty.call(drafts, key)) return;
+    const raw = overrideValue == null ? drafts[key].trim() : String(overrideValue);
+    const nextValue = raw === '' ? 0 : Number.parseFloat(raw);
+    if (!Number.isFinite(nextValue) || nextValue < 0) return;
+
+    const frontendTaskId = frontendTaskIdByBackendId.get(taskId);
+    if (!frontendTaskId) return;
+    updateTask(frontendTaskId, { estimateHours: roundHours(nextValue) });
+    setEditingEstimateTaskId(null);
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    await loadWorkload();
   };
 
   const valueTone = (value: number) =>
     value < 0 ? 'text-red-600' : 'text-[var(--color-text-primary)]';
 
-  const totalColumnClass = 'w-[5.25rem] min-w-[5.25rem] border-b border-l border-[var(--color-border)] px-2 py-2 text-right text-[12px]';
-  const dayColumnClass = 'w-[8.25rem] min-w-[8.25rem] border-b border-[var(--color-border)] px-2 py-2 text-center';
+  const totalColumnClass = 'w-[3.9rem] min-w-[3.9rem] border-b border-l border-[var(--color-border)] px-2 py-2 text-center text-[12px]';
+  const totalColumnLastClass = `${totalColumnClass} border-r`;
+  const dayColumnClass = 'w-[5.8rem] min-w-[5.8rem] border-b border-[var(--color-border)] px-1 py-2 text-center';
+  const dayHeaderColumnClass = 'w-[5.8rem] min-w-[5.8rem] border-b border-[var(--color-border)] px-1 py-2 text-center';
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[1.9rem] border border-[var(--color-border)] bg-[var(--color-canvas)] shadow-[var(--shadow-app)]">
@@ -306,13 +328,16 @@ export function WorkloadView() {
         <table className="min-w-full border-separate border-spacing-0 text-left">
           <thead className="sticky top-0 z-20 bg-[var(--color-canvas)]">
             <tr>
-              <th className="sticky left-0 z-30 w-[22rem] border-b border-r border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
+              <th className="sticky left-0 z-30 w-[23rem] min-w-[23rem] border-b border-r border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
                 Task / Project
               </th>
-              {['Est', 'Plan', 'Left'].map((label) => (
+              {['Est', 'Plan', 'Left'].map((label, index) => (
                 <th
                   key={label}
-                  className="w-[5.25rem] min-w-[5.25rem] border-b border-l border-[var(--color-border)] px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]"
+                  className={[
+                    'w-[3.9rem] min-w-[3.9rem] border-b border-l border-[var(--color-border)] px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]',
+                    index === 2 ? 'border-r' : '',
+                  ].join(' ')}
                 >
                   {label}
                 </th>
@@ -320,7 +345,7 @@ export function WorkloadView() {
               {displayedDaySummaries.map((day) => (
                 <th
                   key={day.date}
-                  className="w-[8.25rem] min-w-[8.25rem] border-b border-[var(--color-border)] px-2 py-2 text-center"
+                  className={dayHeaderColumnClass}
                 >
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">
                     {format(new Date(`${day.date}T00:00:00`), 'EEE')}
@@ -328,45 +353,69 @@ export function WorkloadView() {
                   <div className="mt-0.5 text-[12px] font-semibold text-[var(--color-text-primary)]">
                     {format(new Date(`${day.date}T00:00:00`), 'MMM d')}
                   </div>
-                  <div className="group mt-1 flex items-center justify-center gap-1 text-[10px]">
-                    <span className={day.remainingHours < 0 ? 'text-red-600 font-medium' : day.remainingHours === 0 ? 'text-[var(--color-text-muted)] font-medium' : 'text-emerald-600 font-medium'}>
-                      {hoursText(day.allocatedHours)} / 
-                    </span>
+                  {editingCapacityWeekday === day.weekday ? (
+                    <div className="mt-1 flex items-center justify-center gap-0.5 text-[10px]">
+                      <span
+                        className={[
+                          'font-medium tabular-nums',
+                          day.remainingHours < 0
+                            ? 'text-red-600'
+                            : day.remainingHours === 0
+                              ? 'text-[var(--color-text-muted)]'
+                              : 'text-emerald-600',
+                        ].join(' ')}
+                      >
+                        {hoursText(day.allocatedHours)}
+                      </span>
+                      <span className="font-medium text-[var(--color-text-muted)]">/</span>
+                      <input
+                        autoFocus
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={Object.prototype.hasOwnProperty.call(drafts, dayCapacityKey(day.weekday)) ? drafts[dayCapacityKey(day.weekday)] : String(day.capacityHours)}
+                        onChange={(event) => setDrafts((current) => ({ ...current, [dayCapacityKey(day.weekday)]: event.target.value }))}
+                        onBlur={() => {
+                          setEditingCapacityWeekday(null);
+                          void commitCapacity(day.weekday);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') event.currentTarget.blur();
+                          if (event.key === 'Escape') {
+                            setEditingCapacityWeekday(null);
+                            setDrafts((current) => {
+                              const next = { ...current };
+                              delete next[dayCapacityKey(day.weekday)];
+                              return next;
+                            });
+                          }
+                        }}
+                        className={[
+                          'w-[2.4rem] bg-transparent text-left font-medium tabular-nums outline-none text-[var(--color-text-primary)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                          savingCapacityWeekday === day.weekday ? 'opacity-70' : '',
+                        ].join(' ')}
+                      />
+                      <span className="font-medium text-[var(--color-text-muted)]">h</span>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => void adjustCapacity(day.weekday, -0.5)}
-                      className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
-                      title="Decrease available time"
+                      onClick={() => setEditingCapacityWeekday(day.weekday)}
+                      className="mt-1 inline-flex items-center justify-center text-[10px] tabular-nums"
+                      title="Edit available hours"
                     >
-                      <Minus size={11} strokeWidth={2.3} />
+                      <span className={[
+                        'font-medium',
+                        day.remainingHours < 0
+                          ? 'text-red-600'
+                          : day.remainingHours === 0
+                            ? 'text-[var(--color-text-muted)]'
+                            : 'text-emerald-600',
+                      ].join(' ')}>
+                        {`${hoursText(day.allocatedHours)}/${hoursText(day.capacityHours)}`}
+                      </span>
                     </button>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={Object.prototype.hasOwnProperty.call(drafts, dayCapacityKey(day.weekday)) ? drafts[dayCapacityKey(day.weekday)] : String(day.capacityHours)}
-                      onChange={(event) => setDrafts((current) => ({ ...current, [dayCapacityKey(day.weekday)]: event.target.value }))}
-                      onBlur={() => void commitCapacity(day.weekday)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') event.currentTarget.blur();
-                      }}
-                      className={[
-                        'w-9 bg-transparent text-center font-medium outline-none text-[inherit]',
-                        savingCapacityWeekday === day.weekday ? 'opacity-70' : '',
-                      ].join(' ')}
-                    />
-                    <span className={day.remainingHours < 0 ? 'text-red-600 font-medium' : day.remainingHours === 0 ? 'text-[var(--color-text-muted)] font-medium' : 'text-emerald-600 font-medium'}>
-                      h
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void adjustCapacity(day.weekday, 0.5)}
-                      className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
-                      title="Increase available time"
-                    >
-                      <Plus size={11} strokeWidth={2.3} />
-                    </button>
-                  </div>
+                  )}
                 </th>
               ))}
             </tr>
@@ -391,7 +440,7 @@ export function WorkloadView() {
                         <span className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">
                           {rollup.projectTitle}
                         </span>
-                        <span className="ml-auto text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                        <span className="ml-auto text-right text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
                           {projectTotals.taskCount} tasks
                         </span>
                       </button>
@@ -402,7 +451,7 @@ export function WorkloadView() {
                     <td className={`${totalColumnClass} font-semibold text-[var(--color-text-primary)]`}>
                       {hoursText(roundHours(projectTotals.totalAllocatedHours))}
                     </td>
-                    <td className={`${totalColumnClass} font-semibold ${valueTone(roundHours(projectTotals.totalRemainingHours))}`}>
+                    <td className={`${totalColumnLastClass} font-semibold ${valueTone(roundHours(projectTotals.totalRemainingHours))}`}>
                       {hoursText(roundHours(projectTotals.totalRemainingHours))}
                     </td>
                     {displayedDaySummaries.map((day) => (
@@ -416,18 +465,79 @@ export function WorkloadView() {
                     return (
                       <tr key={`task-${task.taskId}`}>
                         <td className="sticky left-0 z-10 border-b border-r border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-2.5">
-                          <div className="flex items-center gap-2 pl-6">
+                          <div className="flex items-center gap-2 pl-7">
                             <span className="text-[var(--color-text-muted)]">↳</span>
                             <span className="truncate text-[13px] text-[var(--color-text-primary)]">{task.title}</span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const frontendTaskId = frontendTaskIdByBackendId.get(task.taskId);
+                                if (!frontendTaskId) return;
+                                toggleTask(frontendTaskId);
+                                setWorkload((current) => current ? {
+                                  ...current,
+                                  tasks: current.tasks.filter((row) => row.taskId !== task.taskId),
+                                  projectRollups: current.projectRollups.map((rollup) =>
+                                    rollup.projectId === task.projectId
+                                      ? {
+                                          ...rollup,
+                                          totalEstimatedHours: roundHours(rollup.totalEstimatedHours - task.estimateHours),
+                                          totalAllocatedHours: roundHours(
+                                            rollup.totalAllocatedHours - task.totalAllocatedHours,
+                                          ),
+                                          totalRemainingHours: roundHours(
+                                            rollup.totalRemainingHours - task.remainingHours,
+                                          ),
+                                          taskCount: Math.max(0, rollup.taskCount - 1),
+                                        }
+                                      : rollup,
+                                  ),
+                                } : current);
+                                await loadWorkload();
+                              }}
+                              className="ml-auto h-[12px] w-[12px] rounded-full border border-[var(--color-text-muted)] transition-colors hover:border-[var(--color-text-primary)]"
+                              title="Mark task finished"
+                            />
                           </div>
                         </td>
                         <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
-                          {hoursText(task.estimateHours)}
+                          {editingEstimateTaskId === task.taskId ? (
+                            <input
+                              autoFocus
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={Object.prototype.hasOwnProperty.call(drafts, `estimate:${task.taskId}`) ? drafts[`estimate:${task.taskId}`] : String(task.estimateHours)}
+                              onChange={(event) => setDrafts((current) => ({ ...current, [`estimate:${task.taskId}`]: event.target.value }))}
+                              onBlur={() => void commitEstimate(task.taskId)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') event.currentTarget.blur();
+                                if (event.key === 'Escape') {
+                                  setEditingEstimateTaskId(null);
+                                  setDrafts((current) => {
+                                    const next = { ...current };
+                                    delete next[`estimate:${task.taskId}`];
+                                    return next;
+                                  });
+                                }
+                              }}
+                              className="w-[3.1rem] bg-transparent text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingEstimateTaskId(task.taskId)}
+                              className="w-full text-center"
+                              title="Edit estimate"
+                            >
+                              {hoursText(task.estimateHours)}
+                            </button>
+                          )}
                         </td>
                         <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
                           {hoursText(taskTotals.totalAllocatedHours)}
                         </td>
-                        <td className={`${totalColumnClass} font-medium ${valueTone(taskTotals.remainingHours)}`}>
+                        <td className={`${totalColumnLastClass} font-medium ${valueTone(taskTotals.remainingHours)}`}>
                           {hoursText(taskTotals.remainingHours)}
                         </td>
                         {displayedDaySummaries.map((day) => {
@@ -440,20 +550,7 @@ export function WorkloadView() {
                               })();
                           return (
                             <td key={key} className={`${dayColumnClass} py-1.5`}>
-                              <div className="group flex items-center justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const currentHours = getDisplayedCellHours(task.taskId, day.date);
-                                    const nextHours = Math.max(0, roundHours(currentHours - 0.5));
-                                    setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
-                                    void commitCell(task.taskId, day.date, nextHours);
-                                  }}
-                                  className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
-                                  title="Decrease hours"
-                                >
-                                  <Minus size={12} strokeWidth={2.3} />
-                                </button>
+                              <div className="flex items-center justify-center">
                                 <input
                                   type="number"
                                   min="0"
@@ -467,24 +564,11 @@ export function WorkloadView() {
                                     }
                                   }}
                                   className={[
-                                    'w-14 bg-transparent text-center text-[12px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                                    'w-[4.1rem] bg-transparent text-center text-[12px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
                                     savingCellKey === key ? 'opacity-70' : '',
                                   ].join(' ')}
                                   placeholder="—"
                                 />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const currentHours = getDisplayedCellHours(task.taskId, day.date);
-                                    const nextHours = roundHours(currentHours + 0.5);
-                                    setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
-                                    void commitCell(task.taskId, day.date, nextHours);
-                                  }}
-                                  className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
-                                  title="Increase hours"
-                                >
-                                  <Plus size={12} strokeWidth={2.3} />
-                                </button>
                               </div>
                             </td>
                           );
@@ -512,7 +596,7 @@ export function WorkloadView() {
                         <td className={`${totalColumnClass} font-semibold text-[var(--color-text-primary)]`}>
                           {hoursText(roundHours(totals.totalAllocatedHours))}
                         </td>
-                        <td className={`${totalColumnClass} font-semibold ${valueTone(roundHours(totals.totalRemainingHours))}`}>
+                        <td className={`${totalColumnLastClass} font-semibold ${valueTone(roundHours(totals.totalRemainingHours))}`}>
                           {hoursText(roundHours(totals.totalRemainingHours))}
                         </td>
                       </>
@@ -529,15 +613,63 @@ export function WorkloadView() {
                   return (
                     <tr key={`task-${task.taskId}`}>
                       <td className="sticky left-0 z-10 border-b border-r border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-2.5">
-                        <span className="truncate text-[13px] text-[var(--color-text-primary)]">{task.title}</span>
+                        <div className="flex items-center gap-2 pl-1">
+                          <span className="truncate text-[13px] text-[var(--color-text-primary)]">{task.title}</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const frontendTaskId = frontendTaskIdByBackendId.get(task.taskId);
+                              if (!frontendTaskId) return;
+                              toggleTask(frontendTaskId);
+                              setWorkload((current) => current ? {
+                                ...current,
+                                tasks: current.tasks.filter((row) => row.taskId !== task.taskId),
+                              } : current);
+                              await loadWorkload();
+                            }}
+                            className="ml-auto h-[12px] w-[12px] rounded-full border border-[var(--color-text-muted)] transition-colors hover:border-[var(--color-text-primary)]"
+                            title="Mark task finished"
+                          />
+                        </div>
                       </td>
                       <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
-                        {hoursText(task.estimateHours)}
+                        {editingEstimateTaskId === task.taskId ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={Object.prototype.hasOwnProperty.call(drafts, `estimate:${task.taskId}`) ? drafts[`estimate:${task.taskId}`] : String(task.estimateHours)}
+                            onChange={(event) => setDrafts((current) => ({ ...current, [`estimate:${task.taskId}`]: event.target.value }))}
+                            onBlur={() => void commitEstimate(task.taskId)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') event.currentTarget.blur();
+                              if (event.key === 'Escape') {
+                                setEditingEstimateTaskId(null);
+                                setDrafts((current) => {
+                                  const next = { ...current };
+                                  delete next[`estimate:${task.taskId}`];
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="w-[3.1rem] bg-transparent text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingEstimateTaskId(task.taskId)}
+                            className="w-full text-center"
+                            title="Edit estimate"
+                          >
+                            {hoursText(task.estimateHours)}
+                          </button>
+                        )}
                       </td>
                       <td className={`${totalColumnClass} text-[var(--color-text-primary)]`}>
                         {hoursText(taskTotals.totalAllocatedHours)}
                       </td>
-                      <td className={`${totalColumnClass} font-medium ${valueTone(taskTotals.remainingHours)}`}>
+                      <td className={`${totalColumnLastClass} font-medium ${valueTone(taskTotals.remainingHours)}`}>
                         {hoursText(taskTotals.remainingHours)}
                       </td>
                       {displayedDaySummaries.map((day) => {
@@ -550,20 +682,7 @@ export function WorkloadView() {
                             })();
                         return (
                           <td key={key} className={`${dayColumnClass} py-1.5`}>
-                            <div className="group flex items-center justify-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const currentHours = getDisplayedCellHours(task.taskId, day.date);
-                                  const nextHours = Math.max(0, roundHours(currentHours - 0.5));
-                                  setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
-                                  void commitCell(task.taskId, day.date, nextHours);
-                                }}
-                                className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
-                                title="Decrease hours"
-                              >
-                                <Minus size={12} strokeWidth={2.3} />
-                              </button>
+                            <div className="flex items-center justify-center">
                               <input
                                 type="number"
                                 min="0"
@@ -575,24 +694,11 @@ export function WorkloadView() {
                                   if (event.key === 'Enter') event.currentTarget.blur();
                                 }}
                                 className={[
-                                  'w-14 bg-transparent text-center text-[12px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                                  'w-[4.1rem] bg-transparent text-center text-[12px] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
                                   savingCellKey === key ? 'opacity-70' : '',
                                 ].join(' ')}
                                 placeholder="—"
                               />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const currentHours = getDisplayedCellHours(task.taskId, day.date);
-                                  const nextHours = roundHours(currentHours + 0.5);
-                                  setDrafts((current) => ({ ...current, [key]: String(nextHours) }));
-                                  void commitCell(task.taskId, day.date, nextHours);
-                                }}
-                                className="opacity-0 transition-opacity group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
-                                title="Increase hours"
-                              >
-                                <Plus size={12} strokeWidth={2.3} />
-                              </button>
                             </div>
                           </td>
                         );

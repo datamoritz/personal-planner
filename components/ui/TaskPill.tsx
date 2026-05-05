@@ -29,9 +29,10 @@ export function TaskPill({
   className = '',
 }: TaskPillProps) {
   const isDone = task.status === 'done';
-  const hasEstimate = typeof task.estimateHours === 'number' && task.estimateHours > 0;
+  const estimateHours = task.estimateHours;
+  const hasEstimate = typeof estimateHours === 'number' && estimateHours > 0;
   const estimateLabel = hasEstimate
-    ? `${Number.isInteger(task.estimateHours) ? task.estimateHours : task.estimateHours.toFixed(1)}h`
+    ? `${Number.isInteger(estimateHours) ? estimateHours : estimateHours.toFixed(1)}h`
     : null;
   const tags = usePlannerStore((s) => s.tags);
   const tag = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
