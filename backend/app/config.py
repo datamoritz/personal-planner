@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "https://personal-planner.vercel.app",
+        "https://personal-planner-sooty.vercel.app",
     ]
 
     @field_validator("APPLE_CALDAV_URL", mode="before")
