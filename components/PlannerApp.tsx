@@ -28,6 +28,28 @@ type ActiveDrag =
 
 const REORDERABLE_CONTAINERS = new Set(['today', 'backlog']);
 
+function pointInRect(x: number, y: number, rect: { left: number; right: number; top: number; bottom: number }) {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function translatedRectHits(
+  translated: { left: number; right: number; top: number; bottom: number; width: number; height: number } | null | undefined,
+  rect: { left: number; right: number; top: number; bottom: number },
+) {
+  if (!translated) return false;
+
+  const centerX = translated.left + translated.width / 2;
+  const centerY = translated.top + translated.height / 2;
+  if (pointInRect(centerX, centerY, rect)) return true;
+
+  const overlapX = Math.max(0, Math.min(translated.right, rect.right) - Math.max(translated.left, rect.left));
+  const overlapY = Math.max(0, Math.min(translated.bottom, rect.bottom) - Math.max(translated.top, rect.top));
+  const overlapArea = overlapX * overlapY;
+  const activeArea = translated.width * translated.height;
+
+  return overlapArea >= Math.min(activeArea * 0.35, 1800);
+}
+
 /**
  * When the dragged item's center is geometrically inside a week-cal-* droppable,
  * return it immediately. Checked against both pointerCoordinates (most accurate)
@@ -52,7 +74,7 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
       if (!String(container.id).startsWith('week-cal-')) continue;
       const rect = droppableRects.get(container.id);
       if (!rect) continue;
-      if (px >= rect.left && px <= rect.right && py >= rect.top && py <= rect.bottom) {
+      if (pointInRect(px, py, rect)) {
         return [{ id: container.id }];
       }
     }
@@ -65,7 +87,7 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
     for (const preferredId of preferredIds) {
       const rect = droppableRects.get(preferredId);
       if (!rect) continue;
-      if (px >= rect.left && px <= rect.right && py >= rect.top && py <= rect.bottom) {
+      if (pointInRect(px, py, rect) || translatedRectHits(translated, rect)) {
         return [{ id: preferredId }];
       }
     }
