@@ -12,7 +12,7 @@ import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 
 type PopoverState = { id: string; anchor: HTMLElement } | null;
 
-export function TasksTodayColumn() {
+export function TasksTodayColumn({ borderRight = true }: { borderRight?: boolean }) {
   const { currentDate, tasks, addTask, toggleTask, viewMode, activeTagFilter } = usePlannerStore();
   const { setNodeRef } = useDroppable({
     id: 'drop-today-column',
@@ -41,7 +41,7 @@ export function TasksTodayColumn() {
   }, [viewMode]);
 
   return (
-    <div ref={setNodeRef} className="flex flex-col h-full overflow-hidden border-r border-[var(--color-border)]">
+    <div ref={setNodeRef} className={`flex flex-col h-full overflow-hidden ${borderRight ? 'border-r border-[var(--color-border)]' : ''}`}>
       <div className="flex h-[52px] items-center justify-between px-4 border-b border-[var(--color-border)] flex-shrink-0">
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Tasks Today</h2>
         <div className="flex items-center gap-1.5">

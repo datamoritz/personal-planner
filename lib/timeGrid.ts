@@ -2,7 +2,8 @@
 
 export const START_HOUR = 0;   // grid starts at midnight
 export const END_HOUR   = 26;  // grid extends to 2 AM next day (late-night overflow zone)
-export const SLOT_HEIGHT = 56; // px per hour — 12h (8am–8pm) ≈ 672px
+export const SLOT_HEIGHT        = 56; // px per hour — 12h (8am–8pm) ≈ 672px
+export const MOBILE_SLOT_HEIGHT = 36; // px per hour on mobile — more compact scroll
 
 export function timeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);

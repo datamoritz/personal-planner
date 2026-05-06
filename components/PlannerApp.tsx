@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   PointerSensor,
+  TouchSensor,
   closestCenter,
   pointerWithin,
   useSensor,
@@ -15,8 +16,10 @@ import { addDays, format } from 'date-fns';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { usePlannerData } from '@/lib/usePlannerData';
 import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
+import { useIsMobile } from '@/lib/useIsMobile';
 import type { Task, RecurrentTask } from '@/types';
 import { PlannerAppView } from './PlannerAppView';
+import { MobileShell } from './mobile/MobileShell';
 
 type ActiveDrag =
   | { type: 'task'; item: Task; compact?: boolean }
@@ -119,8 +122,11 @@ export function PlannerApp() {
     document.body.dataset.theme = theme;
   }, [theme]);
 
+  const isMobile = useIsMobile();
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 250, tolerance: 5 } }),
   );
 
   const collisionDetection = useCallback<CollisionDetection>(
@@ -239,6 +245,20 @@ export function PlannerApp() {
           : <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
         }
       </div>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <MobileShell
+        theme={theme}
+        activeDrag={activeDrag}
+        sensors={sensors}
+        collisionDetection={collisionDetection}
+        handleDragStart={handleDragStart}
+        handleDragEnd={handleDragEnd}
+        handleRefresh={handleRefresh}
+      />
     );
   }
 

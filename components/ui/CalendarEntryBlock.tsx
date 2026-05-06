@@ -8,6 +8,7 @@ import {
   minutesToTime,
   snapTo15Min,
 } from '@/lib/timeGrid';
+import { useSlotHeight } from '@/lib/slotHeightContext';
 
 interface CalendarEntryLike {
   id: string;
@@ -57,10 +58,12 @@ export function CalendarEntryBlock({
   verticalOnly = false,
   className = '',
 }: CalendarEntryBlockProps) {
-  const blockRef = useRef<HTMLDivElement>(null);
+  const blockRef     = useRef<HTMLDivElement>(null);
   const canReposition = !!onRepositionEnd;
-  const canResize = !!onResizeEnd;
-  const canOpen = !!onDoubleClick;
+  const canResize    = !!onResizeEnd;
+  const canOpen      = !!onDoubleClick;
+  const slotHeight   = useSlotHeight();
+  const isMobileGrid = slotHeight < SLOT_HEIGHT;
 
   // ── Drag to reposition ──────────────────────────────────────────────────
   const handleDragPointerDown = (e: React.PointerEvent) => {
@@ -144,7 +147,7 @@ export function CalendarEntryBlock({
 
     const onMove = (ev: PointerEvent) => {
       const dy = ev.clientY - startY;
-      liveHeight = Math.max(initialHeight + dy, SLOT_HEIGHT / 4);
+      liveHeight = Math.max(initialHeight + dy, slotHeight / 4);
       if (blockRef.current) blockRef.current.style.height = `${liveHeight}px`;
     };
 
@@ -155,7 +158,7 @@ export function CalendarEntryBlock({
 
       if (blockRef.current) blockRef.current.style.height = '';
 
-      const deltaMins = ((liveHeight - initialHeight) / SLOT_HEIGHT) * 60;
+      const deltaMins = ((liveHeight - initialHeight) / slotHeight) * 60;
       const raw       = initialEndMins + deltaMins;
       const snapped   = snapTo15Min(raw);
       const finalMins = Math.max(startMins + 15, Math.min(snapped, END_HOUR * 60));
@@ -204,7 +207,7 @@ export function CalendarEntryBlock({
       {canResize && (
         <div
           onPointerDown={handleResizePointerDown}
-          className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center group"
+          className={`absolute bottom-0 left-0 right-0 ${isMobileGrid ? 'h-6' : 'h-2'} cursor-row-resize flex items-center justify-center group`}
         >
           <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[var(--color-google-event-text)]' : 'bg-[var(--color-accent)]'} opacity-30 group-hover:opacity-70 transition-opacity`} />
         </div>

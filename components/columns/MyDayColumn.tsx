@@ -15,13 +15,12 @@ import {
 } from '@/store/usePlannerStore';
 import {
   END_HOUR,
-  SLOT_HEIGHT,
   timeToMinutes,
   minutesToTime,
-  minutesToOffset,
   snapTo15Min,
   normalizeGridEventRange,
 } from '@/lib/timeGrid';
+import { useSlotHeight } from '@/lib/slotHeightContext';
 import { computeOverlapDepths } from '@/lib/overlapLayout';
 import type { OverlapItem } from '@/lib/overlapLayout';
 import * as api from '@/lib/api';
@@ -50,9 +49,9 @@ function createClickAnchor(x: number, y: number): HTMLElement {
   return anchor;
 }
 
-function getCurrentTimeOffset() {
+function getCurrentTimeOffset(slotHeight: number) {
   const now = new Date();
-  return minutesToOffset(now.getHours() * 60 + now.getMinutes());
+  return ((now.getHours() * 60 + now.getMinutes()) / 60) * slotHeight;
 }
 
 function getCurrentTimeLabel() {
@@ -99,7 +98,8 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     return currentDate === format(d, 'yyyy-MM-dd') && new Date().getHours() < 2;
   })();
 
-  const [timeOffset, setTimeOffset] = useState<number | null>(isToday ? getCurrentTimeOffset() : null);
+  const slotHeight = useSlotHeight();
+  const [timeOffset, setTimeOffset] = useState<number | null>(isToday ? getCurrentTimeOffset(slotHeight) : null);
   const [timeLabel,  setTimeLabel]  = useState<string>(isToday ? getCurrentTimeLabel() : '');
   const [popover, setPopover]       = useState<PopoverState>(null);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -160,15 +160,15 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = DEFAULT_SCROLL_H * SLOT_HEIGHT;
+    if (scrollRef.current) scrollRef.current.scrollTop = DEFAULT_SCROLL_H * slotHeight;
   }, []);
 
   useEffect(() => {
     if (!isToday) { setTimeOffset(null); setTimeLabel(''); return; }
-    setTimeOffset(getCurrentTimeOffset());
+    setTimeOffset(getCurrentTimeOffset(slotHeight));
     setTimeLabel(getCurrentTimeLabel());
     const id = setInterval(() => {
-      setTimeOffset(getCurrentTimeOffset());
+      setTimeOffset(getCurrentTimeOffset(slotHeight));
       setTimeLabel(getCurrentTimeLabel());
     }, 60_000);
     return () => clearInterval(id);
@@ -199,7 +199,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
           ? timeToMinutes(task.endTime) - timeToMinutes(task.startTime)
           : 60;
         const dropY     = centerY - gridRect.top + scrollRef.current.scrollTop;
-        const snapped   = snapTo15Min((dropY / SLOT_HEIGHT) * 60);
+        const snapped   = snapTo15Min((dropY / slotHeight) * 60);
         const startMins = Math.max(0, Math.min(snapped, END_HOUR * 60 - duration));
         moveTask(String(active.id), {
           location:  'myday',
@@ -213,7 +213,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       // External task dropped into My Day grid
       if (!inGrid) return;
       const dropY     = centerY - gridRect.top + scrollRef.current.scrollTop;
-      const snapped   = snapTo15Min((dropY / SLOT_HEIGHT) * 60);
+      const snapped   = snapTo15Min((dropY / slotHeight) * 60);
       const startMins = Math.max(0, Math.min(snapped, END_HOUR * 60 - 60));
       moveTask(String(active.id), {
         location:  'myday',
@@ -227,7 +227,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
   const handleGridDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement) !== e.currentTarget) return;
     const y       = e.clientY - e.currentTarget.getBoundingClientRect().top;
-    const snapped = snapTo15Min((y / SLOT_HEIGHT) * 60);
+    const snapped = snapTo15Min((y / slotHeight) * 60);
     const startMinutes = Math.max(0, Math.min(snapped, END_HOUR * 60 - 60));
     const endMinutes = startMinutes + 60;
     const baseDate = new Date(`${currentDate}T00:00:00`);

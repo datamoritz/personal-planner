@@ -10,16 +10,13 @@ import { AppleBirthdayDetailPopover } from '@/components/ui/AppleBirthdayDetailP
 import { UncertaintyNotepad } from '@/components/ui/UncertaintyNotepad';
 import {
   END_HOUR,
-  SLOT_HEIGHT,
   timeToMinutes,
-  minutesToOffset,
-  durationToHeight,
 } from '@/lib/timeGrid';
+import { useSlotHeight } from '@/lib/slotHeightContext';
 import type { AllDayEvent } from '@/types';
 import type { OverlapDepthMap } from './sharedCalendarViewTypes';
 
 const TOTAL_HOURS = END_HOUR;
-const GRID_HEIGHT = TOTAL_HOURS * SLOT_HEIGHT;
 const LEFT_BASE = 52;
 const OVERLAP_SHIFT = 14;
 
@@ -105,14 +102,6 @@ function getCurrentTimeLabel() {
   return `${h}:${m}`;
 }
 
-function overflowTop(startTime: string) {
-  return minutesToOffset(24 * 60 + timeToMinutes(startTime)) + 1;
-}
-
-function overflowHeight(startTime: string, endTime: string) {
-  return Math.max(durationToHeight(startTime, endTime) - 2, 24);
-}
-
 export function MyDayColumnView({
   notepadOpen,
   actionsMode,
@@ -145,6 +134,14 @@ export function MyDayColumnView({
   popover,
   closePopover,
 }: MyDayColumnViewProps) {
+  const slotHeight = useSlotHeight();
+  const gridHeight = TOTAL_HOURS * slotHeight;
+
+  const toOffset = (mins: number) => (mins / 60) * slotHeight;
+  const toDuration = (s: string, e: string) => ((timeToMinutes(e) - timeToMinutes(s)) / 60) * slotHeight;
+  const overflowTop = (startTime: string) => toOffset(24 * 60 + timeToMinutes(startTime)) + 1;
+  const overflowHeight = (startTime: string, endTime: string) => Math.max(toDuration(startTime, endTime) - 2, 24);
+
   return (
     <div className="flex flex-col h-full overflow-hidden border-r border-[var(--color-border)]">
       <div
@@ -226,12 +223,12 @@ export function MyDayColumnView({
 
       {!notepadOpen && (
         <div ref={setRef} className="flex-1 overflow-y-auto min-h-0">
-          <div className="relative" style={{ height: GRID_HEIGHT }} onDoubleClick={handleGridDoubleClick}>
+          <div className="relative" style={{ height: gridHeight }} onDoubleClick={handleGridDoubleClick}>
             {hours.map((hour) => (
               <div
                 key={hour}
                 className="absolute left-0 right-0 flex items-start pointer-events-none"
-                style={{ top: hour * SLOT_HEIGHT }}
+                style={{ top: hour * slotHeight }}
               >
                 <span className="w-12 text-right pr-3 text-[10px] text-[var(--color-text-secondary)] leading-none -mt-[6px] flex-shrink-0 select-none font-medium">
                   {formatHour(hour)}
@@ -244,7 +241,7 @@ export function MyDayColumnView({
               <div
                 key={`half-${i}`}
                 className="absolute left-12 right-0 border-t border-dashed border-[var(--color-border-grid)] opacity-50 pointer-events-none"
-                style={{ top: (i + 0.5) * SLOT_HEIGHT }}
+                style={{ top: (i + 0.5) * slotHeight }}
               />
             ))}
 
@@ -252,7 +249,7 @@ export function MyDayColumnView({
               <div
                 className="absolute left-0 right-0 top-0 pointer-events-none z-[1]"
                 style={{
-                  height: minutesToOffset(24 * 60 + new Date().getHours() * 60 + new Date().getMinutes()),
+                  height: toOffset(24 * 60 + new Date().getHours() * 60 + new Date().getMinutes()),
                   background: 'var(--color-past-overlay)',
                 }}
               />
@@ -265,7 +262,7 @@ export function MyDayColumnView({
             )}
 
             {isYesterday && (() => {
-              const overflowOffset = minutesToOffset(24 * 60 + new Date().getHours() * 60 + new Date().getMinutes());
+              const overflowOffset = toOffset(24 * 60 + new Date().getHours() * 60 + new Date().getMinutes());
               return (
                 <div
                   className="absolute left-0 right-0 flex items-center pointer-events-none z-50 -translate-y-1/2"
@@ -301,8 +298,8 @@ export function MyDayColumnView({
                   entry={entry}
                   readOnly
                   style={{
-                    top: minutesToOffset(timeToMinutes(entry.startTime)) + 1,
-                    height: Math.max(durationToHeight(entry.startTime, entry.endTime) - 2, 24),
+                    top: toOffset(timeToMinutes(entry.startTime)) + 1,
+                    height: Math.max(toDuration(entry.startTime, entry.endTime) - 2, 24),
                     left: LEFT_BASE + depth * OVERLAP_SHIFT,
                     right: 4,
                     zIndex: 5 + depth,
@@ -322,10 +319,10 @@ export function MyDayColumnView({
                   key={task.id}
                   task={task}
                   style={{
-                    top: task.startTime ? minutesToOffset(timeToMinutes(task.startTime)) + 1 : 0,
+                    top: task.startTime ? toOffset(timeToMinutes(task.startTime)) + 1 : 0,
                     height: task.startTime && task.endTime
-                      ? Math.max(durationToHeight(task.startTime, task.endTime) - 2, 24)
-                      : SLOT_HEIGHT - 2,
+                      ? Math.max(toDuration(task.startTime, task.endTime) - 2, 24)
+                      : slotHeight - 2,
                     left: LEFT_BASE + depth * OVERLAP_SHIFT,
                     right: 4,
                     zIndex: 5 + depth,
@@ -367,7 +364,7 @@ export function MyDayColumnView({
                   top: task.startTime ? overflowTop(task.startTime) : 0,
                   height: task.startTime && task.endTime
                     ? overflowHeight(task.startTime, task.endTime)
-                    : SLOT_HEIGHT - 2,
+                    : slotHeight - 2,
                   left: LEFT_BASE,
                   right: 4,
                   zIndex: 4,

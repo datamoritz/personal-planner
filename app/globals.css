@@ -208,6 +208,14 @@ html, body {
   animation: item-enter 160ms ease-out both;
 }
 
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.sheet-enter {
+  animation: sheet-up 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
 @keyframes check-pop {
   0%   { transform: scale(1); }
   40%  { transform: scale(1.35); }

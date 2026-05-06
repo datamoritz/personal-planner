@@ -12,6 +12,7 @@ import {
   minutesToTime,
   snapTo15Min,
 } from '@/lib/timeGrid';
+import { useSlotHeight } from '@/lib/slotHeightContext';
 
 interface TimedTaskLike {
   id: string;
@@ -55,9 +56,11 @@ export function TimedTaskBlock({
   gripAttributes,
   isDraggingOut = false,
 }: TimedTaskBlockProps) {
-  const isDone   = task.status === 'done';
-  const tags     = usePlannerStore((s) => s.tags);
-  const tag      = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
+  const isDone     = task.status === 'done';
+  const tags       = usePlannerStore((s) => s.tags);
+  const tag        = task.tagId ? tags.find((t) => t.id === task.tagId) : undefined;
+  const slotHeight = useSlotHeight();
+  const isMobileGrid = slotHeight < SLOT_HEIGHT;
   const tagBg    = (!isDone && tag) ? tag.colorDark + '24' : undefined;
   const tagBorder = (!isDone && tag) ? `${tag.colorDark}30` : undefined;
   const blockRef = useRef<HTMLDivElement>(null);
@@ -139,7 +142,7 @@ export function TimedTaskBlock({
 
     const onMove = (ev: PointerEvent) => {
       const dy   = ev.clientY - startY;
-      liveHeight = Math.max(initialHeight + dy, SLOT_HEIGHT / 4);
+      liveHeight = Math.max(initialHeight + dy, slotHeight / 4);
       if (blockRef.current) blockRef.current.style.height = `${liveHeight}px`;
     };
 
@@ -148,7 +151,7 @@ export function TimedTaskBlock({
       window.removeEventListener('pointerup', onUp);
       captureTarget.releasePointerCapture(ev.pointerId);
       if (blockRef.current) blockRef.current.style.height = '';
-      const deltaMins = ((liveHeight - initialHeight) / SLOT_HEIGHT) * 60;
+      const deltaMins = ((liveHeight - initialHeight) / slotHeight) * 60;
       const snapped   = snapTo15Min(initialEndMins + deltaMins);
       const finalMins = Math.max(startMins + 15, Math.min(snapped, END_HOUR * 60));
       onResizeEnd?.(task.id, minutesToTime(finalMins));
@@ -240,7 +243,7 @@ export function TimedTaskBlock({
       {onResizeEnd && task.startTime && (
         <div
           onPointerDown={handleResizePointerDown}
-          className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize flex items-center justify-center"
+          className={`absolute bottom-0 left-0 right-0 ${isMobileGrid ? 'h-6' : 'h-2'} cursor-row-resize flex items-center justify-center`}
         >
           <div className="w-6 h-0.5 rounded-full bg-[var(--color-border)] opacity-60 group-hover:opacity-100 transition-opacity" />
         </div>
