@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useSyncExternalStore } from 'react';
-import { ChevronLeft, ChevronRight, Moon, RefreshCw, Sun } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Moon, RefreshCw, Sparkles, Sun } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -81,6 +81,8 @@ export function MobileShell({
   );
 
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureFocusToken, setCaptureFocusToken] = useState(0);
 
   // Clamp to the three views available on mobile
   const mobileView = (viewMode === 'day' || viewMode === 'week' || viewMode === 'month')
@@ -101,6 +103,13 @@ export function MobileShell({
   // Swipe left/right to navigate — cancelled if vertical scroll is detected first
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const headerTouchStartX = useRef<number | null>(null);
+  const headerTouchStartY = useRef<number | null>(null);
+
+  const openCapture = () => {
+    setCaptureOpen(true);
+    setCaptureFocusToken((token) => token + 1);
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -124,6 +133,20 @@ export function MobileShell({
     if (deltaX > 0) navPrev(); else navNext();
   };
 
+  const handleHeaderTouchStart = (e: React.TouchEvent) => {
+    headerTouchStartX.current = e.touches[0].clientX;
+    headerTouchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleHeaderTouchEnd = (e: React.TouchEvent) => {
+    if (headerTouchStartX.current === null || headerTouchStartY.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - headerTouchStartX.current;
+    const deltaY = e.changedTouches[0].clientY - headerTouchStartY.current;
+    headerTouchStartX.current = null;
+    headerTouchStartY.current = null;
+    if (deltaY > 34 && Math.abs(deltaY) > Math.abs(deltaX) * 1.25) openCapture();
+  };
+
   const dateLabel = formatHeaderDate(mobileView, currentDate, mounted);
   const isAtToday = mounted && mobileView === 'day' && currentDate === format(new Date(), 'yyyy-MM-dd');
 
@@ -137,7 +160,11 @@ export function MobileShell({
         onDragEnd={handleDragEnd}
       >
         {/* Top header */}
-        <header className="flex-shrink-0 flex items-center justify-between px-3 h-12 bg-[var(--color-canvas)] border-b border-[var(--color-border)]">
+        <header
+          className="flex-shrink-0 flex items-center justify-between px-3 h-12 bg-[var(--color-canvas)] border-b border-[var(--color-border)]"
+          onTouchStart={handleHeaderTouchStart}
+          onTouchEnd={handleHeaderTouchEnd}
+        >
           <button onClick={navPrev} className="ui-icon-button" aria-label="Previous">
             <ChevronLeft size={18} strokeWidth={2} />
           </button>
@@ -161,6 +188,18 @@ export function MobileShell({
           </div>
 
           <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => captureOpen ? setCaptureOpen(false) : openCapture()}
+              className={[
+                'ui-icon-button',
+                captureOpen ? 'ui-icon-button--accent' : '',
+              ].join(' ')}
+              aria-label={captureOpen ? 'Hide AI capture' : 'Show AI capture'}
+              title={captureOpen ? 'Hide AI capture' : 'Show AI capture'}
+            >
+              <Sparkles size={14} strokeWidth={2.2} />
+            </button>
             {googleNeedsReconnect ? (
               <button
                 onClick={() => window.open('https://planner-api.moritzknodler.com/auth/google/login', '_blank')}
@@ -184,8 +223,12 @@ export function MobileShell({
           </div>
         </header>
 
-        {/* Capture bar — always visible above the view */}
-        <MobileCaptureBar />
+        {captureOpen && (
+          <MobileCaptureBar
+            autoFocusToken={captureFocusToken}
+            onClose={() => setCaptureOpen(false)}
+          />
+        )}
 
         {/* Content area */}
         <main

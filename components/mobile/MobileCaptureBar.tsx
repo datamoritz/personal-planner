@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import { Loader2, Plus, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronUp, Loader2, Plus, Sparkles } from 'lucide-react';
 import * as api from '@/lib/api';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { TextDraftMode, TextDraftResponse } from '@/types';
@@ -33,7 +33,12 @@ function normalizeDraftLocation(draft: TextDraftResponse): 'today' | 'myday' {
   return 'today';
 }
 
-export function MobileCaptureBar() {
+interface MobileCaptureBarProps {
+  autoFocusToken?: number;
+  onClose?: () => void;
+}
+
+export function MobileCaptureBar({ autoFocusToken = 0, onClose }: MobileCaptureBarProps) {
   const currentDate  = usePlannerStore((s) => s.currentDate);
   const viewMode     = usePlannerStore((s) => s.viewMode);
   const addTask      = usePlannerStore((s) => s.addTask);
@@ -47,8 +52,16 @@ export function MobileCaptureBar() {
   const [error, setError]           = useState<string | null>(null);
   const [popover, setPopover]       = useState<PopoverState>(null);
   const inputRef                    = useRef<HTMLInputElement>(null);
+  const touchStartY                 = useRef<number | null>(null);
+  const touchStartX                 = useRef<number | null>(null);
 
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+
+  useEffect(() => {
+    if (autoFocusToken > 0) {
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }, [autoFocusToken]);
 
   const closePopover = () => {
     setPopover((current) => {
@@ -128,30 +141,60 @@ export function MobileCaptureBar() {
     }
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null || touchStartX.current === null) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartY.current = null;
+    touchStartX.current = null;
+    if (deltaY < -34 && Math.abs(deltaY) > Math.abs(deltaX) * 1.25) onClose?.();
+  };
+
   return (
     <>
-      <div className="flex-shrink-0 px-3 py-2 bg-[var(--color-canvas)] border-b border-[var(--color-border)]">
-        {/* Mode toggle */}
-        <div className="flex items-center gap-1.5 mb-1.5">
-          {(['task', 'event'] as const).map((m) => (
+      <div
+        className="item-enter flex-shrink-0 bg-[var(--color-canvas)] border-b border-[var(--color-border)]"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1.5">
+          <div className="flex items-center gap-1.5">
+            {(['task', 'event'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={[
+                  'px-2.5 py-0.5 rounded-full text-[11px] font-medium capitalize transition-all',
+                  mode === m
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'text-[var(--color-text-muted)] bg-[var(--color-surface)] border border-[var(--color-border)]',
+                ].join(' ')}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          {onClose && (
             <button
-              key={m}
               type="button"
-              onClick={() => setMode(m)}
-              className={[
-                'px-2.5 py-0.5 rounded-full text-[11px] font-medium capitalize transition-all',
-                mode === m
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-text-muted)] bg-[var(--color-surface)] border border-[var(--color-border)]',
-              ].join(' ')}
+              onClick={onClose}
+              title="Hide AI capture"
+              aria-label="Hide AI capture"
+              className="ui-icon-button h-6 w-6 rounded-lg"
             >
-              {m}
+              <ChevronUp size={15} strokeWidth={2.2} />
             </button>
-          ))}
+          )}
         </div>
 
         {/* Input row */}
-        <div className="flex items-center gap-1.5 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] px-3 py-2">
+        <div className="mx-3 mb-2 flex items-center gap-1.5 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] px-3 py-2">
           <input
             ref={inputRef}
             type="text"
@@ -192,7 +235,7 @@ export function MobileCaptureBar() {
         </div>
 
         {error && (
-          <p className="text-[10px] text-rose-500 mt-1 px-1">{error}</p>
+          <p className="text-[10px] text-rose-500 px-4 pb-2">{error}</p>
         )}
       </div>
 
