@@ -77,6 +77,7 @@ export function TimedTaskBlock({
     if (gripActive.current) return; // grip takes over for dnd-kit
     if (!onRepositionEnd || !task.startTime || !task.endTime) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (isMobileGrid && e.pointerType === 'touch') return;
     e.preventDefault();
 
     const captureTarget = e.currentTarget as HTMLElement;
@@ -114,7 +115,7 @@ export function TimedTaskBlock({
           blockRef.current.style.opacity = '';
           blockRef.current.style.cursor  = '';
         }
-        const raw       = (currentTop / SLOT_HEIGHT) * 60;
+        const raw       = (currentTop / slotHeight) * 60;
         const startMins = Math.max(0, Math.min(snapTo15Min(raw), END_HOUR * 60 - duration));
         const pos       = verticalOnly ? undefined : { x: ev.clientX, y: ev.clientY };
         onRepositionEnd(task.id, minutesToTime(startMins), minutesToTime(startMins + duration), pos);
@@ -128,6 +129,7 @@ export function TimedTaskBlock({
   // ── Resize handle ───────────────────────────────────────────────────────
   const handleResizePointerDown = (e: React.PointerEvent) => {
     if (!task.startTime || !task.endTime) return;
+    if (isMobileGrid && e.pointerType === 'touch') return;
     e.preventDefault();
     e.stopPropagation();
 

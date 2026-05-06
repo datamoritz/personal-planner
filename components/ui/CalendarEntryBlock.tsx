@@ -69,6 +69,7 @@ export function CalendarEntryBlock({
   const handleDragPointerDown = (e: React.PointerEvent) => {
     if (!canReposition) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (isMobileGrid && e.pointerType === 'touch') return;
     e.preventDefault();
 
     // Save captureTarget in closure so onUp can release it correctly
@@ -115,7 +116,7 @@ export function CalendarEntryBlock({
           blockRef.current.style.opacity = '';
           blockRef.current.style.cursor  = '';
         }
-        const rawMinutes = (currentTop / SLOT_HEIGHT) * 60;
+        const rawMinutes = (currentTop / slotHeight) * 60;
         const snapped    = snapTo15Min(rawMinutes);
         const startMins  = Math.max(0, Math.min(snapped, END_HOUR * 60 - duration));
         const pos = verticalOnly ? undefined : { x: ev.clientX, y: ev.clientY };
@@ -130,6 +131,7 @@ export function CalendarEntryBlock({
   // ── Resize handle ───────────────────────────────────────────────────────
   const handleResizePointerDown = (e: React.PointerEvent) => {
     if (!canResize) return;
+    if (isMobileGrid && e.pointerType === 'touch') return;
     e.preventDefault();
     e.stopPropagation();
 

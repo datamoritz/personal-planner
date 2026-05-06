@@ -124,6 +124,18 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
     const nextTitle = updates.title ?? entry.title;
     const nextNotes = updates.notes ?? entry.notes;
     const normalizedRange = normalizeGridEventRange(nextDate, nextStart, nextEnd);
+    const previousStartDate = entry.startDate ?? entry.date;
+    const previousEndDate = entry.endDate ?? entry.date;
+    if (
+      nextTitle === entry.title &&
+      normalizedRange.startDate === previousStartDate &&
+      normalizedRange.endDate === previousEndDate &&
+      normalizedRange.startTime === entry.startTime &&
+      normalizedRange.endTime === entry.endTime &&
+      (nextNotes ?? '') === (entry.notes ?? '')
+    ) {
+      return;
+    }
     const optimisticEntry = {
       ...entry,
       title: nextTitle,
