@@ -215,7 +215,11 @@ function GoogleCalendarEntryDetailPopoverInner({
       if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
 
       const target = event.target;
-      if (target instanceof HTMLTextAreaElement) return;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      ) return;
 
       event.preventDefault();
       handleClose();

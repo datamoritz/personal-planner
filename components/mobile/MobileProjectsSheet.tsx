@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, MoreHorizontal, Plus, X } from 'lucide-react';
+import { CalendarPlus, CheckCircle2, ChevronDown, FolderOpen, Inbox, MoreHorizontal, Plus, Trash2, X } from 'lucide-react';
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
 import {
   usePlannerStore,
@@ -12,9 +12,8 @@ import {
 } from '@/store/usePlannerStore';
 import * as api from '@/lib/api';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
-import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { RecurrentTaskDetailPopover } from '@/components/ui/RecurrentTaskDetailPopover';
-import type { Task } from '@/types';
+import type { Project, Task } from '@/types';
 
 type SheetTab = 'projects' | 'backlog' | 'upcoming' | 'recurrent';
 
@@ -96,13 +95,47 @@ function TaskRow({
   );
 }
 
+function ActionButton({
+  icon,
+  label,
+  danger,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[13px] font-medium transition-colors',
+        danger
+          ? 'text-[var(--color-overdue)] hover:bg-[var(--color-overdue-subtle)]'
+          : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]',
+      ].join(' ')}
+    >
+      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface)] text-current">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </button>
+  );
+}
+
 export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
   const [tab, setTab]                       = useState<SheetTab>('projects');
   const [addingBacklog, setAddingBacklog]   = useState(false);
   const [addingRecurrent, setAddingRecurrent] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [actionMenu, setActionMenu] = useState<
+    | { type: 'task'; id: string }
+    | { type: 'project'; id: string }
+    | null
+  >(null);
   const [popover, setPopover] = useState<
-    | { type: 'task'; id: string; anchor: HTMLElement }
     | { type: 'recurrent'; id: string; anchor: HTMLElement }
     | null
   >(null);
@@ -110,6 +143,7 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
   const {
     currentDate, tasks, recurrentTasks, projects, tags,
     addTask, toggleTask, advanceRecurrentTask, addRecurrentTask,
+    moveTask, deleteTask, finishProject, deleteProject,
   } = usePlannerStore();
 
   const overdue        = selectOverdueTasks(tasks);
@@ -117,6 +151,18 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
   const upcoming       = selectUpcomingTasks(tasks, currentDate);
   const recurrent      = selectRecurrentTasksSorted(recurrentTasks);
   const activeProjects = projects.filter((p) => p.status === 'active');
+  const actionTask = actionMenu?.type === 'task'
+    ? tasks.find((task) => task.id === actionMenu.id)
+    : undefined;
+  const actionProject = actionMenu?.type === 'project'
+    ? activeProjects.find((project) => project.id === actionMenu.id)
+    : undefined;
+
+  const moveActionTask = (dest: Parameters<typeof moveTask>[1]) => {
+    if (!actionTask) return;
+    moveTask(actionTask.id, dest);
+    setActionMenu(null);
+  };
 
   const toggleProject = (id: string) => {
     setExpandedProjects((prev) => {
@@ -180,26 +226,38 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
 
                 return (
                   <div key={project.id}>
-                    <button
-                      type="button"
-                      onClick={() => toggleProject(project.id)}
+                    <div
                       className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-[0.875rem] bg-[var(--color-surface)] border border-[var(--color-border)] text-left transition-colors active:bg-[var(--color-surface-raised)]"
                       style={tag ? { borderLeftColor: tag.colorDark, borderLeftWidth: '3px' } : {}}
                     >
-                      <ChevronDown
-                        size={13}
-                        strokeWidth={2.2}
-                        className={`flex-shrink-0 text-[var(--color-text-muted)] transition-transform ${isExpanded ? '' : '-rotate-90'}`}
-                      />
-                      <span className="flex-1 text-[13px] font-semibold text-[var(--color-text-primary)] truncate">
-                        {project.title}
-                      </span>
-                      {projectTasks.length > 0 && (
-                        <span className="text-[11px] text-[var(--color-text-muted)] flex-shrink-0 tabular-nums">
-                          {remaining} left
+                      <button
+                        type="button"
+                        onClick={() => toggleProject(project.id)}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                      >
+                        <ChevronDown
+                          size={13}
+                          strokeWidth={2.2}
+                          className={`flex-shrink-0 text-[var(--color-text-muted)] transition-transform ${isExpanded ? '' : '-rotate-90'}`}
+                        />
+                        <span className="flex-1 text-[13px] font-semibold text-[var(--color-text-primary)] truncate">
+                          {project.title}
                         </span>
-                      )}
-                    </button>
+                        {projectTasks.length > 0 && (
+                          <span className="text-[11px] text-[var(--color-text-muted)] flex-shrink-0 tabular-nums">
+                            {remaining} left
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActionMenu({ type: 'project', id: project.id })}
+                        className="flex-shrink-0 ui-icon-button"
+                        aria-label="Project actions"
+                      >
+                        <MoreHorizontal size={14} strokeWidth={2} />
+                      </button>
+                    </div>
 
                     {isExpanded && (
                       <div className="pl-3 mt-1 mb-0.5 flex flex-col gap-1">
@@ -211,7 +269,7 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
                             key={task.id}
                             task={task}
                             onToggle={() => toggleTask(task.id)}
-                            onDetail={(anchor) => setPopover({ type: 'task', id: task.id, anchor })}
+                            onDetail={() => setActionMenu({ type: 'task', id: task.id })}
                           />
                         ))}
                       </div>
@@ -236,7 +294,7 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
                       task={task}
                       isOverdue
                       onToggle={() => toggleTask(task.id)}
-                      onDetail={(anchor) => setPopover({ type: 'task', id: task.id, anchor })}
+                      onDetail={() => setActionMenu({ type: 'task', id: task.id })}
                     />
                   ))}
                   <div className="h-px bg-[var(--color-border)] my-1" />
@@ -250,7 +308,7 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
                   key={task.id}
                   task={task}
                   onToggle={() => toggleTask(task.id)}
-                  onDetail={(anchor) => setPopover({ type: 'task', id: task.id, anchor })}
+                  onDetail={() => setActionMenu({ type: 'task', id: task.id })}
                 />
               ))}
               {addingBacklog && (
@@ -283,7 +341,7 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
                   task={task}
                   showDate
                   onToggle={() => toggleTask(task.id)}
-                  onDetail={(anchor) => setPopover({ type: 'task', id: task.id, anchor })}
+                  onDetail={() => setActionMenu({ type: 'task', id: task.id })}
                 />
               ))}
             </>
@@ -348,8 +406,79 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
         </div>
       </div>
 
-      {popover?.type === 'task' && (
-        <TaskDetailPopover taskId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />
+      {actionMenu && (
+        <>
+          <div className="fixed inset-0 z-[202] bg-black/20" onClick={() => setActionMenu(null)} />
+          <div className="fixed inset-x-3 bottom-3 z-[203] max-h-[72dvh] overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-popover)] p-2 shadow-[0_-10px_34px_rgba(0,0,0,0.18)]">
+            {actionTask && (
+              <>
+                <div className="px-3 pb-2 pt-1 text-[11px] font-semibold text-[var(--color-text-muted)] truncate">
+                  {actionTask.title}
+                </div>
+                <ActionButton
+                  icon={<CalendarPlus size={15} strokeWidth={2.2} />}
+                  label="Add to Tasks Today"
+                  onClick={() => moveActionTask({ location: 'today', date: currentDate })}
+                />
+                <ActionButton
+                  icon={<Inbox size={15} strokeWidth={2.2} />}
+                  label="Add to Backlog"
+                  onClick={() => moveActionTask({ location: 'backlog', date: undefined })}
+                />
+                {activeProjects.length > 0 && (
+                  <div className="mt-1 border-t border-[var(--color-border)] pt-1">
+                    <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                      Add to Project
+                    </div>
+                    {activeProjects.map((project: Project) => (
+                      <ActionButton
+                        key={project.id}
+                        icon={<FolderOpen size={15} strokeWidth={2.2} />}
+                        label={project.title}
+                        onClick={() => moveActionTask({ location: 'project', projectId: project.id, date: undefined })}
+                      />
+                    ))}
+                  </div>
+                )}
+                <div className="mt-1 border-t border-[var(--color-border)] pt-1">
+                  <ActionButton
+                    icon={<Trash2 size={15} strokeWidth={2.2} />}
+                    label="Delete"
+                    danger
+                    onClick={() => {
+                      deleteTask(actionTask.id);
+                      setActionMenu(null);
+                    }}
+                  />
+                </div>
+              </>
+            )}
+            {actionProject && (
+              <>
+                <div className="px-3 pb-2 pt-1 text-[11px] font-semibold text-[var(--color-text-muted)] truncate">
+                  {actionProject.title}
+                </div>
+                <ActionButton
+                  icon={<CheckCircle2 size={15} strokeWidth={2.2} />}
+                  label="Mark Finished"
+                  onClick={() => {
+                    finishProject(actionProject.id);
+                    setActionMenu(null);
+                  }}
+                />
+                <ActionButton
+                  icon={<Trash2 size={15} strokeWidth={2.2} />}
+                  label="Delete Project"
+                  danger
+                  onClick={() => {
+                    deleteProject(actionProject.id);
+                    setActionMenu(null);
+                  }}
+                />
+              </>
+            )}
+          </div>
+        </>
       )}
       {popover?.type === 'recurrent' && (
         <RecurrentTaskDetailPopover recurrentTaskId={popover.id} anchor={popover.anchor} onClose={() => setPopover(null)} />

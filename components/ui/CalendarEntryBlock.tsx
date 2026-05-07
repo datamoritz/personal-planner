@@ -59,6 +59,7 @@ export function CalendarEntryBlock({
   className = '',
 }: CalendarEntryBlockProps) {
   const blockRef     = useRef<HTMLDivElement>(null);
+  const suppressClickRef = useRef(false);
   const canReposition = !!onRepositionEnd;
   const canResize    = !!onResizeEnd;
   const canOpen      = !!onDoubleClick;
@@ -69,12 +70,12 @@ export function CalendarEntryBlock({
   const handleDragPointerDown = (e: React.PointerEvent) => {
     if (!canReposition) return;
     if (e.button !== 0 && e.pointerType === 'mouse') return;
-    if (isMobileGrid && e.pointerType === 'touch') return;
-    e.preventDefault();
+    const isMobileTouch = isMobileGrid && e.pointerType === 'touch';
+    if (!isMobileTouch) e.preventDefault();
 
     // Save captureTarget in closure so onUp can release it correctly
     const captureTarget = e.currentTarget as HTMLElement;
-    captureTarget.setPointerCapture(e.pointerId);
+    if (!isMobileTouch) captureTarget.setPointerCapture(e.pointerId);
 
     const startY     = e.clientY;
     const startX     = e.clientX;
@@ -84,10 +85,42 @@ export function CalendarEntryBlock({
     const duration   = getDurationMinutes(entry.startTime, entry.endTime);
     let currentTop   = initialTop; // track in closure — avoids DOM read on pointerup
     let hasMoved     = false;
+    let armed         = !isMobileTouch;
+    let cancelled     = false;
+    let longPressTimer: number | null = null;
+
+    const clearLongPressTimer = () => {
+      if (longPressTimer !== null) {
+        window.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    };
+
+    if (isMobileTouch) {
+      longPressTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        armed = true;
+        suppressClickRef.current = true;
+        captureTarget.setPointerCapture(e.pointerId);
+        if (blockRef.current) {
+          blockRef.current.style.zIndex = '30';
+          blockRef.current.style.opacity = '0.85';
+          blockRef.current.style.cursor = 'grabbing';
+        }
+      }, 360);
+    }
 
     const onMove = (ev: PointerEvent) => {
       const dy = ev.clientY - startY;
       const dx = ev.clientX - startX;
+      if (!armed) {
+        if (Math.abs(dy) > 8 || Math.abs(dx) > 8) {
+          cancelled = true;
+          clearLongPressTimer();
+        }
+        return;
+      }
+      ev.preventDefault();
       if (Math.abs(dy) > 4 || Math.abs(dx) > 4) hasMoved = true;
       if (!hasMoved) return;
       currentTop = Math.max(0, initialTop + dy);
@@ -106,7 +139,10 @@ export function CalendarEntryBlock({
     const onUp = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      captureTarget.releasePointerCapture(e.pointerId);
+      clearLongPressTimer();
+      if (captureTarget.hasPointerCapture(e.pointerId)) {
+        captureTarget.releasePointerCapture(e.pointerId);
+      }
 
       if (hasMoved) {
         if (blockRef.current) {
@@ -121,6 +157,12 @@ export function CalendarEntryBlock({
         const startMins  = Math.max(0, Math.min(snapped, END_HOUR * 60 - duration));
         const pos = verticalOnly ? undefined : { x: ev.clientX, y: ev.clientY };
         onRepositionEnd(entry.id, minutesToTime(startMins), minutesToTime(startMins + duration), pos);
+      } else if (armed && isMobileTouch) {
+        if (blockRef.current) {
+          blockRef.current.style.zIndex  = '';
+          blockRef.current.style.opacity = '';
+          blockRef.current.style.cursor  = '';
+        }
       }
     };
 
@@ -131,7 +173,6 @@ export function CalendarEntryBlock({
   // ── Resize handle ───────────────────────────────────────────────────────
   const handleResizePointerDown = (e: React.PointerEvent) => {
     if (!canResize) return;
-    if (isMobileGrid && e.pointerType === 'touch') return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -146,9 +187,11 @@ export function CalendarEntryBlock({
     }
     const initialHeight  = blockRef.current?.getBoundingClientRect().height ?? 0;
     let liveHeight       = initialHeight;
+    let hasMoved         = false;
 
     const onMove = (ev: PointerEvent) => {
       const dy = ev.clientY - startY;
+      if (Math.abs(dy) > 3) hasMoved = true;
       liveHeight = Math.max(initialHeight + dy, slotHeight / 4);
       if (blockRef.current) blockRef.current.style.height = `${liveHeight}px`;
     };
@@ -159,6 +202,7 @@ export function CalendarEntryBlock({
       captureTarget.releasePointerCapture(ev.pointerId);
 
       if (blockRef.current) blockRef.current.style.height = '';
+      if (!hasMoved) return;
 
       const deltaMins = ((liveHeight - initialHeight) / slotHeight) * 60;
       const raw       = initialEndMins + deltaMins;
@@ -175,8 +219,17 @@ export function CalendarEntryBlock({
     <div
       ref={blockRef}
       onPointerDown={handleDragPointerDown}
+      onClick={(e) => {
+        if (!canOpen || !isMobileGrid) return;
+        e.stopPropagation();
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          return;
+        }
+        onDoubleClick?.(entry.id, e.currentTarget);
+      }}
       onDoubleClick={(e) => {
-        if (!canOpen) return;
+        if (!canOpen || isMobileGrid) return;
         e.stopPropagation();
         onDoubleClick?.(entry.id, e.currentTarget);
       }}

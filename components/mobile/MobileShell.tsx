@@ -255,7 +255,7 @@ export function MobileShell({
                 type="button"
                 onClick={() => { setViewMode(value); setSheetOpen(false); }}
                 className={[
-                  'flex-1 py-3 text-[12px] transition-colors',
+                  'flex-1 py-4 text-[12px] transition-colors',
                   isActive ? 'font-semibold text-[var(--color-accent)]' : 'font-medium text-[var(--color-text-muted)]',
                 ].join(' ')}
               >
@@ -267,7 +267,7 @@ export function MobileShell({
             type="button"
             onClick={() => setSheetOpen((v) => !v)}
             className={[
-              'flex-1 py-3 text-[12px] transition-colors',
+              'flex-1 py-4 text-[12px] transition-colors',
               sheetOpen ? 'font-semibold text-[var(--color-accent)]' : 'font-medium text-[var(--color-text-muted)]',
             ].join(' ')}
           >

@@ -62,8 +62,8 @@ export function DetailPopover({
   if (isMobile) {
     return (
       <FloatingPortal>
-        <div className="fixed inset-0 z-[119] bg-black/40" onClick={onClose} />
-        <div className="fixed inset-x-0 bottom-0 z-[120] flex flex-col rounded-t-[1.5rem] bg-[var(--color-popover)] border-t border-x border-[var(--color-popover-border)] max-h-[85dvh] sheet-enter shadow-[0_-8px_40px_rgba(0,0,0,0.16)]">
+        <div className="fixed inset-0 z-[299] bg-black/40" onClick={onClose} />
+        <div className="fixed inset-x-0 bottom-0 z-[300] flex flex-col rounded-t-[1.5rem] bg-[var(--color-popover)] border-t border-x border-[var(--color-popover-border)] max-h-[85dvh] sheet-enter shadow-[0_-8px_40px_rgba(0,0,0,0.16)]">
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
             <div className="w-8 h-[3px] rounded-full bg-[var(--color-border)]" />
