@@ -36,6 +36,11 @@ class Project(Base):
     goal: Mapped["Goal | None"] = relationship(back_populates="projects")
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")
     recurrent_tasks: Mapped[list["RecurrentTask"]] = relationship(back_populates="project")
+    milestones: Mapped[list["Milestone"]] = relationship(
+        back_populates="project",
+        order_by="Milestone.date",
+        passive_deletes="all",
+    )
 
 
 class Goal(Base):
@@ -64,13 +69,19 @@ class Milestone(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     client_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, default=uuid.uuid4)
     goal_id: Mapped[int] = mapped_column(ForeignKey("goals.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     type: Mapped[str] = mapped_column(String(20), nullable=False, default="major")
     date: Mapped[date] = mapped_column(Date, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     goal: Mapped["Goal"] = relationship(back_populates="milestones")
+    project: Mapped["Project | None"] = relationship(back_populates="milestones")
 
 
 class Tag(Base):

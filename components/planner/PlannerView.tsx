@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import {
   DndContext,
   DragOverlay,
   PointerSensor,
   closestCenter,
+  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -15,6 +16,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Flag,
@@ -29,7 +31,9 @@ import {
   createProject,
   createGoal,
   createMilestone,
+  deleteGoal,
   deleteMilestone,
+  deleteProject,
   fetchPlanner,
   patchGoal,
   patchMilestone,
@@ -77,16 +81,6 @@ type PlannerInteraction =
       rectWidth: number;
       initialStart: string;
       initialEnd: string;
-      snapshot: PlannerData;
-    }
-  | {
-      kind: 'milestone';
-      mode: 'move';
-      backendId: number;
-      originX: number;
-      rectLeft: number;
-      rectWidth: number;
-      initialDate: string;
       snapshot: PlannerData;
     };
 
@@ -137,7 +131,7 @@ function bucketKey(goalId: number | null | undefined): string {
   return goalId == null ? 'unassigned' : `goal-${goalId}`;
 }
 
-function buildRows(goals: Goal[], projects: Project[]): PlannerRow[] {
+function buildRows(goals: Goal[], projects: Project[], collapsedGoalIds: Set<number>): PlannerRow[] {
   const byGoalId = new Map<number, Project[]>();
   const unassigned: Project[] = [];
 
@@ -154,14 +148,19 @@ function buildRows(goals: Goal[], projects: Project[]): PlannerRow[] {
   const rows: PlannerRow[] = [];
   for (const goal of goals) {
     rows.push({ id: `goal-${goal.id}`, kind: 'goal', goal, height: 90 });
+    if (goal.backendId != null && collapsedGoalIds.has(goal.backendId)) {
+      rows.push({ id: `goal-gap-${goal.id}`, kind: 'group-gap', height: 10 });
+      continue;
+    }
     const goalProjects = [...(byGoalId.get(goal.backendId ?? -1) ?? [])].sort(
       (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
     );
     for (const project of goalProjects) {
-      rows.push({ id: `project-${project.id}`, kind: 'project', goal, project, height: 42 });
+      const hasMilestones = goal.milestones.some((milestone) => milestone.projectId === project.backendId);
+      rows.push({ id: `project-${project.id}`, kind: 'project', goal, project, height: hasMilestones ? 64 : 42 });
     }
     rows.push({ id: `goal-add-${goal.id}`, kind: 'add-project', goal, height: 42 });
-    rows.push({ id: `goal-gap-${goal.id}`, kind: 'group-gap', height: 0 });
+    rows.push({ id: `goal-gap-${goal.id}`, kind: 'group-gap', height: 10 });
   }
 
   rows.push({ id: 'unassigned-label', kind: 'unassigned-label', height: 42 });
@@ -317,6 +316,40 @@ function collectChangedProjects(before: Project[], after: Project[]): Project[] 
   });
 }
 
+function rehomeProjectMilestones(
+  goals: Goal[],
+  projectBackendId: number,
+  targetGoalId: number | null,
+): Goal[] {
+  const projectMilestones = goals
+    .flatMap((goal) => goal.milestones)
+    .filter((milestone) => milestone.projectId === projectBackendId);
+  if (!projectMilestones.length) return goals;
+
+  if (targetGoalId == null) {
+    return goals.map((goal) => ({
+      ...goal,
+      milestones: goal.milestones.map((milestone) =>
+        milestone.projectId === projectBackendId
+          ? { ...milestone, projectId: undefined }
+          : milestone,
+      ),
+    }));
+  }
+
+  return goals.map((goal) => {
+    const remaining = goal.milestones.filter((milestone) => milestone.projectId !== projectBackendId);
+    if (goal.backendId !== targetGoalId) return { ...goal, milestones: remaining };
+    return {
+      ...goal,
+      milestones: [
+        ...remaining,
+        ...projectMilestones.map((milestone) => ({ ...milestone, goalId: targetGoalId })),
+      ].sort((a, b) => a.date.localeCompare(b.date)),
+    };
+  });
+}
+
 function shiftRangeWithinYear(startDate: string, endDate: string, deltaDays: number, year: number) {
   const { start: yearStart, end: yearEnd } = getPlannerYearBounds(year);
   let start = addDays(parseISO(startDate), deltaDays);
@@ -343,9 +376,11 @@ function shiftRangeWithinYear(startDate: string, endDate: string, deltaDays: num
 function SortableProjectLabelRow({
   row,
   isGhosted = false,
+  onOpen,
 }: {
   row: Extract<PlannerRow, { kind: 'project' }>;
   isGhosted?: boolean;
+  onOpen: (anchor: HTMLElement) => void;
 }) {
   const outside = isProjectOutsideGoal(row.project, row.goal);
   const {
@@ -388,7 +423,11 @@ function SortableProjectLabelRow({
         <GripVertical size={14} />
       </button>
       <span className="text-[var(--color-text-muted)]">↳</span>
-      <div className="min-w-0 flex-1">
+      <button
+        type="button"
+        onClick={(event) => onOpen(event.currentTarget)}
+        className="min-w-0 flex-1 rounded-lg text-left transition hover:bg-[var(--color-surface)]/65 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/30"
+      >
         <div className="flex items-center gap-2 text-[13px]">
           <div className="min-w-0 truncate text-[var(--color-text-primary)]">
             {row.project.title}
@@ -399,7 +438,7 @@ function SortableProjectLabelRow({
               : 'No timeline'}
           </div>
         </div>
-      </div>
+      </button>
     </div>
   );
 }
@@ -450,14 +489,32 @@ function PlannerProjectDragOverlay({
 
 function GoalLabelRow({
   row,
+  collapsed,
+  onToggleCollapsed,
+  onDelete,
 }: {
   row: Extract<PlannerRow, { kind: 'goal' }>;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div
-      className="flex items-center gap-3 border-b border-[var(--color-border)]/55 px-4"
-      style={{ height: row.height }}
+      className="group flex items-center gap-2 border-y border-[var(--color-border)]/70 bg-[var(--color-surface)]/28 px-3"
+      style={{ height: row.height, boxShadow: `inset 3px 0 0 ${hexToRgba(row.goal.color, 0.55)}` }}
     >
+      <button
+        type="button"
+        onClick={onToggleCollapsed}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--color-text-muted)] transition hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)]"
+        aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${row.goal.name}`}
+        aria-expanded={!collapsed}
+      >
+        <ChevronDown
+          size={14}
+          className={`transition-transform ${collapsed ? '-rotate-90' : ''}`}
+        />
+      </button>
       <span
         className="h-2.5 w-2.5 rounded-full"
         style={{ backgroundColor: row.goal.color }}
@@ -472,6 +529,15 @@ function GoalLabelRow({
           </div>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="ui-icon-button ui-icon-button--danger opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+        aria-label={`Delete ${row.goal.name}`}
+        title="Delete goal"
+      >
+        <Trash2 size={12} strokeWidth={2.25} />
+      </button>
     </div>
   );
 }
@@ -575,16 +641,31 @@ function MilestoneMarker({
   year,
   lane = 0,
   labelOffset = 0,
-  onMoveStart,
   onEdit,
 }: {
   milestone: Milestone;
   year: number;
   lane?: number;
   labelOffset?: number;
-  onMoveStart?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onEdit?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    isDragging,
+  } = useDraggable({
+    id: `milestone-${milestone.id}`,
+    data: {
+      type: 'planner-milestone',
+      milestoneId: milestone.id,
+      backendId: milestone.backendId,
+      goalId: milestone.goalId,
+      projectId: milestone.projectId ?? null,
+      date: milestone.date,
+    },
+  });
   const left = dateToPercent(milestone.date, year) * 100;
   const labelPositionClass = lane === 0 ? '-top-6' : '-top-6';
   const markerClass =
@@ -610,16 +691,59 @@ function MilestoneMarker({
         </div>
       </div>
       <button
+        ref={setNodeRef}
         type="button"
         aria-label={`Move milestone ${milestone.name}`}
-        className="relative cursor-ew-resize"
-        onPointerDown={onMoveStart}
+        className="relative cursor-grab touch-none active:cursor-grabbing"
+        style={{
+          transform: CSS.Translate.toString(transform),
+          opacity: isDragging ? 0.35 : 1,
+          zIndex: isDragging ? 40 : undefined,
+        }}
         onDoubleClick={onEdit}
+        {...attributes}
+        {...listeners}
       >
         <div
           className={`h-3.5 w-3.5 rotate-45 rounded-[2px] border shadow-[0_6px_14px_rgba(15,23,42,0.18)] ${markerClass}`}
         />
       </button>
+    </div>
+  );
+}
+
+function MilestoneDropRow({
+  id,
+  goalId,
+  projectId,
+  className,
+  style,
+  children,
+}: {
+  id: string;
+  goalId: number | null;
+  projectId: number | null;
+  className: string;
+  style: CSSProperties;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id,
+    disabled: goalId == null,
+    data: {
+      type: 'milestone-target',
+      goalId,
+      projectId,
+    },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`${className} ${isOver ? 'bg-[var(--color-accent-subtle)]/45' : ''}`}
+      style={style}
+    >
+      {children}
     </div>
   );
 }
@@ -665,14 +789,18 @@ function MilestoneTypePills({
 function PlannerToolbar({
   year,
   zoom,
+  horizontalScale,
   onZoomChange,
+  onHorizontalScaleChange,
   onOpenGoal,
   onOpenMilestone,
   onOpenProject,
 }: {
   year: number;
   zoom: PlannerZoom;
+  horizontalScale: number;
   onZoomChange: (zoom: PlannerZoom) => void;
+  onHorizontalScaleChange: (scale: number) => void;
   onOpenGoal: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onOpenMilestone: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onOpenProject: (event: ReactMouseEvent<HTMLButtonElement>) => void;
@@ -729,25 +857,44 @@ function PlannerToolbar({
         </button>
       </div>
 
-      <div className="flex items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
-        {(['detail', 'week', 'month', 'quarter'] as const).map((option) => {
-          const isActive = zoom === option;
-          return (
-            <button
-              key={option}
-              type="button"
-              onClick={() => onZoomChange(option)}
-              className={[
-                'rounded-full px-2.5 py-1 text-[11px] font-medium transition-all',
-                isActive
-                  ? 'bg-[var(--color-canvas)] text-[var(--color-text-primary)] shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]',
-              ].join(' ')}
-            >
-              {option === 'detail' ? 'Detail' : option === 'week' ? 'Week' : option === 'month' ? 'Month' : 'Quarter'}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
+          {(['detail', 'week', 'month', 'quarter'] as const).map((option) => {
+            const isActive = zoom === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => onZoomChange(option)}
+                className={[
+                  'rounded-full px-2.5 py-1 text-[11px] font-medium transition-all',
+                  isActive
+                    ? 'bg-[var(--color-canvas)] text-[var(--color-text-primary)] shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]',
+                ].join(' ')}
+              >
+                {option === 'detail' ? 'Detail' : option === 'week' ? 'Week' : option === 'month' ? 'Month' : 'Quarter'}
+              </button>
+            );
+          })}
+        </div>
+        <label
+          className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)]/70 bg-[var(--color-surface)]/70 px-2 py-1"
+          title={`Horizontal zoom ${Math.round(horizontalScale * 100)}%`}
+        >
+          <span className="text-[10px] text-[var(--color-text-muted)]">−</span>
+          <input
+            type="range"
+            min="65"
+            max="200"
+            step="5"
+            value={Math.round(horizontalScale * 100)}
+            onChange={(event) => onHorizontalScaleChange(Number(event.target.value) / 100)}
+            className="h-1 w-16 cursor-ew-resize accent-[var(--color-accent)]"
+            aria-label="Horizontal timeline zoom"
+          />
+          <span className="text-[10px] text-[var(--color-text-muted)]">+</span>
+        </label>
       </div>
     </div>
   );
@@ -875,26 +1022,42 @@ function PlannerProjectCreatePopover({
   );
 }
 
-function PlannerProjectRangePopover({
+function PlannerProjectEditPopover({
   anchor,
   project,
+  goals,
+  milestones,
   year,
   onClose,
   onSave,
+  onDelete,
+  onOpenMilestone,
 }: {
   anchor: HTMLElement;
   project: Project;
+  goals: Goal[];
+  milestones: Milestone[];
   year: number;
   onClose: () => void;
-  onSave: (projectId: string, startDate: string, endDate: string) => void;
+  onSave: (project: Project) => void;
+  onDelete: (project: Project) => void;
+  onOpenMilestone: (milestone: Milestone, anchor: HTMLElement) => void;
 }) {
+  const [title, setTitle] = useState(project.title);
+  const [goalId, setGoalId] = useState(project.goalId == null ? '' : String(project.goalId));
   const [startDate, setStartDate] = useState(project.startDate ?? `${year}-01-01`);
   const [endDate, setEndDate] = useState(project.endDate ?? `${year}-03-31`);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!project.backendId || saving) return;
+    if (!title.trim()) {
+      setError('Please enter a project name.');
+      return;
+    }
     if (!startDate || !endDate || startDate > endDate) {
       setError('Please choose a valid start and end date.');
       return;
@@ -902,30 +1065,76 @@ function PlannerProjectRangePopover({
     setSaving(true);
     setError(null);
     try {
+      const nextGoalId = goalId ? Number.parseInt(goalId, 10) : undefined;
       await patchProject(project.backendId, {
+        title: title.trim(),
+        goal_id: nextGoalId ?? null,
         start_date: startDate,
         end_date: endDate,
       });
-      onSave(project.id, startDate, endDate);
+      onSave({
+        ...project,
+        title: title.trim(),
+        goalId: nextGoalId,
+        startDate,
+        endDate,
+        updatedAt: new Date().toISOString(),
+      });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update project range.');
+      setError(err instanceof Error ? err.message : 'Failed to update project.');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleDelete = async () => {
+    if (!project.backendId || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteProject(project.backendId);
+      onDelete(project);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete project.');
+      setDeleting(false);
+    }
+  };
+
   return (
-    <DetailPopover anchor={anchor} onClose={onClose} className="w-[23rem]" title="Project Range">
+    <DetailPopover
+      anchor={anchor}
+      onClose={onClose}
+      className="w-[25rem]"
+      title="Edit Project"
+      headerActions={(
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          disabled={saving || deleting}
+          className="ui-icon-button ui-icon-button--danger disabled:opacity-40"
+          aria-label="Delete project"
+          title="Delete project"
+        >
+          <Trash2 size={12} strokeWidth={2.25} />
+        </button>
+      )}
+    >
       <div className="flex flex-col gap-3.5">
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
-          <div className="text-[12px] font-semibold text-[var(--color-text-primary)]">
-            {project.title}
-          </div>
-          <div className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-            Set the timeline range for this existing project.
-          </div>
-        </div>
+        <PopoverField label="Name">
+          <PopoverInput value={title} onChange={setTitle} placeholder="Project name" />
+        </PopoverField>
+        <PopoverField label="Goal">
+          <select value={goalId} onChange={(event) => setGoalId(event.target.value)} className="ui-input">
+            <option value="">Unassigned</option>
+            {goals.map((goal) => (
+              <option key={goal.id} value={goal.backendId}>
+                {goal.name}
+              </option>
+            ))}
+          </select>
+        </PopoverField>
         <div className="grid grid-cols-2 gap-3">
           <PopoverField label="Start">
             <input
@@ -944,6 +1153,57 @@ function PlannerProjectRangePopover({
             />
           </PopoverField>
         </div>
+        <PopoverField label={`Milestones (${milestones.length})`}>
+          <div className="max-h-36 space-y-1 overflow-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/55 p-1.5">
+            {milestones.length ? milestones.map((milestone) => (
+              <button
+                key={milestone.id}
+                type="button"
+                onClick={(event) => onOpenMilestone(milestone, event.currentTarget)}
+                className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-[var(--color-canvas)]"
+              >
+                <span className="min-w-0 truncate text-[12px] font-medium text-[var(--color-text-primary)]">
+                  {milestone.name}
+                </span>
+                <span className="shrink-0 text-[10px] text-[var(--color-text-muted)]">
+                  {format(parseISO(milestone.date), 'MMM d')}
+                </span>
+              </button>
+            )) : (
+              <div className="px-2.5 py-3 text-[11px] text-[var(--color-text-muted)]">
+                No milestones in this project yet.
+              </div>
+            )}
+          </div>
+        </PopoverField>
+        {confirmDelete && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-800/40 dark:bg-red-950/20">
+            <div className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+              Delete this project?
+            </div>
+            <div className="mt-1 text-[11px] leading-relaxed text-red-600/85 dark:text-red-300/75">
+              Its milestones will be deleted. Tasks and recurrent tasks will become unassigned.
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)]"
+              >
+                Keep project
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40"
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        )}
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300">
             {error}
@@ -960,10 +1220,10 @@ function PlannerProjectRangePopover({
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={saving}
+            disabled={saving || deleting || !title.trim()}
             className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-accent)]/15 bg-[var(--color-accent-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--color-accent)] hover:brightness-[0.985] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Save range
+            Save changes
           </button>
         </div>
       </div>
@@ -1085,38 +1345,56 @@ function PlannerMilestoneCreatePopover({
   onClose,
   onCreate,
   goals,
+  projects,
   defaultGoalId,
+  defaultProjectId,
   year,
 }: {
   anchor: HTMLElement;
   onClose: () => void;
   onCreate: (milestone: Milestone) => void;
   goals: Goal[];
+  projects: Project[];
   defaultGoalId: number | null;
+  defaultProjectId?: number | null;
   year: number;
 }) {
-  const [goalId, setGoalId] = useState<string>(defaultGoalId ? String(defaultGoalId) : '');
+  const [target, setTarget] = useState(
+    defaultProjectId
+      ? `project:${defaultProjectId}`
+      : defaultGoalId
+        ? `goal:${defaultGoalId}`
+        : '',
+  );
   const [name, setName] = useState('');
+  const [notes, setNotes] = useState('');
   const [type, setType] = useState<MilestoneType>('major');
   const [date, setDate] = useState(`${year}-06-15`);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!goalId && goals[0]?.backendId) {
-      setGoalId(String(goals[0].backendId));
+    if (!target && goals[0]?.backendId) {
+      setTarget(`goal:${goals[0].backendId}`);
     }
-  }, [goalId, goals]);
+  }, [target, goals]);
 
   const handleSubmit = async () => {
-    const numericGoalId = Number.parseInt(goalId, 10);
-    if (!name.trim() || Number.isNaN(numericGoalId) || saving) return;
+    const [targetKind, targetIdValue] = target.split(':');
+    const targetId = Number.parseInt(targetIdValue, 10);
+    const selectedProject = targetKind === 'project'
+      ? projects.find((project) => project.backendId === targetId)
+      : undefined;
+    const numericGoalId = targetKind === 'goal' ? targetId : selectedProject?.goalId;
+    if (!name.trim() || numericGoalId == null || Number.isNaN(numericGoalId) || saving) return;
     setSaving(true);
     setError(null);
     try {
       const milestone = await createMilestone({
         goalId: numericGoalId,
+        projectId: selectedProject?.backendId,
         name: name.trim(),
+        notes: notes.trim() || undefined,
         type,
         date,
       });
@@ -1134,17 +1412,43 @@ function PlannerMilestoneCreatePopover({
       <div className="flex flex-col gap-3.5">
         {goals.length ? (
           <>
-            <PopoverField label="Goal">
-              <select value={goalId} onChange={(event) => setGoalId(event.target.value)} className="ui-input">
+            <PopoverField label="Place on">
+              <select value={target} onChange={(event) => setTarget(event.target.value)} className="ui-input">
+                <optgroup label="Goals">
                 {goals.map((goal) => (
-                  <option key={goal.id} value={goal.backendId}>
+                  <option key={goal.id} value={`goal:${goal.backendId}`}>
                     {goal.name}
                   </option>
                 ))}
+                </optgroup>
+                {goals.map((goal) => {
+                  const goalProjects = projects.filter(
+                    (project) => project.goalId === goal.backendId && project.backendId != null,
+                  );
+                  if (!goalProjects.length) return null;
+                  return (
+                    <optgroup key={`projects-${goal.id}`} label={`${goal.name} projects`}>
+                      {goalProjects.map((project) => (
+                        <option key={project.id} value={`project:${project.backendId}`}>
+                          {project.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </PopoverField>
             <PopoverField label="Name">
               <PopoverInput value={name} onChange={setName} placeholder="Milestone name" />
+            </PopoverField>
+            <PopoverField label="Notes">
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Context, definition of done, or useful details…"
+                rows={3}
+                className="ui-input resize-y"
+              />
             </PopoverField>
             <PopoverField label="Type">
               <MilestoneTypePills value={type} onChange={setType} />
@@ -1179,7 +1483,7 @@ function PlannerMilestoneCreatePopover({
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={saving || !goals.length || !name.trim() || !goalId}
+            disabled={saving || !goals.length || !name.trim() || !target}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/15 text-[12px] font-semibold hover:brightness-[0.985] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Create milestone
@@ -1194,6 +1498,7 @@ function PlannerMilestoneEditPopover({
   anchor,
   milestone,
   goals,
+  projects,
   onClose,
   onSave,
   onDelete,
@@ -1201,12 +1506,16 @@ function PlannerMilestoneEditPopover({
   anchor: HTMLElement;
   milestone: Milestone;
   goals: Goal[];
+  projects: Project[];
   onClose: () => void;
   onSave: (nextMilestone: Milestone) => void;
   onDelete: (milestoneId: string) => void;
 }) {
-  const [goalId, setGoalId] = useState(String(milestone.goalId));
+  const [target, setTarget] = useState(
+    milestone.projectId ? `project:${milestone.projectId}` : `goal:${milestone.goalId}`,
+  );
   const [name, setName] = useState(milestone.name);
+  const [notes, setNotes] = useState(milestone.notes ?? '');
   const [type, setType] = useState<MilestoneType>(milestone.type);
   const [date, setDate] = useState(milestone.date);
   const [saving, setSaving] = useState(false);
@@ -1215,21 +1524,30 @@ function PlannerMilestoneEditPopover({
 
   const handleSave = async () => {
     if (!milestone.backendId || saving) return;
-    const numericGoalId = Number.parseInt(goalId, 10);
-    if (!name.trim() || Number.isNaN(numericGoalId)) return;
+    const [targetKind, targetIdValue] = target.split(':');
+    const targetId = Number.parseInt(targetIdValue, 10);
+    const selectedProject = targetKind === 'project'
+      ? projects.find((project) => project.backendId === targetId)
+      : undefined;
+    const numericGoalId = targetKind === 'goal' ? targetId : selectedProject?.goalId;
+    if (!name.trim() || numericGoalId == null || Number.isNaN(numericGoalId)) return;
     setSaving(true);
     setError(null);
     try {
       await patchMilestone(milestone.backendId, {
         goal_id: numericGoalId,
+        project_id: selectedProject?.backendId ?? null,
         name: name.trim(),
+        notes: notes.trim() || null,
         type,
         date,
       });
       onSave({
         ...milestone,
         goalId: numericGoalId,
+        projectId: selectedProject?.backendId,
         name: name.trim(),
+        notes: notes.trim() || undefined,
         type,
         date,
         updatedAt: new Date().toISOString(),
@@ -1276,17 +1594,43 @@ function PlannerMilestoneEditPopover({
       )}
     >
       <div className="flex flex-col gap-3.5">
-        <PopoverField label="Goal">
-          <select value={goalId} onChange={(event) => setGoalId(event.target.value)} className="ui-input">
+        <PopoverField label="Place on">
+          <select value={target} onChange={(event) => setTarget(event.target.value)} className="ui-input">
+            <optgroup label="Goals">
             {goals.map((goal) => (
-              <option key={goal.id} value={goal.backendId}>
+              <option key={goal.id} value={`goal:${goal.backendId}`}>
                 {goal.name}
               </option>
             ))}
+            </optgroup>
+            {goals.map((goal) => {
+              const goalProjects = projects.filter(
+                (project) => project.goalId === goal.backendId && project.backendId != null,
+              );
+              if (!goalProjects.length) return null;
+              return (
+                <optgroup key={`projects-${goal.id}`} label={`${goal.name} projects`}>
+                  {goalProjects.map((project) => (
+                    <option key={project.id} value={`project:${project.backendId}`}>
+                      {project.title}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
         </PopoverField>
         <PopoverField label="Name">
           <PopoverInput value={name} onChange={setName} placeholder="Milestone name" />
+        </PopoverField>
+        <PopoverField label="Notes">
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Context, definition of done, or useful details…"
+            rows={4}
+            className="ui-input resize-y"
+          />
         </PopoverField>
         <PopoverField label="Type">
           <MilestoneTypePills value={type} onChange={setType} />
@@ -1326,11 +1670,64 @@ function PlannerMilestoneEditPopover({
   );
 }
 
+function GoalDeleteDialog({
+  goal,
+  projectCount,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  goal: Goal;
+  projectCount: number;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/25 p-4 backdrop-blur-[2px]">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-goal-title"
+        className="w-full max-w-sm rounded-[1.35rem] border border-[var(--color-border)] bg-[var(--color-canvas)] p-5 shadow-[0_24px_80px_rgba(15,23,42,0.24)]"
+      >
+        <h2 id="delete-goal-title" className="text-[15px] font-semibold text-[var(--color-text-primary)]">
+          Delete “{goal.name}”?
+        </h2>
+        <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-text-muted)]">
+          This permanently deletes the Goal, its {projectCount} {projectCount === 1 ? 'project' : 'projects'}, and all milestones. Tasks inside those projects will become unassigned.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="rounded-xl border border-[var(--color-border)] px-3 py-1.5 text-[12px] font-medium text-[var(--color-text-secondary)] disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="rounded-xl bg-red-600 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-red-700 disabled:opacity-40"
+          >
+            {deleting ? 'Deleting…' : 'Delete Goal'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PlannerView() {
   const currentDate = usePlannerStore((state) => state.currentDate);
   const fallbackProjects = usePlannerStore((state) => state.projects);
   const year = parseISO(currentDate).getFullYear();
   const [zoom, setZoom] = useState<PlannerZoom>('month');
+  const [horizontalScale, setHorizontalScale] = useState(1);
+  const [collapsedGoalIds, setCollapsedGoalIds] = useState<Set<number>>(new Set());
+  const [collapsedGoalsLoaded, setCollapsedGoalsLoaded] = useState(false);
   const [planner, setPlanner] = useState<PlannerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1354,6 +1751,8 @@ export function PlannerView() {
     projectId: string;
   } | null>(null);
   const [activeDraggedProjectId, setActiveDraggedProjectId] = useState<string | null>(null);
+  const [goalToDelete, setGoalToDelete] = useState<Goal | null>(null);
+  const [deletingGoal, setDeletingGoal] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const timelineCanvasRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1379,6 +1778,25 @@ export function PlannerView() {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem('planner-collapsed-goals');
+      const parsed = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(parsed)) {
+        setCollapsedGoalIds(new Set(parsed.filter((value): value is number => typeof value === 'number')));
+      }
+    } catch {
+      // Ignore malformed local UI preferences.
+    } finally {
+      setCollapsedGoalsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!collapsedGoalsLoaded) return;
+    window.localStorage.setItem('planner-collapsed-goals', JSON.stringify([...collapsedGoalIds]));
+  }, [collapsedGoalIds, collapsedGoalsLoaded]);
+
   const plannerData = useMemo<PlannerData>(
     () => planner ?? { goals: [], projects: fallbackProjects },
     [planner, fallbackProjects],
@@ -1387,15 +1805,15 @@ export function PlannerView() {
   const selectedGoalBackendId = plannerData.goals[0]?.backendId ?? null;
 
   const rows = useMemo(
-    () => buildRows(plannerData.goals, plannerData.projects),
-    [plannerData],
+    () => buildRows(plannerData.goals, plannerData.projects, collapsedGoalIds),
+    [plannerData, collapsedGoalIds],
   );
   const projectItemIds = useMemo(
     () => rows.filter((row): row is Extract<PlannerRow, { kind: 'project' }> => row.kind === 'project').map((row) => row.id),
     [rows],
   );
   const segments = useMemo(() => buildPlannerSegments(year, zoom), [year, zoom]);
-  const contentWidth = TIMELINE_MIN_WIDTH[zoom];
+  const contentWidth = Math.round(TIMELINE_MIN_WIDTH[zoom] * horizontalScale);
   const totalRowHeight = rows.reduce((sum, row) => sum + row.height, 0);
   const today = new Date();
   const todayPercent = isSameYear(today, new Date(year, 0, 1))
@@ -1435,27 +1853,6 @@ export function PlannerView() {
     });
   }, [canPersist, plannerData]);
 
-  const startMilestoneInteraction = useCallback((
-    backendId: number | undefined,
-    date: string,
-    event: ReactPointerEvent<HTMLButtonElement>,
-  ) => {
-    if (!canPersist || !backendId || !timelineCanvasRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const rect = timelineCanvasRef.current.getBoundingClientRect();
-    setInteraction({
-      kind: 'milestone',
-      mode: 'move',
-      backendId,
-      originX: event.clientX,
-      rectLeft: rect.left,
-      rectWidth: rect.width,
-      initialDate: date,
-      snapshot: plannerData,
-    });
-  }, [canPersist, plannerData]);
-
   useEffect(() => {
     if (!interaction) return undefined;
 
@@ -1463,28 +1860,6 @@ export function PlannerView() {
       const currentDateValue = xToDate(event.clientX - interaction.rectLeft, interaction.rectWidth, year, zoom);
       const originDateValue = xToDate(interaction.originX - interaction.rectLeft, interaction.rectWidth, year, zoom);
       const deltaDays = differenceInCalendarDays(currentDateValue, originDateValue);
-
-      if (interaction.kind === 'milestone') {
-        const nextDate = format(
-          clampDateToYear(addDays(parseISO(interaction.initialDate), deltaDays), year),
-          'yyyy-MM-dd',
-        );
-        setPlanner((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            goals: prev.goals.map((goal) => ({
-              ...goal,
-              milestones: goal.milestones.map((milestone) =>
-                milestone.backendId === interaction.backendId
-                  ? { ...milestone, date: nextDate }
-                  : milestone,
-              ),
-            })),
-          };
-        });
-        return;
-      }
 
       if (interaction.mode === 'move') {
         const nextRange = shiftRangeWithinYear(
@@ -1597,14 +1972,6 @@ export function PlannerView() {
             return;
           }
 
-          const nextMilestone = currentPlanner.goals
-            .flatMap((goal) => goal.milestones)
-            .find((milestone) => milestone.backendId === interaction.backendId);
-          const previousMilestone = snapshot.goals
-            .flatMap((goal) => goal.milestones)
-            .find((milestone) => milestone.backendId === interaction.backendId);
-          if (!nextMilestone || !previousMilestone || nextMilestone.date === previousMilestone.date) return;
-          await patchMilestone(interaction.backendId, { date: nextMilestone.date });
         } catch (err: unknown) {
           setPlanner(snapshot);
           setError(err instanceof Error ? err.message : 'Failed to update planner item.');
@@ -1621,11 +1988,65 @@ export function PlannerView() {
     };
   }, [interaction, planner, year, zoom]);
 
-  const handleProjectDragEnd = useCallback(async ({ active, over }: DragEndEvent) => {
+  const handlePlannerDragEnd = useCallback(async ({ active, over, delta }: DragEndEvent) => {
     setActiveDraggedProjectId(null);
-    if (!canPersist || !planner || !over || active.id === over.id) return;
     const activeData = active.data.current;
-    const overData = over.data.current;
+    const overData = over?.data.current;
+    if (!canPersist || !planner || !activeData) return;
+
+    if (activeData.type === 'planner-milestone') {
+      const milestone = planner.goals
+        .flatMap((goal) => goal.milestones)
+        .find((item) => item.id === activeData.milestoneId);
+      if (!milestone?.backendId || !timelineCanvasRef.current) return;
+
+      const targetData = overData?.type === 'milestone-target' ? overData : null;
+      const targetGoalId = targetData?.goalId ?? milestone.goalId;
+      const targetProjectId = targetData
+        ? (targetData.projectId as number | null)
+        : milestone.projectId ?? null;
+      if (targetGoalId !== milestone.goalId) {
+        setError('Milestones can only move within their current Goal.');
+        return;
+      }
+
+      const canvasWidth = Math.max(1, timelineCanvasRef.current.getBoundingClientRect().width);
+      const { start: yearStart, end: yearEnd } = getPlannerYearBounds(year);
+      const yearDays = Math.max(1, differenceInCalendarDays(yearEnd, yearStart));
+      const deltaDays = Math.round((delta.x / canvasWidth) * yearDays);
+      const nextDate = format(
+        clampDateToYear(addDays(parseISO(milestone.date), deltaDays), year),
+        'yyyy-MM-dd',
+      );
+      const nextMilestone: Milestone = {
+        ...milestone,
+        projectId: targetProjectId ?? undefined,
+        date: nextDate,
+        updatedAt: new Date().toISOString(),
+      };
+      const snapshot = planner;
+      setPlanner({
+        ...planner,
+        goals: planner.goals.map((goal) => ({
+          ...goal,
+          milestones: goal.milestones.map((item) =>
+            item.id === milestone.id ? nextMilestone : item,
+          ),
+        })),
+      });
+      try {
+        await patchMilestone(milestone.backendId, {
+          project_id: targetProjectId,
+          date: nextDate,
+        });
+      } catch (err: unknown) {
+        setPlanner(snapshot);
+        setError(err instanceof Error ? err.message : 'Failed to move milestone.');
+      }
+      return;
+    }
+
+    if (!over || active.id === over.id) return;
     if (activeData?.type !== 'planner-project') return;
 
     let targetGoalId: number | null = null;
@@ -1654,7 +2075,13 @@ export function PlannerView() {
     if (!changedProjects.length) return;
 
     const snapshot = planner;
-    setPlanner({ ...planner, projects: nextProjects });
+    const activeProject = planner.projects.find((project) => project.id === activeData.projectId);
+    setPlanner({
+      goals: activeProject?.backendId
+        ? rehomeProjectMilestones(planner.goals, activeProject.backendId, targetGoalId)
+        : planner.goals,
+      projects: nextProjects,
+    });
 
     try {
       await Promise.all(
@@ -1669,9 +2096,9 @@ export function PlannerView() {
       setPlanner(snapshot);
       setError(err instanceof Error ? err.message : 'Failed to reorder projects.');
     }
-  }, [canPersist, planner]);
+  }, [canPersist, planner, year]);
 
-  const handleProjectDragStart = useCallback(({ active }: DragStartEvent) => {
+  const handlePlannerDragStart = useCallback(({ active }: DragStartEvent) => {
     const activeData = active.data.current;
     if (activeData?.type === 'planner-project') {
       setActiveDraggedProjectId(activeData.projectId as string);
@@ -1683,7 +2110,9 @@ export function PlannerView() {
       <PlannerToolbar
         year={year}
         zoom={zoom}
+        horizontalScale={horizontalScale}
         onZoomChange={setZoom}
+        onHorizontalScaleChange={setHorizontalScale}
         onOpenProject={(event) => {
           setProjectPopover({
             anchor: event.currentTarget,
@@ -1701,6 +2130,41 @@ export function PlannerView() {
           setMilestonePopoverOpen(true);
         }}
       />
+
+      {goalToDelete && (
+        <GoalDeleteDialog
+          goal={goalToDelete}
+          projectCount={plannerData.projects.filter((project) => project.goalId === goalToDelete.backendId).length}
+          deleting={deletingGoal}
+          onCancel={() => {
+            if (!deletingGoal) setGoalToDelete(null);
+          }}
+          onConfirm={() => {
+            if (!goalToDelete.backendId || deletingGoal) return;
+            const goalBackendId = goalToDelete.backendId;
+            setDeletingGoal(true);
+            void deleteGoal(goalBackendId)
+              .then(() => {
+                setPlanner((prev) => prev
+                  ? {
+                      goals: prev.goals.filter((goal) => goal.backendId !== goalBackendId),
+                      projects: prev.projects.filter((project) => project.goalId !== goalBackendId),
+                    }
+                  : prev);
+                setCollapsedGoalIds((current) => {
+                  const next = new Set(current);
+                  next.delete(goalBackendId);
+                  return next;
+                });
+                setGoalToDelete(null);
+              })
+              .catch((err: unknown) => {
+                setError(err instanceof Error ? err.message : 'Failed to delete goal.');
+              })
+              .finally(() => setDeletingGoal(false));
+          }}
+        />
+      )}
 
       {goalPopoverOpen && goalAnchor && (
         <PlannerGoalCreatePopover
@@ -1745,7 +2209,9 @@ export function PlannerView() {
           anchor={milestoneAnchor}
           year={year}
           goals={plannerData.goals}
+          projects={plannerData.projects}
           defaultGoalId={selectedGoalBackendId}
+          defaultProjectId={null}
           onClose={() => {
             setMilestonePopoverOpen(false);
             setMilestoneAnchor(null);
@@ -1779,6 +2245,7 @@ export function PlannerView() {
             anchor={milestoneEditPopover.anchor}
             milestone={milestone}
             goals={plannerData.goals}
+            projects={plannerData.projects}
             onClose={() => setMilestoneEditPopover(null)}
             onSave={(nextMilestone) => {
               setPlanner((prev) => {
@@ -1820,22 +2287,47 @@ export function PlannerView() {
       {projectRangePopover && (() => {
         const project = plannerData.projects.find((item) => item.id === projectRangePopover.projectId);
         if (!project) return null;
+        const projectMilestones = plannerData.goals
+          .flatMap((goal) => goal.milestones)
+          .filter((milestone) => milestone.projectId === project.backendId);
         return (
-          <PlannerProjectRangePopover
+          <PlannerProjectEditPopover
             anchor={projectRangePopover.anchor}
             project={project}
+            goals={plannerData.goals}
+            milestones={projectMilestones}
             year={year}
             onClose={() => setProjectRangePopover(null)}
-            onSave={(projectId, startDate, endDate) => {
+            onOpenMilestone={(milestone, anchor) => {
+              setMilestoneEditPopover({ anchor, milestoneId: milestone.id });
+            }}
+            onSave={(nextProject) => {
+              setPlanner((prev) => {
+                if (!prev) return prev;
+                const movedToGoal = (nextProject.goalId ?? null) !== (project.goalId ?? null);
+                return {
+                  goals: movedToGoal && project.backendId
+                    ? rehomeProjectMilestones(prev.goals, project.backendId, nextProject.goalId ?? null)
+                    : prev.goals,
+                  projects: prev.projects.map((item) =>
+                    item.id === nextProject.id
+                      ? nextProject
+                      : item,
+                  ),
+                };
+              });
+            }}
+            onDelete={(deletedProject) => {
               setPlanner((prev) => {
                 if (!prev) return prev;
                 return {
-                  ...prev,
-                  projects: prev.projects.map((item) =>
-                    item.id === projectId
-                      ? { ...item, startDate, endDate }
-                      : item,
-                  ),
+                  goals: prev.goals.map((goal) => ({
+                    ...goal,
+                    milestones: goal.milestones.filter(
+                      (milestone) => milestone.projectId !== deletedProject.backendId,
+                    ),
+                  })),
+                  projects: prev.projects.filter((item) => item.id !== deletedProject.id),
                 };
               });
             }}
@@ -1864,8 +2356,8 @@ export function PlannerView() {
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
-              onDragStart={handleProjectDragStart}
-              onDragEnd={handleProjectDragEnd}
+              onDragStart={handlePlannerDragStart}
+              onDragEnd={handlePlannerDragEnd}
               onDragCancel={() => setActiveDraggedProjectId(null)}
             >
               <div
@@ -1880,7 +2372,25 @@ export function PlannerView() {
                     <div className="sticky top-0 z-10 h-12 border-b border-[var(--color-border)] bg-[var(--color-canvas)]" />
                     {rows.map((row) => {
                       if (row.kind === 'goal') {
-                        return <GoalLabelRow key={row.id} row={row} />;
+                        const goalBackendId = row.goal.backendId;
+                        const collapsed = goalBackendId != null && collapsedGoalIds.has(goalBackendId);
+                        return (
+                          <GoalLabelRow
+                            key={row.id}
+                            row={row}
+                            collapsed={collapsed}
+                            onToggleCollapsed={() => {
+                              if (goalBackendId == null) return;
+                              setCollapsedGoalIds((current) => {
+                                const next = new Set(current);
+                                if (next.has(goalBackendId)) next.delete(goalBackendId);
+                                else next.add(goalBackendId);
+                                return next;
+                              });
+                            }}
+                            onDelete={() => setGoalToDelete(row.goal)}
+                          />
+                        );
                       }
 
                       if (row.kind === 'project') {
@@ -1889,6 +2399,12 @@ export function PlannerView() {
                             key={row.id}
                             row={row}
                             isGhosted={activeDraggedProjectId === row.project.id}
+                            onOpen={(anchor) =>
+                              setProjectRangePopover({
+                                anchor,
+                                projectId: row.project.id,
+                              })
+                            }
                           />
                         );
                       }
@@ -1937,7 +2453,13 @@ export function PlannerView() {
                         );
                       }
 
-                      return <div key={row.id} style={{ height: row.height }} />;
+                      return (
+                        <div
+                          key={row.id}
+                          className="border-y border-[var(--color-border)]/35 bg-[var(--color-surface)]/35"
+                          style={{ height: row.height }}
+                        />
+                      );
                     })}
                   </div>
                 </SortableContext>
@@ -1981,13 +2503,17 @@ export function PlannerView() {
                       {rows.map((row) => {
                       if (row.kind === 'goal') {
                         const range = rangeToPercent(row.goal.startDate, row.goal.endDate, year);
-                        const milestoneLayoutMap = getMilestoneLabelLayoutMap(row.goal.milestones);
+                        const goalMilestones = row.goal.milestones.filter((milestone) => milestone.projectId == null);
+                        const milestoneLayoutMap = getMilestoneLabelLayoutMap(goalMilestones);
                         return (
-                          <div
+                          <MilestoneDropRow
                             key={row.id}
-                              className="relative border-b border-[var(--color-border)]/55"
-                              style={{ height: row.height }}
-                            >
+                            id={`milestone-target-goal-${row.goal.backendId}`}
+                            goalId={row.goal.backendId!}
+                            projectId={null}
+                            className="relative border-y border-[var(--color-border)]/70 bg-[var(--color-surface)]/18"
+                            style={{ height: row.height }}
+                          >
                               <TimelineBar
                                 left={range.left}
                                 width={range.width}
@@ -2024,16 +2550,13 @@ export function PlannerView() {
                                   )
                                 }
                               />
-                              {row.goal.milestones.map((milestone) => (
+                              {goalMilestones.map((milestone) => (
                                 <MilestoneMarker
                                   key={milestone.id}
                                   milestone={milestone}
                                   year={year}
                                   lane={milestoneLayoutMap.get(milestone.id)?.lane ?? 0}
                                   labelOffset={milestoneLayoutMap.get(milestone.id)?.offset ?? 0}
-                                  onMoveStart={(event) =>
-                                    startMilestoneInteraction(milestone.backendId, milestone.date, event)
-                                  }
                                   onEdit={(event) => {
                                     event.preventDefault();
                                     event.stopPropagation();
@@ -2044,16 +2567,23 @@ export function PlannerView() {
                                   }}
                                 />
                               ))}
-                            </div>
+                          </MilestoneDropRow>
                           );
                         }
 
                         if (row.kind === 'project') {
                           const outside = isProjectOutsideGoal(row.project, row.goal);
                           const color = outside ? '#f59e0b' : row.goal?.color ?? '#94a3b8';
+                          const projectMilestones = row.goal?.milestones.filter(
+                            (milestone) => milestone.projectId === row.project.backendId,
+                          ) ?? [];
+                          const milestoneLayoutMap = getMilestoneLabelLayoutMap(projectMilestones);
                           return (
-                            <div
+                            <MilestoneDropRow
                               key={row.id}
+                              id={`milestone-target-project-${row.project.backendId}`}
+                              goalId={row.goal?.backendId ?? null}
+                              projectId={row.project.backendId ?? null}
                               className="relative border-b border-[var(--color-border)]/40"
                               style={{
                                 height: row.height,
@@ -2108,7 +2638,24 @@ export function PlannerView() {
                                   }}
                                 />
                               )}
-                            </div>
+                              {projectMilestones.map((milestone) => (
+                                <MilestoneMarker
+                                  key={milestone.id}
+                                  milestone={milestone}
+                                  year={year}
+                                  lane={milestoneLayoutMap.get(milestone.id)?.lane ?? 0}
+                                  labelOffset={milestoneLayoutMap.get(milestone.id)?.offset ?? 0}
+                                  onEdit={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    setMilestoneEditPopover({
+                                      anchor: event.currentTarget,
+                                      milestoneId: milestone.id,
+                                    });
+                                  }}
+                                />
+                              ))}
+                            </MilestoneDropRow>
                           );
                         }
 
@@ -2132,7 +2679,13 @@ export function PlannerView() {
                           );
                         }
 
-                        return <div key={row.id} style={{ height: row.height }} />;
+                        return (
+                          <div
+                            key={row.id}
+                            className="border-y border-[var(--color-border)]/35 bg-[var(--color-surface)]/35"
+                            style={{ height: row.height }}
+                          />
+                        );
                       })}
                     </div>
                   </div>

@@ -88,6 +88,13 @@ def update_project(project_id: int, payload: schemas.ProjectUpdate, db: Session 
     next_end = update_data.get("end_date", project.end_date)
     _validate_project_payload(next_goal_id, next_start, next_end, db)
 
+    if "goal_id" in update_data and next_goal_id != project.goal_id:
+        for milestone in project.milestones:
+            if next_goal_id is None:
+                milestone.project_id = None
+            else:
+                milestone.goal_id = next_goal_id
+
     for field, value in update_data.items():
         setattr(project, field, value)
 
@@ -103,5 +110,13 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    db.query(models.Task).filter(models.Task.project_id == project_id).update(
+        {models.Task.project_id: None},
+        synchronize_session=False,
+    )
+    db.query(models.RecurrentTask).filter(models.RecurrentTask.project_id == project_id).update(
+        {models.RecurrentTask.project_id: None},
+        synchronize_session=False,
+    )
     db.delete(project)
     db.commit()

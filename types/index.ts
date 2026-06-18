@@ -158,7 +158,9 @@ export interface Milestone {
   id: string;
   backendId?: number;
   goalId: number;
+  projectId?: number;
   name: string;
+  notes?: string;
   type: MilestoneType;
   date: string;
   createdAt: string;

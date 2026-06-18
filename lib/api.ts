@@ -391,7 +391,9 @@ function toMilestone(b: BackendMilestone): Milestone {
     id:         b.client_id ?? String(b.id),
     backendId:  b.id,
     goalId:     b.goal_id,
+    projectId:  b.project_id ?? undefined,
     name:       b.name,
+    notes:      b.notes ?? undefined,
     type:       (b.type as MilestoneType | undefined) ?? 'major',
     date:       b.date,
     createdAt:  b.created_at,
@@ -653,15 +655,23 @@ export async function patchGoal(backendId: number, fields: Record<string, unknow
   await patch<unknown>(`/goals/${backendId}`, fields);
 }
 
+export async function deleteGoal(backendId: number): Promise<void> {
+  await del(`/goals/${backendId}`);
+}
+
 export async function createMilestone(input: {
   goalId: number;
+  projectId?: number;
   name: string;
+  notes?: string;
   type: MilestoneType;
   date: string;
 }): Promise<Milestone> {
   const milestone = await post<BackendMilestone>('/milestones', {
     goal_id: input.goalId,
+    project_id: input.projectId ?? null,
     name: input.name,
+    notes: input.notes ?? null,
     type: input.type,
     date: input.date,
   });

@@ -343,7 +343,9 @@ class ProjectOut(BaseModel):
 
 class MilestoneBase(BaseModel):
     goal_id: int
+    project_id: int | None = None
     name: str
+    notes: str | None = None
     type: Literal["major", "project"] = "major"
     date: date_value
 
@@ -354,7 +356,9 @@ class MilestoneCreate(MilestoneBase):
 
 class MilestoneUpdate(BaseModel):
     goal_id: Optional[int] = None
+    project_id: Optional[int] = None
     name: Optional[str] = None
+    notes: Optional[str] = None
     type: Optional[Literal["major", "project"]] = None
     date: Optional[date_value] = None
 

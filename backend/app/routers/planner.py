@@ -88,6 +88,18 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     goal = db.get(models.Goal, goal_id)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
+    project_ids = [project.id for project in goal.projects]
+    if project_ids:
+        db.query(models.Task).filter(models.Task.project_id.in_(project_ids)).update(
+            {models.Task.project_id: None},
+            synchronize_session=False,
+        )
+        db.query(models.RecurrentTask).filter(models.RecurrentTask.project_id.in_(project_ids)).update(
+            {models.RecurrentTask.project_id: None},
+            synchronize_session=False,
+        )
+        for project in list(goal.projects):
+            db.delete(project)
     db.delete(goal)
     db.commit()
 
@@ -102,11 +114,16 @@ def create_milestone(payload: schemas.MilestoneCreate, db: Session = Depends(get
     goal = db.get(models.Goal, payload.goal_id)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
+    project = db.get(models.Project, payload.project_id) if payload.project_id is not None else None
+    if payload.project_id is not None and (not project or project.goal_id != payload.goal_id):
+        raise HTTPException(status_code=422, detail="Project must belong to the selected goal")
 
     milestone = models.Milestone(
         client_id=payload.client_id or uuid.uuid4(),
         goal_id=payload.goal_id,
+        project_id=payload.project_id,
         name=payload.name,
+        notes=payload.notes,
         type=payload.type,
         date=payload.date,
     )
@@ -123,9 +140,14 @@ def update_milestone(milestone_id: int, payload: schemas.MilestoneUpdate, db: Se
         raise HTTPException(status_code=404, detail="Milestone not found")
 
     update_data = payload.model_dump(exclude_unset=True)
-    next_goal_id = update_data.get("goal_id")
-    if next_goal_id is not None and not db.get(models.Goal, next_goal_id):
+    next_goal_id = update_data.get("goal_id", milestone.goal_id)
+    if not db.get(models.Goal, next_goal_id):
         raise HTTPException(status_code=404, detail="Goal not found")
+    next_project_id = update_data.get("project_id", milestone.project_id)
+    if next_project_id is not None:
+        project = db.get(models.Project, next_project_id)
+        if not project or project.goal_id != next_goal_id:
+            raise HTTPException(status_code=422, detail="Project must belong to the selected goal")
 
     for field, value in update_data.items():
         setattr(milestone, field, value)
