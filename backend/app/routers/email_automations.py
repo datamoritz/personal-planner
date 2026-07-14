@@ -186,6 +186,19 @@ def _calendar_role_from_body(body: str) -> str:
     return "atlanta"
 
 
+def _strip_calendar_routing_command(body: str) -> str:
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        next_line = re.sub(r"^\s*events?\b[\s:,-]*", "", line, count=1, flags=re.IGNORECASE)
+        if next_line != line:
+            lines[index] = next_line
+        break
+    return "\n".join(lines).strip()
+
+
 def _profile_email(gmail) -> str:
     profile = gmail.users().getProfile(userId="me").execute()
     email_address = profile.get("emailAddress")
@@ -481,6 +494,7 @@ def process_calendar_automation_emails(
             email_subject, email_body = _fetch_automation_email_content(gmail, message_id)
             calendar_role = _calendar_role_from_body(email_body)
             calendar_meta = _get_calendar_for_role(calendar, calendar_role)
+            email_body = _strip_calendar_routing_command(email_body)
             draft, parsed = _suggest_calendar_event_from_email(
                 subject=email_subject,
                 body=email_body,
