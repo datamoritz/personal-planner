@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.config import settings
 from app.db import get_db
-from app.routers.email import _fetch_email_content, _header_map
+from app.routers.email import _extract_parts, _fetch_email_content, _fetch_message, _header_map, _html_to_text
 from app.routers.google import (
     get_gmail_service,
     get_google_service,
@@ -139,6 +139,39 @@ def _sender_and_subject(gmail, message_id: str) -> tuple[str | None, str | None]
     message = _fetch_message_metadata(gmail, message_id)
     headers = _header_map(message.get("payload", {}).get("headers"))
     return headers.get("from"), headers.get("subject")
+
+
+def _clean_forwarded_text(text: str) -> str:
+    lines: list[str] = []
+    for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        stripped = line.lstrip()
+        if stripped.startswith(">"):
+            stripped = stripped[1:].lstrip()
+        lines.append(stripped)
+    normalized = "\n".join(lines)
+    while "\n\n\n" in normalized:
+        normalized = normalized.replace("\n\n\n", "\n\n")
+    return normalized.strip()
+
+
+def _fetch_automation_email_content(gmail, message_id: str) -> tuple[str, str]:
+    email = _fetch_email_content(gmail, message_id)
+    if email.body.strip():
+        return email.subject, email.body
+
+    message = _fetch_message(gmail, message_id, format_="full", fields="id,snippet,payload")
+    plain_parts, html_parts = _extract_parts(message.get("payload"))
+    fallback_body = ""
+    if plain_parts:
+        fallback_body = "\n\n".join(part for part in plain_parts if part.strip())
+    elif html_parts:
+        fallback_body = _html_to_text("\n\n".join(part for part in html_parts if part.strip()))
+
+    fallback_body = _clean_forwarded_text(fallback_body)
+    if not fallback_body:
+        fallback_body = message.get("snippet", "")
+
+    return email.subject, fallback_body
 
 
 def _profile_email(gmail) -> str:
@@ -313,6 +346,36 @@ def _send_confirmation_email(
     gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
 
 
+def _send_error_confirmation_email(
+    gmail,
+    *,
+    to_email: str,
+    source_subject: str | None,
+    error_message: str,
+) -> None:
+    message = EmailMessage()
+    message["To"] = to_email
+    message["From"] = to_email
+    message["Subject"] = "Planner calendar automation: Needs review"
+    message.set_content(
+        "\n".join(
+            [
+                "No calendar event was created.",
+                "",
+                f"Source email: {source_subject or '(No subject)'}",
+                "",
+                "Reason:",
+                error_message,
+                "",
+                "The source email was labeled Planner/Error.",
+            ]
+        )
+    )
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+    gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
+
+
 def _modify_labels(gmail, message_id: str, *, add_label_ids: list[str], remove_label_ids: list[str] | None = None) -> None:
     gmail.users().messages().modify(
         userId="me",
@@ -401,10 +464,10 @@ def process_calendar_automation_emails(
                 db.add(run)
             db.commit()
 
-            email = _fetch_email_content(gmail, message_id)
+            email_subject, email_body = _fetch_automation_email_content(gmail, message_id)
             draft, parsed = _suggest_calendar_event_from_email(
-                subject=email.subject,
-                body=email.body,
+                subject=email_subject,
+                body=email_body,
                 sender=sender,
                 timezone=settings.EMAIL_AUTOMATION_TIMEZONE,
             )
@@ -419,7 +482,7 @@ def process_calendar_automation_emails(
             _send_confirmation_email(
                 gmail,
                 to_email=to_email,
-                source_subject=email.subject,
+                source_subject=email_subject,
                 event=event,
                 parsed=parsed,
                 dry_run=dry_run,
@@ -438,7 +501,7 @@ def process_calendar_automation_emails(
                 ProcessedEmailAutomationItem(
                     messageId=message_id,
                     status=run.status,
-                    subject=email.subject,
+                    subject=email_subject,
                     eventId=run.event_id,
                     parsed=parsed,
                 )
@@ -465,6 +528,15 @@ def process_calendar_automation_emails(
                 db.rollback()
             try:
                 _modify_labels(gmail, message_id, add_label_ids=[error_label_id])
+            except Exception:
+                pass
+            try:
+                _send_error_confirmation_email(
+                    gmail,
+                    to_email=to_email,
+                    source_subject=subject,
+                    error_message=str(detail),
+                )
             except Exception:
                 pass
             items.append(
