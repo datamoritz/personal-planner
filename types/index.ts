@@ -80,6 +80,9 @@ export interface CalendarEntry {
   startTime: string;    // 'HH:MM'
   endTime: string;      // 'HH:MM'
   notes?: string;
+  calendarId?: string;
+  calendarName?: string;
+  calendarRole?: 'atlanta' | 'events';
   createdAt: string;
   updatedAt: string;
   syncState?: 'pending';
@@ -93,6 +96,9 @@ export interface AllDayEvent {
   date: string;         // inclusive start date
   endDate?: string;     // inclusive end date
   source: 'google' | 'apple_birthdays';
+  calendarId?: string;
+  calendarName?: string;
+  calendarRole?: 'atlanta' | 'events';
   readOnly?: boolean;
   birthdayContactId?: number;
   hasMessage?: boolean;

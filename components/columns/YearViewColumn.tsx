@@ -27,7 +27,7 @@ type PreviewItem = {
   id: string;
   title: string;
   timeLabel: string;
-  tone: 'all-day' | 'google' | 'task' | 'birthday';
+  tone: 'all-day' | 'google' | 'events' | 'task' | 'birthday';
   done?: boolean;
 };
 
@@ -66,6 +66,7 @@ function dotToneClass(tone: PreviewItem['tone']) {
   if (tone === 'birthday') return 'bg-[#f59e0b]';
   if (tone === 'all-day') return 'bg-[var(--color-google-event-text)]';
   if (tone === 'google') return 'bg-[var(--color-google-event)]';
+  if (tone === 'events') return 'bg-[var(--color-google-events-event-text)]';
   return 'bg-[var(--color-accent)]';
 }
 
@@ -98,13 +99,17 @@ function buildMonthWeeks(
         id: event.id,
         title: event.title,
         timeLabel: 'all-day',
-        tone: event.source === 'apple_birthdays' ? 'birthday' as const : 'all-day' as const,
+        tone: event.source === 'apple_birthdays'
+          ? 'birthday' as const
+          : event.calendarRole === 'events'
+          ? 'events' as const
+          : 'all-day' as const,
       })),
       ...dayTimedEntries.map((entry) => ({
         id: entry.id,
         title: entry.title,
         timeLabel: formatPreviewTime(entry.startTime),
-        tone: 'google' as const,
+        tone: entry.calendarRole === 'events' ? 'events' as const : 'google' as const,
       })),
       ...dayTimedTasks.map((task) => ({
         id: task.id,

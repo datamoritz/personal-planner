@@ -108,6 +108,7 @@ class GoogleTimedEventCreate(BaseModel):
     end_time: time
     notes: Optional[str] = None
     tz: str = "America/Denver"
+    calendar_id: Optional[str] = None
 
 
 class GoogleTimedEventOut(BaseModel):
@@ -119,6 +120,9 @@ class GoogleTimedEventOut(BaseModel):
     startTime: str
     endTime: str
     notes: Optional[str] = None
+    calendarId: Optional[str] = None
+    calendarName: Optional[str] = None
+    calendarRole: Optional[str] = None
     createdAt: str
     updatedAt: str
 
@@ -131,6 +135,7 @@ class GoogleTimedEventUpdate(BaseModel):
     end_time: time
     notes: Optional[str] = None
     tz: str = "America/Denver"
+    calendar_id: Optional[str] = None
 
 
 class GoogleAllDayEventCreate(BaseModel):
@@ -138,6 +143,7 @@ class GoogleAllDayEventCreate(BaseModel):
     date: date
     end_date: Optional[date] = None
     notes: Optional[str] = None
+    calendar_id: Optional[str] = None
 
 
 class GoogleAllDayEventOut(BaseModel):
@@ -146,6 +152,9 @@ class GoogleAllDayEventOut(BaseModel):
     date: str
     endDate: str
     source: str = "google"
+    calendarId: Optional[str] = None
+    calendarName: Optional[str] = None
+    calendarRole: Optional[str] = None
     birthdayContactId: Optional[int] = None
     hasMessage: bool = False
     notes: Optional[str] = None
@@ -173,6 +182,12 @@ class GoogleAllDayEventUpdate(BaseModel):
     date: date
     end_date: Optional[date] = None
     notes: Optional[str] = None
+    calendar_id: Optional[str] = None
+
+
+class GoogleEventMoveRequest(BaseModel):
+    source_calendar_id: str
+    destination_calendar_role: Literal["atlanta", "events"]
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 from datetime import date, datetime, time, timedelta
 from email.message import EmailMessage
 from typing import Any
@@ -17,6 +18,7 @@ from app.routers.email import _extract_parts, _fetch_email_content, _fetch_messa
 from app.routers.google import (
     get_gmail_service,
     get_google_service,
+    _get_calendar_for_role,
     _normalize_allday_event,
     _normalize_timed_event,
     _to_local_iso,
@@ -174,6 +176,16 @@ def _fetch_automation_email_content(gmail, message_id: str) -> tuple[str, str]:
     return email.subject, fallback_body
 
 
+def _calendar_role_from_body(body: str) -> str:
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        first_word = re.split(r"[\s:,-]+", stripped, maxsplit=1)[0].lower()
+        return "events" if first_word in {"event", "events"} else "atlanta"
+    return "atlanta"
+
+
 def _profile_email(gmail) -> str:
     profile = gmail.users().getProfile(userId="me").execute()
     email_address = profile.get("emailAddress")
@@ -267,12 +279,12 @@ def _suggest_calendar_event_from_email(
     return draft, parsed
 
 
-def _create_calendar_event(calendar, draft: CalendarDraft) -> dict:
+def _create_calendar_event(calendar, draft: CalendarDraft, calendar_id: str, calendar_meta: dict) -> dict:
     if draft.allDay:
         end_date = draft.endDate or draft.date
         google_end_date = end_date + timedelta(days=1)
         created = calendar.events().insert(
-            calendarId="primary",
+            calendarId=calendar_id,
             body={
                 "summary": draft.title,
                 "description": draft.notes,
@@ -280,11 +292,11 @@ def _create_calendar_event(calendar, draft: CalendarDraft) -> dict:
                 "end": {"date": google_end_date.isoformat()},
             },
         ).execute()
-        normalized = _normalize_allday_event(created, tz_name=draft.timezone)
+        normalized = _normalize_allday_event(created, tz_name=draft.timezone, calendar=calendar_meta)
     else:
         end_date = draft.endDate or draft.date
         created = calendar.events().insert(
-            calendarId="primary",
+            calendarId=calendar_id,
             body={
                 "summary": draft.title,
                 "description": draft.notes,
@@ -298,7 +310,7 @@ def _create_calendar_event(calendar, draft: CalendarDraft) -> dict:
                 },
             },
         ).execute()
-        normalized = _normalize_timed_event(created, tz_name=draft.timezone)
+        normalized = _normalize_timed_event(created, tz_name=draft.timezone, calendar=calendar_meta)
 
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was created but could not be normalized")
@@ -313,6 +325,7 @@ def _send_confirmation_email(
     event: dict | None,
     parsed: dict[str, Any],
     dry_run: bool,
+    calendar_name: str,
 ) -> None:
     title = parsed.get("title") or "(No title)"
     date_value = parsed.get("date") or "(No date)"
@@ -333,6 +346,7 @@ def _send_confirmation_email(
                 f"Title: {title}",
                 f"Date: {date_value}",
                 f"Time: {time_text}",
+                f"Calendar: {calendar_name}",
                 f"Source email: {source_subject}",
                 f"Google event id: {event.get('id') if event else '(dry run)'}",
                 "",
@@ -465,13 +479,15 @@ def process_calendar_automation_emails(
             db.commit()
 
             email_subject, email_body = _fetch_automation_email_content(gmail, message_id)
+            calendar_role = _calendar_role_from_body(email_body)
+            calendar_meta = _get_calendar_for_role(calendar, calendar_role)
             draft, parsed = _suggest_calendar_event_from_email(
                 subject=email_subject,
                 body=email_body,
                 sender=sender,
                 timezone=settings.EMAIL_AUTOMATION_TIMEZONE,
             )
-            event = None if dry_run else _create_calendar_event(calendar, draft)
+            event = None if dry_run else _create_calendar_event(calendar, draft, calendar_meta["id"], calendar_meta)
             run.event_id = event.get("id") if event else None
             run.parsed_json = json.dumps(parsed, ensure_ascii=False)
             run.status = "dry_run" if dry_run else "event_created"
@@ -486,6 +502,7 @@ def process_calendar_automation_emails(
                 event=event,
                 parsed=parsed,
                 dry_run=dry_run,
+                calendar_name=calendar_meta.get("summary") or calendar_meta["id"],
             )
             if not dry_run:
                 _modify_labels(gmail, message_id, add_label_ids=[processed_label_id], remove_label_ids=["UNREAD"])

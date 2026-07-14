@@ -119,6 +119,7 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
       endTime: entry.endTime,
       notes: entry.notes ?? undefined,
       tz,
+      calendarId: entry.calendarId,
     }).then(() => {
       refreshGoogle();
     }).catch((err) => {
@@ -150,6 +151,7 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
       date: nextDate,
       endDate: shiftedEndDate,
       notes: entry.notes ?? undefined,
+      calendarId: entry.calendarId,
     }).then(() => {
       refreshGoogle();
     }).catch((err) => {
@@ -161,8 +163,9 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
 
   const deleteGoogleEntry = useCallback((entryId: string) => {
     const prevEntries = usePlannerStore.getState().googleCalendarEntries;
+    const entry = selectMergedGoogleCalendarEntryById(prevEntries, entryId);
     applyOptimisticGoogleDelete(entryId);
-    api.deleteGoogleTimedEvent(entryId).then(() => {
+    api.deleteGoogleTimedEvent(entryId, entry?.calendarId).then(() => {
       refreshGoogle();
     }).catch((err) => {
       console.error('[deleteGoogleTimedEvent month]', err);
@@ -173,8 +176,9 @@ export function MonthViewColumn({ monthViewMode, showEventTimes }: MonthViewColu
 
   const deleteAllDayEvent = useCallback((eventId: string) => {
     const prevEvents = usePlannerStore.getState().googleAllDayEvents;
+    const event = prevEvents.find((item) => item.id === eventId);
     applyOptimisticGoogleAllDayDelete(eventId);
-    api.deleteGoogleAllDayEvent(eventId).then(() => {
+    api.deleteGoogleAllDayEvent(eventId, event?.calendarId).then(() => {
       refreshGoogle();
     }).catch((err) => {
       console.error('[deleteGoogleAllDayEvent month]', err);

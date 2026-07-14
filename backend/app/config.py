@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     EMAIL_AUTOMATION_PROCESSED_LABEL: str = "Planner/Processed"
     EMAIL_AUTOMATION_ERROR_LABEL: str = "Planner/Error"
     EMAIL_AUTOMATION_TIMEZONE: str = "America/Denver"
+    GOOGLE_DEFAULT_CALENDAR_NAME: str = "Atlanta"
+    GOOGLE_EVENTS_CALENDAR_NAME: str = "Events"
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

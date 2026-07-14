@@ -16,6 +16,7 @@ interface CalendarEntryLike {
   startTime: string;
   endTime: string;
   notes?: string | null;
+  calendarRole?: 'atlanta' | 'events';
 }
 
 interface CalendarEntryBlockProps {
@@ -65,6 +66,9 @@ export function CalendarEntryBlock({
   const canOpen      = !!onDoubleClick;
   const slotHeight   = useSlotHeight();
   const isMobileGrid = slotHeight < SLOT_HEIGHT;
+  const isEventsCalendar = entry.calendarRole === 'events';
+  const eventBg = isEventsCalendar ? 'var(--color-google-events-event)' : 'var(--color-google-event)';
+  const eventText = isEventsCalendar ? 'var(--color-google-events-event-text)' : 'var(--color-google-event-text)';
 
   // ── Drag to reposition ──────────────────────────────────────────────────
   const handleDragPointerDown = (e: React.PointerEvent) => {
@@ -233,11 +237,11 @@ export function CalendarEntryBlock({
         e.stopPropagation();
         onDoubleClick?.(entry.id, e.currentTarget);
       }}
-      style={{ ...style, boxShadow: 'none' }}
+      style={{ ...style, boxShadow: 'none', '--calendar-entry-bg': eventBg, '--calendar-entry-text': eventText } as React.CSSProperties}
       className={[
         `absolute left-1 right-1 rounded-lg ${compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5'} select-none overflow-hidden transition-colors`,
         readOnly
-          ? `bg-[var(--color-google-event)] ${canReposition ? 'cursor-grab' : canOpen ? 'cursor-pointer' : 'cursor-default'}`
+          ? `bg-[var(--calendar-entry-bg)] ${canReposition ? 'cursor-grab' : canOpen ? 'cursor-pointer' : 'cursor-default'}`
           : [
               'bg-[var(--color-accent-subtle)]',
               'hover:bg-[color-mix(in_srgb,var(--color-accent-subtle)_88%,white_12%)]',
@@ -248,13 +252,13 @@ export function CalendarEntryBlock({
     >
       <p className={[
         `${compact ? 'text-[10px]' : 'text-xs'} font-semibold leading-tight truncate`,
-        readOnly ? 'text-[var(--color-google-event-text)]' : 'text-[var(--color-accent)]',
+        readOnly ? 'text-[var(--calendar-entry-text)]' : 'text-[var(--color-accent)]',
       ].join(' ')}>
         {entry.title}
       </p>
       <p className={[
         `${compact ? 'text-[9px]' : 'text-[10px]'} mt-0.5`,
-        readOnly ? 'text-[color-mix(in_srgb,var(--color-google-event-text)_72%,var(--color-text-secondary))]' : 'text-[var(--color-text-secondary)]',
+        readOnly ? 'text-[color-mix(in_srgb,var(--calendar-entry-text)_72%,var(--color-text-secondary))]' : 'text-[var(--color-text-secondary)]',
       ].join(' ')}>
         {formatDisplayTime(entry.startTime)} – {formatDisplayTime(entry.endTime)}
       </p>
@@ -264,7 +268,7 @@ export function CalendarEntryBlock({
           onPointerDown={handleResizePointerDown}
           className={`absolute bottom-0 left-0 right-0 ${isMobileGrid ? 'h-6' : 'h-2'} cursor-row-resize flex items-center justify-center group`}
         >
-          <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[var(--color-google-event-text)]' : 'bg-[var(--color-accent)]'} opacity-30 group-hover:opacity-70 transition-opacity`} />
+          <div className={`w-6 h-0.5 rounded-full ${readOnly ? 'bg-[var(--calendar-entry-text)]' : 'bg-[var(--color-accent)]'} opacity-30 group-hover:opacity-70 transition-opacity`} />
         </div>
       )}
     </div>

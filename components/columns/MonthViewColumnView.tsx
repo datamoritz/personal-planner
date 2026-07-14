@@ -59,7 +59,7 @@ function MonthEventRow({
 }: {
   title: string;
   time?: string;
-  tone: 'google' | 'task' | 'all-day' | 'birthday';
+  tone: 'google' | 'events' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
   trailingIndicator?: string;
   isStart?: boolean;
@@ -70,6 +70,8 @@ function MonthEventRow({
   const toneClass =
     tone === 'google'
       ? 'bg-[color-mix(in_srgb,var(--color-google-event)_94%,white_6%)] text-[var(--color-google-event-text)]'
+      : tone === 'events'
+      ? 'bg-[color-mix(in_srgb,var(--color-google-events-event)_94%,white_6%)] text-[var(--color-google-events-event-text)]'
       : tone === 'task'
       ? 'bg-[color-mix(in_srgb,var(--color-accent-subtle)_92%,white_8%)] text-[var(--color-accent)]'
       : tone === 'birthday'
@@ -217,7 +219,7 @@ function MonthDraggableEventRow({
   containerId: string;
   title: string;
   time?: string;
-  tone: 'google' | 'task' | 'all-day' | 'birthday';
+  tone: 'google' | 'events' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
   onDoubleClick?: (id: string, anchor: HTMLElement) => void;
   dragType: 'google-entry' | 'google-all-day' | 'task';
@@ -276,7 +278,7 @@ function MonthReadOnlyEventRow({
   event: AllDayEvent;
   title: string;
   time?: string;
-  tone: 'google' | 'task' | 'all-day' | 'birthday';
+  tone: 'google' | 'events' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
   trailingIndicator?: string;
   isStart?: boolean;
@@ -452,7 +454,7 @@ function MonthDayCell({
                   id={event.id}
                   containerId={eventContainerId}
                   title={event.title}
-                  tone="all-day"
+                tone={event.calendarRole === 'events' ? 'events' : 'all-day'}
                   showTime={false}
                   dragType="google-all-day"
                   onDoubleClick={onGoogleEntryDoubleClick}
@@ -469,7 +471,7 @@ function MonthDayCell({
                 containerId={eventContainerId}
                 title={entry.title}
                 time={formatEventTime(entry.startTime)}
-                tone="google"
+                tone={entry.calendarRole === 'events' ? 'events' : 'google'}
                 showTime={showEventTimes}
                 dragType="google-entry"
                 onDoubleClick={onGoogleEntryDoubleClick}

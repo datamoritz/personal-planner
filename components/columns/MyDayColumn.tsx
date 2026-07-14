@@ -157,6 +157,7 @@ export function MyDayColumn({ onFocusMode, onActionsMode }: { onFocusMode?: (act
       endTime: normalizedRange.endTime,
       notes: nextNotes,
       tz,
+      calendarId: entry.calendarId,
     }).then(() => {
       refreshGoogle();
     }).catch((err) => {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { addDays, format } from 'date-fns';
-import { Check, Sparkles, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, Sparkles, Trash2 } from 'lucide-react';
 import { usePlannerStore, selectMergedGoogleCalendarEntryById } from '@/store/usePlannerStore';
 import type { AllDayEvent, CalendarEntry } from '@/types';
 import { DetailPopover } from './DetailPopover';
@@ -80,7 +80,9 @@ function GoogleCalendarEntryDetailPopoverInner({
   const [notes, setNotes] = useState(entry.notes ?? '');
   const [emojiLoading, setEmojiLoading] = useState(false);
   const [isAllDay, setIsAllDay] = useState(initialIsAllDay);
+  const [calendarMenuOpen, setCalendarMenuOpen] = useState(false);
   const baseEventId = entry.id.split('::')[0];
+  const calendarRole = entry.calendarRole ?? 'atlanta';
 
   const handleStartTimeChange = useCallback((nextStartTime: string) => {
     setStartTime(nextStartTime);
@@ -144,6 +146,7 @@ function GoogleCalendarEntryDetailPopoverInner({
         date: nextDate,
         endDate: nextEndDate,
         notes: nextNotes || undefined,
+        calendarId: entry.calendarId,
       }).then(() => {
         refresh();
       }).catch((err) => {
@@ -197,6 +200,7 @@ function GoogleCalendarEntryDetailPopoverInner({
       endTime: nextEnd,
       notes: nextNotes || undefined,
       tz,
+      calendarId: entry.calendarId,
     }).then(() => {
       refresh();
     }).catch((err) => {
@@ -232,7 +236,7 @@ function GoogleCalendarEntryDetailPopoverInner({
   const handleDelete = () => {
     if (isAllDay) {
       applyOptimisticGoogleAllDayDelete(baseEventId);
-      api.deleteGoogleAllDayEvent(baseEventId).then(() => {
+      api.deleteGoogleAllDayEvent(baseEventId, entry.calendarId).then(() => {
         refresh();
       }).catch((err) => {
         console.error('[deleteGoogleAllDayEvent]', err);
@@ -245,7 +249,7 @@ function GoogleCalendarEntryDetailPopoverInner({
     }
 
     applyOptimisticGoogleDelete(baseEventId);
-    api.deleteGoogleTimedEvent(baseEventId).then(() => {
+    api.deleteGoogleTimedEvent(baseEventId, entry.calendarId).then(() => {
       refresh();
     }).catch((err) => {
       console.error('[deleteGoogleTimedEvent]', err);
@@ -253,6 +257,56 @@ function GoogleCalendarEntryDetailPopoverInner({
       clearPendingGoogleMutation(baseEventId);
     }).finally(() => {
       onClose();
+    });
+  };
+
+  const handleCalendarMove = (destinationCalendarRole: 'atlanta' | 'events') => {
+    if (!entry.calendarId || destinationCalendarRole === calendarRole) {
+      setCalendarMenuOpen(false);
+      return;
+    }
+
+    setCalendarMenuOpen(false);
+    const nextCalendarName = destinationCalendarRole === 'events' ? 'Events' : 'Atlanta';
+
+    if (isTimedEntry) {
+      const optimisticEntry: CalendarEntry = {
+        ...entry,
+        id: baseEventId,
+        calendarRole: destinationCalendarRole,
+        calendarName: nextCalendarName,
+      };
+      applyOptimisticGoogleEntry(optimisticEntry);
+      api.moveGoogleTimedEvent(baseEventId, {
+        sourceCalendarId: entry.calendarId,
+        destinationCalendarRole,
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }).then(() => {
+        refresh();
+      }).catch((err) => {
+        console.error('[moveGoogleTimedEvent]', err);
+        setGoogleCalendarEntries(googleEntries);
+        clearPendingGoogleMutation(baseEventId);
+      });
+      return;
+    }
+
+    const optimisticAllDayEvent: AllDayEvent = {
+      ...entry,
+      id: baseEventId,
+      calendarRole: destinationCalendarRole,
+      calendarName: nextCalendarName,
+    };
+    applyOptimisticGoogleAllDayEvent(optimisticAllDayEvent);
+    api.moveGoogleAllDayEvent(baseEventId, {
+      sourceCalendarId: entry.calendarId,
+      destinationCalendarRole,
+    }).then(() => {
+      refresh();
+    }).catch((err) => {
+      console.error('[moveGoogleAllDayEvent]', err);
+      setGoogleAllDayEvents(googleAllDayEvents);
+      clearPendingGoogleAllDayMutation(baseEventId);
     });
   };
 
@@ -302,6 +356,40 @@ function GoogleCalendarEntryDetailPopoverInner({
           >
             <Sparkles size={12} strokeWidth={2.2} />
           </button>
+          {entry.calendarId && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setCalendarMenuOpen((current) => !current);
+                }}
+                className="ui-icon-button text-[var(--color-text-muted)]"
+                aria-label="Move calendar event"
+                title={`Calendar: ${entry.calendarName ?? (calendarRole === 'events' ? 'Events' : 'Atlanta')}`}
+              >
+                <CalendarDays size={12} strokeWidth={2.2} />
+              </button>
+              {calendarMenuOpen && (
+                <div className="absolute right-0 top-7 z-50 min-w-28 overflow-hidden rounded-lg border border-[var(--color-popover-border)] bg-[var(--color-popover)] py-1 shadow-[var(--shadow-floating)]">
+                  {(['atlanta', 'events'] as const).map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => handleCalendarMove(role)}
+                      className={[
+                        'flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-[var(--color-surface)]',
+                        role === calendarRole ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]',
+                      ].join(' ')}
+                    >
+                      <span>{role === 'events' ? 'Events' : 'Atlanta'}</span>
+                      {role === calendarRole && <Check size={11} strokeWidth={2.4} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {showSaveAction && (
             <button
               onClick={handleClose}

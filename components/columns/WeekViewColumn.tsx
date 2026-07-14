@@ -123,6 +123,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
       endTime: normalizedRange.endTime,
       notes: nextNotes,
       tz,
+      calendarId: entry.calendarId,
     }).then(() => {
       refreshGoogle();
     }).catch((err) => {
@@ -154,6 +155,7 @@ export function WeekViewColumn({ sidebarVisible, onNKey }: WeekViewColumnProps) 
       date: nextDate,
       endDate: shiftedEndDate,
       notes: entry.notes ?? undefined,
+      calendarId: entry.calendarId,
     }).then(() => {
       refreshGoogle();
     }).catch((err) => {

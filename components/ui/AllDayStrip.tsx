@@ -23,11 +23,15 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick, on
         <div
           key={ev.id}
           title={ev.notes ?? ev.title}
+          style={{
+            '--all-day-bg': ev.calendarRole === 'events' ? 'var(--color-google-events-event)' : 'var(--color-google-event)',
+            '--all-day-text': ev.calendarRole === 'events' ? 'var(--color-google-events-event-text)' : 'var(--color-google-event-text)',
+          } as React.CSSProperties}
           className={[
             'flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium truncate select-none',
             ev.source === 'apple_birthdays'
               ? 'text-[#b45309] bg-[color-mix(in_srgb,#f97316_10%,white_90%)] shadow-[0_6px_18px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28'
-              : 'text-[#10b981] bg-[#10b981]/10',
+              : 'text-[var(--all-day-text)] bg-[var(--all-day-bg)]',
             ev.readOnly ? 'cursor-pointer' : 'cursor-pointer',
           ].join(' ')}
           onClick={(e) => {
@@ -43,7 +47,7 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick, on
           <span
             className={[
               'w-1.5 h-1.5 rounded-full flex-shrink-0',
-              ev.source === 'apple_birthdays' ? 'bg-[#f59e0b]' : 'bg-[#10b981]',
+              ev.source === 'apple_birthdays' ? 'bg-[#f59e0b]' : 'bg-[var(--all-day-text)]',
             ].join(' ')}
           />
           <span className="truncate flex-1 min-w-0">{ev.title}</span>

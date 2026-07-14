@@ -894,6 +894,7 @@ export async function createGoogleTimedEvent(input: {
   notes?: string;
   tz: string;
   endDate?: string;
+  calendarId?: string;
 }): Promise<CalendarEntry> {
   return post<CalendarEntry>('/google/events', {
     title: input.title,
@@ -903,6 +904,7 @@ export async function createGoogleTimedEvent(input: {
     end_time: toApiTime(input.endTime),
     notes: input.notes ?? null,
     tz: input.tz,
+    calendar_id: input.calendarId ?? null,
   });
 }
 
@@ -914,6 +916,7 @@ export async function patchGoogleTimedEvent(eventId: string, input: {
   notes?: string;
   tz: string;
   endDate?: string;
+  calendarId?: string;
 }): Promise<CalendarEntry> {
   return patch<CalendarEntry>(`/google/events/${eventId}`, {
     title: input.title,
@@ -923,11 +926,13 @@ export async function patchGoogleTimedEvent(eventId: string, input: {
     end_time: toApiTime(input.endTime),
     notes: input.notes ?? null,
     tz: input.tz,
+    calendar_id: input.calendarId ?? null,
   });
 }
 
-export async function deleteGoogleTimedEvent(eventId: string): Promise<void> {
-  await del(`/google/events/${eventId}`);
+export async function deleteGoogleTimedEvent(eventId: string, calendarId?: string): Promise<void> {
+  const query = calendarId ? `?calendar_id=${encodeURIComponent(calendarId)}` : '';
+  await del(`/google/events/${eventId}${query}`);
 }
 
 export async function createGoogleAllDayEvent(input: {
@@ -935,12 +940,14 @@ export async function createGoogleAllDayEvent(input: {
   date: string;
   endDate?: string;
   notes?: string;
+  calendarId?: string;
 }): Promise<AllDayEvent> {
   return post<AllDayEvent>('/google/all-day-events', {
     title: input.title,
     date: input.date,
     end_date: input.endDate ?? null,
     notes: input.notes ?? null,
+    calendar_id: input.calendarId ?? null,
   });
 }
 
@@ -949,17 +956,41 @@ export async function patchGoogleAllDayEvent(eventId: string, input: {
   date: string;
   endDate?: string;
   notes?: string;
+  calendarId?: string;
 }): Promise<AllDayEvent> {
   return patch<AllDayEvent>(`/google/all-day-events/${eventId}`, {
     title: input.title,
     date: input.date,
     end_date: input.endDate ?? null,
     notes: input.notes ?? null,
+    calendar_id: input.calendarId ?? null,
   });
 }
 
-export async function deleteGoogleAllDayEvent(eventId: string): Promise<void> {
-  await del(`/google/all-day-events/${eventId}`);
+export async function deleteGoogleAllDayEvent(eventId: string, calendarId?: string): Promise<void> {
+  const query = calendarId ? `?calendar_id=${encodeURIComponent(calendarId)}` : '';
+  await del(`/google/all-day-events/${eventId}${query}`);
+}
+
+export async function moveGoogleTimedEvent(eventId: string, input: {
+  sourceCalendarId: string;
+  destinationCalendarRole: 'atlanta' | 'events';
+  tz: string;
+}): Promise<CalendarEntry> {
+  return post<CalendarEntry>(`/google/events/${eventId}/move?tz=${encodeURIComponent(input.tz)}`, {
+    source_calendar_id: input.sourceCalendarId,
+    destination_calendar_role: input.destinationCalendarRole,
+  });
+}
+
+export async function moveGoogleAllDayEvent(eventId: string, input: {
+  sourceCalendarId: string;
+  destinationCalendarRole: 'atlanta' | 'events';
+}): Promise<AllDayEvent> {
+  return post<AllDayEvent>(`/google/all-day-events/${eventId}/move`, {
+    source_calendar_id: input.sourceCalendarId,
+    destination_calendar_role: input.destinationCalendarRole,
+  });
 }
 
 // ─── Tag mutations ──────────────────────────────────────────────────────────

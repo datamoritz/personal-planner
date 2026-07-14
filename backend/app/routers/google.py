@@ -132,7 +132,56 @@ def _event_part_to_local_dt(event_part: dict, fallback_tz: str) -> datetime | No
     return parsed.astimezone(ZoneInfo(fallback_tz))
 
 
-def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
+def _calendar_role(calendar_name: str | None) -> str:
+    if (calendar_name or "").strip().lower() == settings.GOOGLE_EVENTS_CALENDAR_NAME.strip().lower():
+        return "events"
+    return "atlanta"
+
+
+def _calendar_metadata(calendar: dict) -> dict:
+    return {
+        "calendarId": calendar["id"],
+        "calendarName": calendar.get("summary") or calendar["id"],
+        "calendarRole": _calendar_role(calendar.get("summary")),
+    }
+
+
+def _find_calendar_by_name(service, calendar_name: str) -> dict:
+    page_token = None
+    target = calendar_name.strip().lower()
+    while True:
+        result = service.calendarList().list(pageToken=page_token).execute()
+        for calendar in result.get("items", []):
+            if (calendar.get("summary") or "").strip().lower() == target:
+                return calendar
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+    raise HTTPException(status_code=404, detail=f"Google calendar not found: {calendar_name}")
+
+
+def _get_calendar_for_role(service, role: str) -> dict:
+    if role == "events":
+        return _find_calendar_by_name(service, settings.GOOGLE_EVENTS_CALENDAR_NAME)
+    return _find_calendar_by_name(service, settings.GOOGLE_DEFAULT_CALENDAR_NAME)
+
+
+def _get_calendar_by_id(service, calendar_id: str) -> dict:
+    return service.calendarList().get(calendarId=calendar_id).execute()
+
+
+def _get_tracked_calendars(service) -> list[dict]:
+    calendars: list[dict] = []
+    seen: set[str] = set()
+    for name in [settings.GOOGLE_DEFAULT_CALENDAR_NAME, settings.GOOGLE_EVENTS_CALENDAR_NAME]:
+        calendar = _find_calendar_by_name(service, name)
+        if calendar["id"] not in seen:
+            calendars.append(calendar)
+            seen.add(calendar["id"])
+    return calendars
+
+
+def _normalize_timed_event(event: dict, tz_name: str = "America/Denver", calendar: dict | None = None) -> dict | None:
     """Normalize a Google Calendar timed event into one span-aware frontend event."""
     if event.get("status") == "cancelled":
         return None
@@ -148,7 +197,7 @@ def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> dict
     if end_dt <= start_dt:
         return None
 
-    return {
+    normalized = {
         "id": event["id"],
         "title": event.get("summary", "(No title)"),
         "startDate": start_dt.strftime("%Y-%m-%d"),
@@ -160,9 +209,12 @@ def _normalize_timed_event(event: dict, tz_name: str = "America/Denver") -> dict
         "createdAt": event.get("created", start_dt.isoformat()),
         "updatedAt": event.get("updated", end_dt.isoformat()),
     }
+    if calendar:
+        normalized.update(_calendar_metadata(calendar))
+    return normalized
 
 
-def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dict | None:
+def _normalize_allday_event(event: dict, tz_name: str = "America/Denver", calendar: dict | None = None) -> dict | None:
     """Normalize a Google Calendar all-day event for the frontend AllDayEvent shape."""
     if event.get("status") == "cancelled":
         return None
@@ -181,7 +233,7 @@ def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dic
         except ValueError:
             display_end_date = start_date_raw
 
-    return {
+    normalized = {
         "id": event["id"],
         "title": event.get("summary", "(No title)"),
         "date": start_date_raw,
@@ -191,6 +243,9 @@ def _normalize_allday_event(event: dict, tz_name: str = "America/Denver") -> dic
         "createdAt": event.get("created", start_date_raw),
         "updatedAt": event.get("updated", start_date_raw),
     }
+    if calendar:
+        normalized.update(_calendar_metadata(calendar))
+    return normalized
 
 
 def _apple_birthday_events_from_cache(
@@ -258,15 +313,15 @@ def _to_local_iso(date_value, wall_time: time, tz_name: str) -> str:
     return local_dt.isoformat()
 
 
-def _get_existing_event(service, event_id: str) -> dict:
-    return service.events().get(calendarId="primary", eventId=event_id).execute()
+def _get_existing_event(service, event_id: str, calendar_id: str) -> dict:
+    return service.events().get(calendarId=calendar_id, eventId=event_id).execute()
 
 
-def _update_event_resource(service, event_id: str, existing: dict, body_updates: dict) -> dict:
+def _update_event_resource(service, event_id: str, calendar_id: str, existing: dict, body_updates: dict) -> dict:
     updated_body = dict(existing)
     updated_body.update(body_updates)
     return service.events().update(
-        calendarId="primary",
+        calendarId=calendar_id,
         eventId=event_id,
         body=updated_body,
     ).execute()
@@ -353,14 +408,17 @@ def google_status(db: Session = Depends(get_db)):
 @router.get("/google/events")
 def google_events(start: str, end: str, tz: str = "America/Denver", db: Session = Depends(get_db)):
     service = get_google_service(db)
-    result = service.events().list(
-        calendarId="primary",
-        timeMin=_to_utc_iso(start, time.min, tz),
-        timeMax=_to_utc_iso(end, time(23, 59, 59), tz),
-        singleEvents=True,
-        orderBy="startTime",
-    ).execute()
-    return result.get("items", [])
+    items: list[dict] = []
+    for calendar in _get_tracked_calendars(service):
+        result = service.events().list(
+            calendarId=calendar["id"],
+            timeMin=_to_utc_iso(start, time.min, tz),
+            timeMax=_to_utc_iso(end, time(23, 59, 59), tz),
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+        items.extend(result.get("items", []))
+    return items
 
 
 @router.post("/google/events", response_model=schemas.GoogleTimedEventOut, status_code=201)
@@ -372,6 +430,8 @@ def create_google_event(payload: schemas.GoogleTimedEventCreate, db: Session = D
         raise HTTPException(status_code=400, detail="end_time must be after start_time when end_date matches date")
 
     service = get_google_service(db)
+    calendar_id = payload.calendar_id or _get_calendar_for_role(service, "atlanta")["id"]
+    calendar = _get_calendar_by_id(service, calendar_id)
     body = {
         "summary": payload.title,
         "description": payload.notes,
@@ -385,8 +445,8 @@ def create_google_event(payload: schemas.GoogleTimedEventCreate, db: Session = D
         },
     }
 
-    created = service.events().insert(calendarId="primary", body=body).execute()
-    normalized = _normalize_timed_event(created, tz_name=payload.tz)
+    created = service.events().insert(calendarId=calendar_id, body=body).execute()
+    normalized = _normalize_timed_event(created, tz_name=payload.tz, calendar=calendar)
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was created but could not be normalized")
     return normalized
@@ -402,6 +462,8 @@ def create_google_all_day_event(payload: schemas.GoogleAllDayEventCreate, db: Se
     google_end_date = end_date + timedelta(days=1)
 
     service = get_google_service(db)
+    calendar_id = payload.calendar_id or _get_calendar_for_role(service, "atlanta")["id"]
+    calendar = _get_calendar_by_id(service, calendar_id)
     body = {
         "summary": payload.title,
         "description": payload.notes,
@@ -409,8 +471,8 @@ def create_google_all_day_event(payload: schemas.GoogleAllDayEventCreate, db: Se
         "end": {"date": google_end_date.isoformat()},
     }
 
-    created = service.events().insert(calendarId="primary", body=body).execute()
-    normalized = _normalize_allday_event(created)
+    created = service.events().insert(calendarId=calendar_id, body=body).execute()
+    normalized = _normalize_allday_event(created, calendar=calendar)
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google all-day event was created but could not be normalized")
     return normalized
@@ -425,6 +487,8 @@ def update_google_event(event_id: str, payload: schemas.GoogleTimedEventUpdate, 
         raise HTTPException(status_code=400, detail="end_time must be after start_time when end_date matches date")
 
     service = get_google_service(db)
+    calendar_id = payload.calendar_id or _get_calendar_for_role(service, "atlanta")["id"]
+    calendar = _get_calendar_by_id(service, calendar_id)
     body = {
         "summary": payload.title,
         "description": payload.notes,
@@ -438,9 +502,9 @@ def update_google_event(event_id: str, payload: schemas.GoogleTimedEventUpdate, 
         },
     }
 
-    existing = _get_existing_event(service, event_id)
-    updated = _update_event_resource(service, event_id, existing, body)
-    normalized = _normalize_timed_event(updated, tz_name=payload.tz)
+    existing = _get_existing_event(service, event_id, calendar_id)
+    updated = _update_event_resource(service, event_id, calendar_id, existing, body)
+    normalized = _normalize_timed_event(updated, tz_name=payload.tz, calendar=calendar)
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google event was updated but could not be normalized")
     return normalized
@@ -455,6 +519,8 @@ def update_google_all_day_event(event_id: str, payload: schemas.GoogleAllDayEven
     google_end_date = end_date + timedelta(days=1)
 
     service = get_google_service(db)
+    calendar_id = payload.calendar_id or _get_calendar_for_role(service, "atlanta")["id"]
+    calendar = _get_calendar_by_id(service, calendar_id)
     body = {
         "summary": payload.title,
         "description": payload.notes,
@@ -463,44 +529,85 @@ def update_google_all_day_event(event_id: str, payload: schemas.GoogleAllDayEven
     }
 
     try:
-        existing = _get_existing_event(service, event_id)
-        updated = _update_event_resource(service, event_id, existing, body)
+        existing = _get_existing_event(service, event_id, calendar_id)
+        updated = _update_event_resource(service, event_id, calendar_id, existing, body)
     except HttpError as exc:
         detail = exc.error_details if getattr(exc, "error_details", None) else str(exc)
         raise HTTPException(status_code=exc.resp.status if exc.resp else 502, detail=detail) from exc
-    normalized = _normalize_allday_event(updated)
+    normalized = _normalize_allday_event(updated, calendar=calendar)
     if normalized is None:
         raise HTTPException(status_code=500, detail="Google all-day event was updated but could not be normalized")
     return normalized
 
 
 @router.delete("/google/events/{event_id}", status_code=204)
-def delete_google_event(event_id: str, db: Session = Depends(get_db)):
+def delete_google_event(event_id: str, calendar_id: str | None = None, db: Session = Depends(get_db)):
     service = get_google_service(db)
-    service.events().delete(calendarId="primary", eventId=event_id).execute()
+    source_calendar_id = calendar_id or _get_calendar_for_role(service, "atlanta")["id"]
+    service.events().delete(calendarId=source_calendar_id, eventId=event_id).execute()
 
 
 @router.delete("/google/all-day-events/{event_id}", status_code=204)
-def delete_google_all_day_event(event_id: str, db: Session = Depends(get_db)):
+def delete_google_all_day_event(event_id: str, calendar_id: str | None = None, db: Session = Depends(get_db)):
     service = get_google_service(db)
-    service.events().delete(calendarId="primary", eventId=event_id).execute()
+    source_calendar_id = calendar_id or _get_calendar_for_role(service, "atlanta")["id"]
+    service.events().delete(calendarId=source_calendar_id, eventId=event_id).execute()
 
 
 @router.get("/google/calendar-entries")
 def google_calendar_entries(start: str, end: str, tz: str = "America/Denver", db: Session = Depends(get_db)):
     service = get_google_service(db)
-    result = service.events().list(
-        calendarId="primary",
-        timeMin=_to_utc_iso(start, time.min, tz),
-        timeMax=_to_utc_iso(end, time(23, 59, 59), tz),
-        singleEvents=True,
-        orderBy="startTime",
-    ).execute()
-
-    items = result.get("items", [])
-    timed = [e for event in items if (e := _normalize_timed_event(event, tz_name=tz)) is not None]
-    all_day = [e for event in items if (e := _normalize_allday_event(event, tz_name=tz)) is not None]
+    timed: list[dict] = []
+    all_day: list[dict] = []
+    for calendar in _get_tracked_calendars(service):
+        result = service.events().list(
+            calendarId=calendar["id"],
+            timeMin=_to_utc_iso(start, time.min, tz),
+            timeMax=_to_utc_iso(end, time(23, 59, 59), tz),
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+        items = result.get("items", [])
+        timed.extend(
+            e for event in items
+            if (e := _normalize_timed_event(event, tz_name=tz, calendar=calendar)) is not None
+        )
+        all_day.extend(
+            e for event in items
+            if (e := _normalize_allday_event(event, tz_name=tz, calendar=calendar)) is not None
+        )
     all_day.extend(_apple_birthday_events_from_cache(db, start, end))
+    timed.sort(key=lambda event: (event["date"], event["startTime"], event["title"].lower()))
     all_day.sort(key=lambda event: (event["date"], event["title"].lower()))
 
     return {"timed": timed, "allDay": all_day}
+
+
+@router.post("/google/events/{event_id}/move", response_model=schemas.GoogleTimedEventOut)
+def move_google_event(event_id: str, payload: schemas.GoogleEventMoveRequest, tz: str = "America/Denver", db: Session = Depends(get_db)):
+    service = get_google_service(db)
+    destination = _get_calendar_for_role(service, payload.destination_calendar_role)
+    moved = service.events().move(
+        calendarId=payload.source_calendar_id,
+        eventId=event_id,
+        destination=destination["id"],
+    ).execute()
+    normalized = _normalize_timed_event(moved, tz_name=tz, calendar=destination)
+    if normalized is None:
+        raise HTTPException(status_code=500, detail="Google event was moved but could not be normalized")
+    return normalized
+
+
+@router.post("/google/all-day-events/{event_id}/move", response_model=schemas.GoogleAllDayEventOut)
+def move_google_all_day_event(event_id: str, payload: schemas.GoogleEventMoveRequest, db: Session = Depends(get_db)):
+    service = get_google_service(db)
+    destination = _get_calendar_for_role(service, payload.destination_calendar_role)
+    moved = service.events().move(
+        calendarId=payload.source_calendar_id,
+        eventId=event_id,
+        destination=destination["id"],
+    ).execute()
+    normalized = _normalize_allday_event(moved, calendar=destination)
+    if normalized is None:
+        raise HTTPException(status_code=500, detail="Google all-day event was moved but could not be normalized")
+    return normalized
