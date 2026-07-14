@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_EMOJI_MODEL: str = "gpt-4.1-mini"
     OPENAI_TASK_MODEL: str = "gpt-4.1-mini"
+    EMAIL_AUTOMATION_CALENDAR_LABEL: str = "Planner/Calendar"
+    EMAIL_AUTOMATION_PROCESSED_LABEL: str = "Planner/Processed"
+    EMAIL_AUTOMATION_ERROR_LABEL: str = "Planner/Error"
+    EMAIL_AUTOMATION_TIMEZONE: str = "America/Denver"
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

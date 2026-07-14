@@ -205,6 +205,26 @@ class CalendarEntry(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
+class EmailAutomationRun(Base):
+    __tablename__ = "email_automation_runs"
+    __table_args__ = (
+        UniqueConstraint("automation_type", "gmail_message_id", name="uq_email_automation_runs_type_message"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    automation_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    gmail_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    source_subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_sender: Mapped[str | None] = mapped_column(Text, nullable=True)
+    event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    parsed_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class AppleBirthdayContactCache(Base):
     __tablename__ = "apple_birthday_contacts"
 
