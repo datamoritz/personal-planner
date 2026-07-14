@@ -17,7 +17,7 @@ from app.routers.google import get_gmail_service
 
 router = APIRouter(prefix="/email", tags=["email"])
 
-RECENT_EMAIL_QUERY = "in:inbox newer_than:1d -label:spam"
+RECENT_EMAIL_QUERY = "in:inbox newer_than:7d -label:spam"
 RECENT_EMAIL_MAX_RESULTS = 50
 RECENT_EMAIL_HEADERS = ["Subject", "From", "To"]
 MESSAGE_HEADERS = ["Subject"]
