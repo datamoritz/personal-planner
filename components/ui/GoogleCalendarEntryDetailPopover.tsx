@@ -34,7 +34,7 @@ export function GoogleCalendarEntryDetailPopover({
 
   return (
     <GoogleCalendarEntryDetailPopoverInner
-      key={`${entry.id}:${entry.updatedAt}:${timedEntry ? 'timed' : 'all-day'}:${isDraft ? 'draft' : 'saved'}`}
+      key={`${entry.id}:${entry.updatedAt}:${entry.calendarRole ?? 'atlanta'}:${entry.calendarId ?? ''}:${timedEntry ? 'timed' : 'all-day'}:${isDraft ? 'draft' : 'saved'}`}
       entry={entry}
       anchor={anchor}
       onClose={onClose}
@@ -83,6 +83,7 @@ function GoogleCalendarEntryDetailPopoverInner({
   const [calendarMenuOpen, setCalendarMenuOpen] = useState(false);
   const baseEventId = entry.id.split('::')[0];
   const calendarRole = entry.calendarRole ?? 'atlanta';
+  const [selectedCalendarRole, setSelectedCalendarRole] = useState<'atlanta' | 'events'>(calendarRole);
 
   const handleStartTimeChange = useCallback((nextStartTime: string) => {
     setStartTime(nextStartTime);
@@ -268,6 +269,7 @@ function GoogleCalendarEntryDetailPopoverInner({
 
     setCalendarMenuOpen(false);
     const nextCalendarName = destinationCalendarRole === 'events' ? 'Events' : 'Atlanta';
+    setSelectedCalendarRole(destinationCalendarRole);
 
     if (isTimedEntry) {
       const optimisticEntry: CalendarEntry = {
@@ -281,10 +283,12 @@ function GoogleCalendarEntryDetailPopoverInner({
         sourceCalendarId: entry.calendarId,
         destinationCalendarRole,
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      }).then(() => {
+      }).then((movedEntry) => {
+        applyOptimisticGoogleEntry(movedEntry);
         refresh();
       }).catch((err) => {
         console.error('[moveGoogleTimedEvent]', err);
+        setSelectedCalendarRole(calendarRole);
         setGoogleCalendarEntries(googleEntries);
         clearPendingGoogleMutation(baseEventId);
       });
@@ -301,10 +305,12 @@ function GoogleCalendarEntryDetailPopoverInner({
     api.moveGoogleAllDayEvent(baseEventId, {
       sourceCalendarId: entry.calendarId,
       destinationCalendarRole,
-    }).then(() => {
+    }).then((movedEvent) => {
+      applyOptimisticGoogleAllDayEvent(movedEvent);
       refresh();
     }).catch((err) => {
       console.error('[moveGoogleAllDayEvent]', err);
+      setSelectedCalendarRole(calendarRole);
       setGoogleAllDayEvents(googleAllDayEvents);
       clearPendingGoogleAllDayMutation(baseEventId);
     });
@@ -366,7 +372,7 @@ function GoogleCalendarEntryDetailPopoverInner({
                 }}
                 className="ui-icon-button text-[var(--color-text-muted)]"
                 aria-label="Move calendar event"
-                title={`Calendar: ${entry.calendarName ?? (calendarRole === 'events' ? 'Events' : 'Atlanta')}`}
+                title={`Calendar: ${selectedCalendarRole === 'events' ? 'Events' : 'Atlanta'}`}
               >
                 <CalendarDays size={12} strokeWidth={2.2} />
               </button>
@@ -379,11 +385,11 @@ function GoogleCalendarEntryDetailPopoverInner({
                       onClick={() => handleCalendarMove(role)}
                       className={[
                         'flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-[var(--color-surface)]',
-                        role === calendarRole ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]',
+                        role === selectedCalendarRole ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-secondary)]',
                       ].join(' ')}
                     >
                       <span>{role === 'events' ? 'Events' : 'Atlanta'}</span>
-                      {role === calendarRole && <Check size={11} strokeWidth={2.4} />}
+                      {role === selectedCalendarRole && <Check size={11} strokeWidth={2.4} />}
                     </button>
                   ))}
                 </div>

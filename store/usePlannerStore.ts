@@ -252,7 +252,10 @@ function sameGoogleEventShape(a: CalendarEntry, b: CalendarEntry): boolean {
     (a.endDate ?? a.date) === (b.endDate ?? b.date) &&
     a.startTime === b.startTime &&
     a.endTime === b.endTime &&
-    (a.notes ?? '') === (b.notes ?? '')
+    (a.notes ?? '') === (b.notes ?? '') &&
+    (a.calendarId ?? '') === (b.calendarId ?? '') &&
+    (a.calendarRole ?? '') === (b.calendarRole ?? '') &&
+    (a.calendarName ?? '') === (b.calendarName ?? '')
   );
 }
 
@@ -261,7 +264,10 @@ function sameAllDayEventShape(a: AllDayEvent, b: AllDayEvent): boolean {
     a.title === b.title &&
     a.date === b.date &&
     (a.endDate ?? a.date) === (b.endDate ?? b.date) &&
-    (a.notes ?? '') === (b.notes ?? '')
+    (a.notes ?? '') === (b.notes ?? '') &&
+    (a.calendarId ?? '') === (b.calendarId ?? '') &&
+    (a.calendarRole ?? '') === (b.calendarRole ?? '') &&
+    (a.calendarName ?? '') === (b.calendarName ?? '')
   );
 }
 
