@@ -41,6 +41,16 @@ class CalendarDraft(BaseModel):
     notes: str | None = None
     allDay: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def blank_strings_to_none(cls, values: dict) -> dict:
+        if not isinstance(values, dict):
+            return values
+        for field in ("endDate", "startTime", "endTime", "notes"):
+            if values.get(field) == "":
+                values[field] = None
+        return values
+
     @model_validator(mode="after")
     def validate_time_fields(self) -> "CalendarDraft":
         end_date = self.endDate or self.date
@@ -179,7 +189,7 @@ def _clean_forwarded_text(text: str) -> str:
 
 def _fetch_automation_email_content(gmail, message_id: str) -> tuple[str, str]:
     email = _fetch_email_content(gmail, message_id)
-    if email.body.strip():
+    if email.body.strip() and email.body.strip("_ \n\t"):
         return email.subject, email.body
 
     message = _fetch_message(gmail, message_id, format_="full", fields="id,snippet,payload")
