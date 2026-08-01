@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import {
   DndContext,
   DragOverlay,
@@ -10,7 +11,7 @@ import {
   type SensorDescriptor,
   type SensorOptions,
 } from '@dnd-kit/core';
-import { BookOpen, ChevronLeft, ChevronRight, Clapperboard, Mail, Moon, RefreshCw, Sparkles, Sun, Tag } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, CircleDot, Clapperboard, Mail, Moon, RefreshCw, Sparkles, Sun, Tag } from 'lucide-react';
 import { DayHeader } from './DayHeader';
 import { ProjectsColumn } from './columns/ProjectsColumn';
 import { MyDayColumn } from './columns/MyDayColumn';
@@ -29,6 +30,11 @@ import { ReadWatchPopover } from './ui/ReadWatchPopover';
 import { SmartCaptureBar } from './ui/SmartCaptureBar';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
+
+const MandalaPanel = dynamic(
+  () => import('./ui/MandalaPanel').then((module) => module.MandalaPanel),
+  { ssr: false },
+);
 
 type ActiveDrag =
   | { type: 'task'; item: Task; compact?: boolean }
@@ -132,6 +138,7 @@ export function PlannerAppView({
   handleDragEnd,
 }: PlannerAppViewProps) {
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [mandalaPanelOpen, setMandalaPanelOpen] = useState(false);
   const [mediaPopoverOpen, setMediaPopoverOpen] = useState(false);
   const [mediaAnchor, setMediaAnchor] = useState<HTMLElement | null>(null);
   const [smartCaptureOpen, setSmartCaptureOpen] = useState(true);
@@ -208,6 +215,19 @@ export function PlannerAppView({
                     onClose={() => setMediaPopoverOpen(false)}
                   />
                 )}
+              </div>
+              <div className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={() => setMandalaPanelOpen(true)}
+                  title="Life Mandala"
+                  className={[
+                    'ui-icon-button hover:text-[var(--color-accent)] bg-white/30 hover:bg-white/50 dark:bg-white/5 dark:hover:bg-white/10',
+                    mandalaPanelOpen ? 'text-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : 'text-[var(--color-text-muted)]',
+                  ].join(' ')}
+                >
+                  <CircleDot size={14} strokeWidth={2.1} />
+                </button>
               </div>
               <div className="relative inline-flex">
                 <button
@@ -374,6 +394,7 @@ export function PlannerAppView({
         </DragOverlay>
 
         <EmailToTaskPanelV2 open={emailPanelOpen} onClose={() => setEmailPanelOpen(false)} />
+        {mandalaPanelOpen && <MandalaPanel onClose={() => setMandalaPanelOpen(false)} />}
       </DndContext>
     </div>
   );

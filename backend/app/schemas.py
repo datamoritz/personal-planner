@@ -424,6 +424,66 @@ class PlannerRead(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Life Mandala
+# ---------------------------------------------------------------------------
+
+class MandalaNode(BaseModel):
+    id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=120)
+    parentId: str | None = None
+    kind: Literal["connected", "loose"] = "connected"
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    sortOrder: int = 0
+
+
+class MandalaDocument(BaseModel):
+    centerTitle: str = Field(min_length=1, max_length=80)
+    nodes: list[MandalaNode] = Field(max_length=150)
+    version: Literal[1] = 1
+
+    @model_validator(mode="after")
+    def validate_tree(self):
+        by_id = {node.id: node for node in self.nodes}
+        if len(by_id) != len(self.nodes):
+            raise ValueError("Mandala node ids must be unique")
+
+        for node in self.nodes:
+            if node.kind == "loose":
+                if node.parentId is not None:
+                    raise ValueError("Loose mandala nodes cannot have a parent")
+                continue
+            if node.parentId is not None:
+                parent = by_id.get(node.parentId)
+                if parent is None or parent.kind != "connected":
+                    raise ValueError("Connected mandala node parent must exist")
+
+            depth = 1
+            seen = {node.id}
+            parent_id = node.parentId
+            while parent_id is not None:
+                if parent_id in seen:
+                    raise ValueError("Mandala nodes cannot contain cycles")
+                seen.add(parent_id)
+                parent = by_id.get(parent_id)
+                if parent is None:
+                    raise ValueError("Connected mandala node parent must exist")
+                depth += 1
+                parent_id = parent.parentId
+            if depth > 3:
+                raise ValueError("Mandala supports at most three connected levels")
+        return self
+
+
+class MandalaStateUpdate(BaseModel):
+    document: MandalaDocument
+
+
+class MandalaStateRead(BaseModel):
+    document: MandalaDocument
+    updatedAt: datetime
+
+
+# ---------------------------------------------------------------------------
 # Tasks
 # ---------------------------------------------------------------------------
 

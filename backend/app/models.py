@@ -84,6 +84,15 @@ class Milestone(Base):
     project: Mapped["Project | None"] = relationship(back_populates="milestones")
 
 
+class MandalaState(Base):
+    __tablename__ = "mandala_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    document_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Tag(Base):
     __tablename__ = "tags"
 

@@ -185,6 +185,26 @@ export interface Goal {
   updatedAt: string;
 }
 
+// ─── Life Mandala ─────────────────────────────────────────────────────────
+
+export type MandalaNodeKind = 'connected' | 'loose';
+
+export interface MandalaNode {
+  id: string;
+  title: string;
+  parentId: string | null;
+  kind: MandalaNodeKind;
+  /** Set on main-circle nodes; descendant colors are derived automatically. */
+  color?: string;
+  sortOrder: number;
+}
+
+export interface MandalaDocument {
+  centerTitle: string;
+  nodes: MandalaNode[];
+  version: 1;
+}
+
 // ─── Read / Watch ──────────────────────────────────────────────────────────
 
 export type MediaKind = 'read' | 'watch';

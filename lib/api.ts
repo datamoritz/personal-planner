@@ -36,9 +36,10 @@ import type {
   TextDraftResponse,
   AppleBirthdayMessage,
   WatchSearchResult,
+  MandalaDocument,
 } from '@/types';
 
-export const API_BASE = 'https://planner-api.moritzknodler.com';
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'https://planner-api.moritzknodler.com';
 
 export function normalizeExecutionView(
   view: string | null | undefined,
@@ -67,6 +68,7 @@ async function request<T>(
 
 const get  = <T>(path: string)                   => request<T>(path);
 const post = <T>(path: string, body: unknown)    => request<T>(path, { method: 'POST',   body: JSON.stringify(body) });
+const put = <T>(path: string, body: unknown)     => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) });
 const patch = <T>(path: string, body: unknown)   => request<T>(path, { method: 'PATCH',  body: JSON.stringify(body) });
 const del  = (path: string)                      => request<void>(path, { method: 'DELETE' });
 
@@ -838,6 +840,16 @@ export async function getWatchStreamingSources(
     `/media/watch/${watchmodeId}/sources?region=${encodeURIComponent(region)}`,
   );
   return Array.isArray(response.providers) ? response.providers.map((provider) => provider.name) : [];
+}
+
+export async function getMandala(): Promise<MandalaDocument> {
+  const response = await get<{ document: MandalaDocument }>('/mandala');
+  return response.document;
+}
+
+export async function saveMandala(document: MandalaDocument): Promise<MandalaDocument> {
+  const response = await put<{ document: MandalaDocument }>('/mandala', { document });
+  return response.document;
 }
 
 // ─── Project mutations ──────────────────────────────────────────────────────

@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { addDays, addYears, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
 import { usePlannerStore } from '@/store/usePlannerStore';
+import { API_BASE } from '@/lib/api';
 import type { AllDayEvent, CalendarEntry } from '@/types';
-
-const API_BASE = 'https://planner-api.moritzknodler.com';
 
 export function useGoogleCalendar(): { refresh: () => void } {
   const currentDate               = usePlannerStore((s) => s.currentDate);
