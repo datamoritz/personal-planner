@@ -199,9 +199,24 @@ export interface MandalaNode {
   sortOrder: number;
 }
 
+export interface MandalaLayoutSettings {
+  /** Distance from the center tile to Level 1. */
+  levelOneDistance: number;
+  /** Additional distance from Level 1 to Level 2. */
+  levelTwoDistance: number;
+  /** Additional distance from Level 2 to Level 3. */
+  levelThreeDistance: number;
+  /** Visible gap between Level 2 tiles in the same branch. */
+  levelTwoSpacing: number;
+  /** Visible gap between Level 3 tiles in the same group. */
+  levelThreeSpacing: number;
+}
+
 export interface MandalaDocument {
   centerTitle: string;
   nodes: MandalaNode[];
+  /** Optional while older saved documents are upgraded by the API defaults. */
+  layout?: MandalaLayoutSettings;
   version: 1;
 }
 
@@ -329,6 +344,14 @@ export interface EmailTaskSuggestion {
   status?: string | null;
   tagName?: string | null;
   projectTitle?: string | null;
+}
+
+export interface EmailDraftSuggestion extends EmailTaskSuggestion {
+  allDay?: boolean | null;
+}
+
+export interface EmailDraftSuggestionsResponse {
+  suggestions: EmailDraftSuggestion[];
 }
 
 export type TextDraftMode = 'task' | 'event';

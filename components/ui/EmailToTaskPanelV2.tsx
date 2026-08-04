@@ -7,11 +7,10 @@ import * as api from '@/lib/api';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type {
   EmailContent,
-  EmailTaskSuggestion,
+  EmailDraftSuggestion,
   RecentEmail,
   TaskLocation,
   TextDraftMode,
-  TextDraftResponse,
 } from '@/types';
 import { PopoverField, PopoverInput } from './PopoverField';
 
@@ -32,6 +31,17 @@ type ArchivedEmailState = {
   index: number;
   selectedBeforeArchive: string | null;
 };
+
+type DraftStatus = 'pending' | 'saving' | 'created' | 'skipped';
+
+type DraftItem = {
+  id: string;
+  draft: DraftTask;
+  status: DraftStatus;
+  error?: string;
+};
+
+type DraftQueues = Record<TextDraftMode, DraftItem[]>;
 
 const DEFAULT_WIDTH = 1140;
 const DEFAULT_HEIGHT = 700;
@@ -70,36 +80,53 @@ function quickFollowUpTitle(subject: string): string {
   return `Email follow-up: ${words}${cleaned.split(' ').length > 6 ? '...' : ''}`;
 }
 
-function suggestionToDraft(suggestion: EmailTaskSuggestion | null, fallbackTitle = ''): DraftTask {
+function oneHourAfter(rawTime: string): string {
+  const [hours, minutes] = rawTime.split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return '15:00';
+  const totalMinutes = (hours * 60 + minutes + 60) % (24 * 60);
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+}
+
+function suggestionToDraft(
+  suggestion: EmailDraftSuggestion | null,
+  fallbackTitle = '',
+  mode: TextDraftMode = 'task',
+  fallbackDate = '',
+): DraftTask {
+  const suggestedLocation = suggestion?.location;
+  const targetLocation: DraftTask['targetLocation'] =
+    suggestedLocation === 'myday' || suggestedLocation === 'backlog' || suggestedLocation === 'project'
+      ? suggestedLocation
+      : 'today';
+  const allDay = mode === 'event' && Boolean(suggestion?.allDay);
+  const startTime = allDay
+    ? ''
+    : toLocalTime(suggestion?.startTime) || (mode === 'event' ? '14:00' : '');
+  const endTime = allDay
+    ? ''
+    : toLocalTime(suggestion?.endTime) || (mode === 'event' ? oneHourAfter(startTime) : '');
+
   return {
     title: suggestion?.title?.trim() || fallbackTitle,
     notes: suggestion?.notes?.trim() || '',
-    taskDate: suggestion?.taskDate || '',
-    startTime: toLocalTime(suggestion?.startTime),
-    endTime: toLocalTime(suggestion?.endTime),
-    allDay: false,
+    taskDate: suggestion?.taskDate || fallbackDate,
+    startTime,
+    endTime,
+    allDay,
     tagName: suggestion?.tagName?.trim() || '',
     projectTitle: suggestion?.projectTitle?.trim() || '',
-    targetLocation: 'today',
-  };
-}
-
-function textDraftToEmailDraft(draft: TextDraftResponse, fallbackTitle = ''): DraftTask {
-  return {
-    title: draft.title?.trim() || fallbackTitle,
-    notes: draft.notes?.trim() || '',
-    taskDate: draft.taskDate || '',
-    startTime: toLocalTime(draft.startTime),
-    endTime: toLocalTime(draft.endTime),
-    allDay: Boolean(draft.allDay),
-    tagName: '',
-    projectTitle: '',
-    targetLocation: draft.location === 'myday' && draft.startTime ? 'myday' : 'today',
+    targetLocation,
   };
 }
 
 function looksLikeTimedSuggestion(draft: DraftTask): boolean {
   return Boolean(draft.startTime || draft.endTime);
+}
+
+function nextPendingDraftIndex(items: DraftItem[], currentIndex: number): number {
+  const laterIndex = items.findIndex((item, index) => index > currentIndex && item.status === 'pending');
+  if (laterIndex !== -1) return laterIndex;
+  return items.findIndex((item, index) => index !== currentIndex && item.status === 'pending');
 }
 
 function PaneLabel({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
@@ -194,8 +221,6 @@ export function EmailToTaskPanelV2({
   onClose: () => void;
 }) {
   const addTask = usePlannerStore((s) => s.addTask);
-  const updateTask = usePlannerStore((s) => s.updateTask);
-  const setTaskTag = usePlannerStore((s) => s.setTaskTag);
   const viewMode = usePlannerStore((s) => s.viewMode);
   const applyOptimisticGoogleEntry = usePlannerStore((s) => s.applyOptimisticGoogleEntry);
   const applyOptimisticGoogleAllDayEvent = usePlannerStore((s) => s.applyOptimisticGoogleAllDayEvent);
@@ -206,17 +231,17 @@ export function EmailToTaskPanelV2({
   const [emails, setEmails] = useState<RecentEmail[]>([]);
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<EmailContent | null>(null);
-  const [draft, setDraft] = useState<DraftTask>(() => suggestionToDraft(null));
   const [draftMode, setDraftMode] = useState<TextDraftMode>('event');
+  const [draftsByMode, setDraftsByMode] = useState<DraftQueues>({ event: [], task: [] });
+  const [activeDraftIndexByMode, setActiveDraftIndexByMode] = useState<Record<TextDraftMode, number>>({ event: 0, task: 0 });
+  const [hasSuggestedByMode, setHasSuggestedByMode] = useState<Record<TextDraftMode, boolean>>({ event: false, task: false });
   const [extraInstruction, setExtraInstruction] = useState('');
   const [isLoadingEmails, setIsLoadingEmails] = useState(false);
   const [isLoadingEmail, setIsLoadingEmail] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [isUndoingArchive, setIsUndoingArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [archivedEmail, setArchivedEmail] = useState<ArchivedEmailState | null>(null);
 
@@ -237,6 +262,25 @@ export function EmailToTaskPanelV2({
     () => emails.find((email) => email.id === selectedEmailId) ?? null,
     [emails, selectedEmailId],
   );
+  const activeDrafts = draftsByMode[draftMode];
+  const activeDraftIndex = Math.min(activeDraftIndexByMode[draftMode], Math.max(0, activeDrafts.length - 1));
+  const activeDraftItem = activeDrafts[activeDraftIndex] ?? null;
+  const hasUnreviewedDrafts = activeDrafts.some((item) => item.status === 'pending' || item.status === 'saving');
+  const draft = activeDraftItem?.draft ?? suggestionToDraft(null, '', draftMode, currentDate);
+  const setDraft = useCallback((updater: React.SetStateAction<DraftTask>) => {
+    setDraftsByMode((prev) => {
+      const queue = prev[draftMode];
+      const index = Math.min(activeDraftIndexByMode[draftMode], Math.max(0, queue.length - 1));
+      const item = queue[index];
+      if (!item || item.status !== 'pending') return prev;
+      const nextDraft = typeof updater === 'function'
+        ? (updater as (value: DraftTask) => DraftTask)(item.draft)
+        : updater;
+      const nextQueue = [...queue];
+      nextQueue[index] = { ...item, draft: nextDraft, error: undefined };
+      return { ...prev, [draftMode]: nextQueue };
+    });
+  }, [activeDraftIndexByMode, draftMode]);
   const selectedTag = useMemo(
     () => tags.find((tag) => tag.name === draft.tagName) ?? null,
     [draft.tagName, tags],
@@ -260,7 +304,6 @@ export function EmailToTaskPanelV2({
   const loadEmails = useCallback(async () => {
     setIsLoadingEmails(true);
     setError(null);
-    setSuccessMessage(null);
     try {
       const recent = await api.getRecentEmails();
       setEmails(recent);
@@ -285,7 +328,6 @@ export function EmailToTaskPanelV2({
     let cancelled = false;
     setIsLoadingEmail(true);
     setError(null);
-    setSuccessMessage(null);
     api.getEmailContent(selectedEmailId)
       .then((email) => {
         if (cancelled) return;
@@ -303,6 +345,13 @@ export function EmailToTaskPanelV2({
       cancelled = true;
     };
   }, [open, selectedEmailId]);
+
+  useEffect(() => {
+    setDraftsByMode({ event: [], task: [] });
+    setActiveDraftIndexByMode({ event: 0, task: 0 });
+    setHasSuggestedByMode({ event: false, task: false });
+    setExtraInstruction('');
+  }, [selectedEmailId]);
 
   useEffect(() => {
     if (!open || !tagPickerOpen) return;
@@ -362,70 +411,66 @@ export function EmailToTaskPanelV2({
     if (!selectedEmailId) return;
     setIsSuggesting(true);
     setError(null);
-    setSuccessMessage(null);
     try {
-      if (draftMode === 'task') {
-        const suggestion = await api.suggestTaskFromEmail(selectedEmailId, {
-          promptAddition: extraInstruction,
-          currentDate,
-          currentDateTime: new Date().toISOString(),
-          currentView: api.normalizeExecutionView(viewMode),
-          timezone,
-        });
-        const fallbackTitle = selectedEmail?.subject ? quickFollowUpTitle(selectedEmail.subject) : '';
-        setDraft(suggestionToDraft(suggestion, fallbackTitle));
-        return;
-      }
-
-      if (!selectedEmail) return;
-
-      const promptText = [
-        `Subject: ${selectedEmail.subject || '(No subject)'}`,
-        '',
-        selectedEmail.body || '',
-        extraInstruction.trim() ? `\nFocus: ${extraInstruction.trim()}` : '',
-      ]
-        .join('\n')
-        .trim();
-
-      const eventDraft = await api.suggestTextDraft({
-        text: promptText,
-        mode: 'event',
+      const response = await api.suggestDraftsFromEmail(selectedEmailId, {
+        mode: draftMode,
+        promptAddition: extraInstruction,
         currentDate,
         currentDateTime: new Date().toISOString(),
         currentView: api.normalizeExecutionView(viewMode),
         timezone,
       });
-      const fallbackTitle = selectedEmail.subject?.trim() || 'New event';
-      setDraft(textDraftToEmailDraft(eventDraft, fallbackTitle));
+      const nextDrafts = response.suggestions.map((suggestion) => ({
+        id: crypto.randomUUID(),
+        draft: suggestionToDraft(suggestion, '', draftMode, currentDate),
+        status: 'pending' as const,
+      }));
+      setDraftsByMode((prev) => ({ ...prev, [draftMode]: nextDrafts }));
+      setActiveDraftIndexByMode((prev) => ({ ...prev, [draftMode]: 0 }));
+      setHasSuggestedByMode((prev) => ({ ...prev, [draftMode]: true }));
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to generate ${draftMode} suggestion`);
     } finally {
       setIsSuggesting(false);
     }
-  }, [currentDate, draftMode, extraInstruction, selectedEmail, selectedEmailId, timezone, viewMode]);
+  }, [currentDate, draftMode, extraInstruction, selectedEmailId, timezone, viewMode]);
 
   const handleQuickFollowUp = useCallback(() => {
     if (!selectedEmail) return;
-    setDraft((prev) => ({
-      ...prev,
-      title: quickFollowUpTitle(selectedEmail.subject),
-      allDay: false,
-    }));
+    const followUpDraft: DraftItem = {
+      id: crypto.randomUUID(),
+      draft: suggestionToDraft(
+        { title: quickFollowUpTitle(selectedEmail.subject), taskDate: currentDate },
+        '',
+        'task',
+        currentDate,
+      ),
+      status: 'pending',
+    };
+    setDraftsByMode((prev) => ({ ...prev, task: [...prev.task, followUpDraft] }));
+    setActiveDraftIndexByMode((prev) => ({ ...prev, task: draftsByMode.task.length }));
+    setHasSuggestedByMode((prev) => ({ ...prev, task: true }));
     setError(null);
-    setSuccessMessage(null);
-  }, [selectedEmail]);
+  }, [currentDate, draftsByMode.task.length, selectedEmail]);
 
   const handleSave = useCallback(async () => {
+    if (!activeDraftItem || activeDraftItem.status !== 'pending') return;
     const title = draft.title.trim();
     if (!title) {
-      setError('Title is required');
+      setDraftsByMode((prev) => {
+        const queue = [...prev[draftMode]];
+        queue[activeDraftIndex] = { ...queue[activeDraftIndex], error: 'Title is required' };
+        return { ...prev, [draftMode]: queue };
+      });
       return;
     }
 
-    setIsSaving(true);
     setError(null);
-    setSuccessMessage(null);
+    setDraftsByMode((prev) => {
+      const queue = [...prev[draftMode]];
+      queue[activeDraftIndex] = { ...queue[activeDraftIndex], status: 'saving', error: undefined };
+      return { ...prev, [draftMode]: queue };
+    });
     try {
       if (draftMode === 'event') {
         const eventDate = draft.taskDate || currentDate;
@@ -438,76 +483,72 @@ export function EmailToTaskPanelV2({
             notes,
           });
           applyOptimisticGoogleAllDayEvent(created);
-          setSuccessMessage('Event created');
-          return;
+        } else {
+          const created = await api.createGoogleTimedEvent({
+            title,
+            date: eventDate,
+            startTime: draft.startTime || '14:00',
+            endTime: draft.endTime || '15:00',
+            notes,
+            tz: timezone,
+          });
+          applyOptimisticGoogleEntry(created);
+        }
+      } else {
+        const project = projects.find(
+          (candidate) => candidate.title.trim().toLowerCase() === draft.projectTitle.trim().toLowerCase(),
+        );
+        const tag = tags.find(
+          (candidate) => candidate.name.trim().toLowerCase() === draft.tagName.trim().toLowerCase(),
+        );
+
+        const location = draft.targetLocation;
+        const effectiveDate =
+          location === 'today' || location === 'myday'
+            ? (draft.taskDate || currentDate)
+            : undefined;
+
+        if (location === 'project' && !project) {
+          throw new Error('Choose a project for project tasks');
         }
 
-        const created = await api.createGoogleTimedEvent({
+        if (location === 'myday' && (!draft.startTime || !draft.endTime)) {
+          throw new Error('Choose a start and end time for My Day tasks');
+        }
+
+        addTask({
           title,
-          date: eventDate,
-          startTime: draft.startTime || '14:00',
-          endTime: draft.endTime || '15:00',
-          notes,
-          tz: timezone,
-        });
-        applyOptimisticGoogleEntry(created);
-        setSuccessMessage('Event created');
-        return;
-      }
-
-      const project = projects.find(
-        (candidate) => candidate.title.trim().toLowerCase() === draft.projectTitle.trim().toLowerCase(),
-      );
-      const tag = tags.find(
-        (candidate) => candidate.name.trim().toLowerCase() === draft.tagName.trim().toLowerCase(),
-      );
-
-      const location = draft.targetLocation;
-      const effectiveDate =
-        location === 'today' || location === 'myday'
-          ? (draft.taskDate || currentDate)
-          : undefined;
-
-      if (location === 'project' && !project) {
-        setError('Choose a project for project tasks');
-        setIsSaving(false);
-        return;
-      }
-
-      if (location === 'myday' && (!draft.startTime || !draft.endTime)) {
-        setError('Choose a start and end time for My Day tasks');
-        setIsSaving(false);
-        return;
-      }
-
-      const taskId = addTask({
-        title,
-        location,
-        date: effectiveDate,
-        projectId: location === 'project' ? project?.id : undefined,
-      });
-
-      if (
-        draft.notes.trim() ||
-        (location === 'myday' && (draft.startTime || draft.endTime)) ||
-        (location !== 'backlog' && location !== 'project' && effectiveDate)
-      ) {
-        updateTask(taskId, {
-          notes: draft.notes.trim() || undefined,
+          location,
           date: effectiveDate,
+          projectId: location === 'project' ? project?.id : undefined,
+          notes: draft.notes.trim() || undefined,
           startTime: location === 'myday' ? draft.startTime || undefined : undefined,
           endTime: location === 'myday' ? draft.endTime || undefined : undefined,
+          tagId: tag?.id,
         });
       }
 
-      if (tag) setTaskTag(taskId, tag.id);
-      setSuccessMessage('Task created');
+      setDraftsByMode((prev) => {
+        const queue = [...prev[draftMode]];
+        queue[activeDraftIndex] = { ...queue[activeDraftIndex], status: 'created', error: undefined };
+        return { ...prev, [draftMode]: queue };
+      });
+      const nextIndex = nextPendingDraftIndex(activeDrafts, activeDraftIndex);
+      if (nextIndex !== -1) {
+        setActiveDraftIndexByMode((prev) => ({ ...prev, [draftMode]: nextIndex }));
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to save ${draftMode}`);
-    } finally {
-      setIsSaving(false);
+      const message = err instanceof Error ? err.message : `Failed to save ${draftMode}`;
+      setDraftsByMode((prev) => {
+        const queue = [...prev[draftMode]];
+        queue[activeDraftIndex] = { ...queue[activeDraftIndex], status: 'pending', error: message };
+        return { ...prev, [draftMode]: queue };
+      });
     }
   }, [
+    activeDraftIndex,
+    activeDraftItem,
+    activeDrafts,
     addTask,
     applyOptimisticGoogleAllDayEvent,
     applyOptimisticGoogleEntry,
@@ -515,17 +556,36 @@ export function EmailToTaskPanelV2({
     draft,
     draftMode,
     projects,
-    setTaskTag,
     tags,
     timezone,
-    updateTask,
   ]);
+
+  const handleSkip = useCallback(() => {
+    if (!activeDraftItem || activeDraftItem.status === 'created') return;
+    setDraftsByMode((prev) => {
+      const queue = [...prev[draftMode]];
+      queue[activeDraftIndex] = { ...queue[activeDraftIndex], status: 'skipped', error: undefined };
+      return { ...prev, [draftMode]: queue };
+    });
+    const nextIndex = nextPendingDraftIndex(activeDrafts, activeDraftIndex);
+    if (nextIndex !== -1) {
+      setActiveDraftIndexByMode((prev) => ({ ...prev, [draftMode]: nextIndex }));
+    }
+  }, [activeDraftIndex, activeDraftItem, activeDrafts, draftMode]);
+
+  const handleUndoSkip = useCallback(() => {
+    if (!activeDraftItem || activeDraftItem.status !== 'skipped') return;
+    setDraftsByMode((prev) => {
+      const queue = [...prev[draftMode]];
+      queue[activeDraftIndex] = { ...queue[activeDraftIndex], status: 'pending', error: undefined };
+      return { ...prev, [draftMode]: queue };
+    });
+  }, [activeDraftIndex, activeDraftItem, draftMode]);
 
   const handleArchive = useCallback(async () => {
     if (!selectedListItem || isArchiving) return;
     setIsArchiving(true);
     setError(null);
-    setSuccessMessage(null);
     try {
       await api.archiveEmail(selectedListItem.id);
 
@@ -556,7 +616,6 @@ export function EmailToTaskPanelV2({
     if (!archivedEmail || isUndoingArchive) return;
     setIsUndoingArchive(true);
     setError(null);
-    setSuccessMessage(null);
     try {
       await api.unarchiveEmail(archivedEmail.email.id);
       setEmails((prev) => {
@@ -603,7 +662,7 @@ export function EmailToTaskPanelV2({
             <HeaderIcon />
             <div>
               <div className="text-[15px] font-semibold tracking-tight text-[var(--color-text-primary)]">Email to Task</div>
-              <div className="text-[11px] text-[var(--color-text-muted)]">Inbox emails from the last 24 hours</div>
+              <div className="text-[11px] text-[var(--color-text-muted)]">Inbox emails from the last 7 days</div>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -746,7 +805,10 @@ export function EmailToTaskPanelV2({
                     <button
                       key={value}
                       type="button"
-                      onClick={() => setDraftMode(value)}
+                      onClick={() => {
+                        setDraftMode(value);
+                        setError(null);
+                      }}
                       className={[
                         'rounded-full px-2.5 py-1 text-[11px] font-medium capitalize transition-all',
                         draftMode === value
@@ -765,14 +827,43 @@ export function EmailToTaskPanelV2({
                     Follow-up
                   </DraftActionButton>
                 )}
-                <DraftActionButton onClick={() => void handleSuggest()} active disabled={!selectedEmailId || isSuggesting}>
+                <DraftActionButton onClick={() => void handleSuggest()} active disabled={!selectedEmailId || isSuggesting || hasUnreviewedDrafts}>
                   {isSuggesting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} strokeWidth={2} />}
                   Suggest
                 </DraftActionButton>
               </div>
+              {activeDrafts.length > 0 && (
+                <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5" aria-label={`${draftMode} suggestions`}>
+                  {activeDrafts.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveDraftIndexByMode((prev) => ({ ...prev, [draftMode]: index }))}
+                      title={item.draft.title || `${draftMode} ${index + 1}`}
+                      className={[
+                        'inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full border px-2 text-[11px] font-semibold transition-all',
+                        index === activeDraftIndex
+                          ? 'border-[var(--color-accent)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20'
+                          : 'border-[var(--color-border-subtle)] text-[var(--color-text-muted)]',
+                        item.status === 'created' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/25 dark:text-emerald-300' : '',
+                        item.status === 'skipped' ? 'bg-[var(--color-surface-secondary)] line-through opacity-65' : '',
+                      ].join(' ')}
+                    >
+                      {item.status === 'created' ? <CheckCircle2 size={12} /> : index + 1}
+                    </button>
+                  ))}
+                  <span className="ml-1 shrink-0 text-[11px] text-[var(--color-text-muted)]">
+                    {activeDrafts.filter((item) => item.status === 'created' || item.status === 'skipped').length}/{activeDrafts.length} reviewed
+                  </span>
+                </div>
+              )}
             </div>
-            <>
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-3 flex flex-col gap-3 relative">
+            {activeDraftItem ? (
+              <>
+                <div className={[
+                  'min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-3 flex flex-col gap-3 relative',
+                  activeDraftItem.status !== 'pending' ? 'pointer-events-none opacity-65' : '',
+                ].join(' ')}>
                   <PopoverField label="Title">
                     <PopoverInput
                       value={draft.title}
@@ -955,9 +1046,9 @@ export function EmailToTaskPanelV2({
                   </PopoverField>
                   )}
 
-                  {error && (
+                  {(activeDraftItem.error || error) && (
                     <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-300">
-                      {error}
+                      {activeDraftItem.error || error}
                     </div>
                   )}
 
@@ -980,40 +1071,59 @@ export function EmailToTaskPanelV2({
                 <div className="mt-auto border-t border-[var(--color-popover-border)]/45 bg-[var(--color-surface-secondary)]/22 px-4 pt-3.5 pb-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-h-[18px] text-[12px] text-[var(--color-text-muted)]">
-                      {successMessage && !error ? (
+                      {activeDraftItem.status === 'created' ? (
                         <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
                           <CheckCircle2 size={14} />
-                          {successMessage}
+                          {draftMode === 'event' ? 'Event created' : 'Task created'}
                         </span>
-                      ) : null}
+                      ) : activeDraftItem.status === 'skipped' ? 'Skipped' : `Suggestion ${activeDraftIndex + 1} of ${activeDrafts.length}`}
                     </div>
                     <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className="px-3 py-1.5 rounded-xl border border-[var(--color-border-subtle)] text-[12px] font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)]/92 hover:bg-[var(--color-surface-raised)]"
-                    >
-                      Cancel
-                    </button>
+                    {activeDraftItem.status === 'skipped' ? (
+                      <button
+                        type="button"
+                        onClick={handleUndoSkip}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--color-border-subtle)] text-[12px] font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)]/92 hover:bg-[var(--color-surface-raised)]"
+                      >
+                        <Undo2 size={12} />
+                        Undo
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSkip}
+                        disabled={activeDraftItem.status !== 'pending'}
+                        className="px-3 py-1.5 rounded-xl border border-[var(--color-border-subtle)] text-[12px] font-medium text-[var(--color-text-secondary)] bg-[var(--color-surface)]/92 hover:bg-[var(--color-surface-raised)] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => void handleSave()}
-                      disabled={isSaving || !draft.title.trim()}
+                      disabled={activeDraftItem.status !== 'pending' || !draft.title.trim()}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--color-accent-soft)] text-[var(--color-accent)] border border-[var(--color-accent)]/15 text-[12px] font-semibold hover:brightness-[0.985] disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {isSaving ? <Loader2 size={13} className="animate-spin" /> : successMessage && !error ? <CheckCircle2 size={13} /> : null}
-                      {successMessage && !error
-                        ? draftMode === 'event'
-                          ? 'Event created'
-                          : 'Task created'
-                        : draftMode === 'event'
-                          ? 'Save event'
-                          : 'Save task'}
+                      {activeDraftItem.status === 'saving' ? <Loader2 size={13} className="animate-spin" /> : activeDraftItem.status === 'created' ? <CheckCircle2 size={13} /> : null}
+                      {activeDraftItem.status === 'created'
+                        ? draftMode === 'event' ? 'Event created' : 'Task created'
+                        : draftMode === 'event' ? 'Save event' : 'Save task'}
                     </button>
                     </div>
                   </div>
                 </div>
               </>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+                <Sparkles size={22} className="text-[var(--color-text-muted)]" />
+                <div className="mt-3 text-[13px] font-medium text-[var(--color-text-secondary)]">
+                  {hasSuggestedByMode[draftMode]
+                    ? `No ${draftMode === 'event' ? 'events' : 'tasks'} found in this email`
+                    : `Suggest ${draftMode === 'event' ? 'events' : 'tasks'} from this email`}
+                </div>
+                {error && <div className="mt-2 text-[12px] text-red-600 dark:text-red-300">{error}</div>}
+              </div>
+            )}
           </div>
         </div>
 

@@ -31,6 +31,7 @@ import type {
   Tag,
   RecentEmail,
   EmailContent,
+  EmailDraftSuggestionsResponse,
   EmailTaskSuggestion,
   TextDraftMode,
   TextDraftResponse,
@@ -798,6 +799,27 @@ export async function suggestTaskFromEmail(
   },
 ): Promise<EmailTaskSuggestion> {
   return post<EmailTaskSuggestion>(`/email/${messageId}/task-suggestion`, {
+    promptAddition: input.promptAddition?.trim() || undefined,
+    currentDate: input.currentDate,
+    currentDateTime: input.currentDateTime,
+    currentView: input.currentView,
+    timezone: input.timezone,
+  });
+}
+
+export async function suggestDraftsFromEmail(
+  messageId: string,
+  input: {
+    mode: TextDraftMode;
+    promptAddition?: string;
+    currentDate: string;
+    currentDateTime: string;
+    currentView: 'day' | 'week' | 'month' | 'year';
+    timezone: string;
+  },
+): Promise<EmailDraftSuggestionsResponse> {
+  return post<EmailDraftSuggestionsResponse>(`/email/${messageId}/draft-suggestions`, {
+    mode: input.mode,
     promptAddition: input.promptAddition?.trim() || undefined,
     currentDate: input.currentDate,
     currentDateTime: input.currentDateTime,

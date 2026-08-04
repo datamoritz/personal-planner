@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, Loader2, Plus, Sparkles } from 'lucide-react';
 import * as api from '@/lib/api';
 import { usePlannerStore } from '@/store/usePlannerStore';
@@ -63,12 +63,18 @@ export function MobileCaptureBar({ autoFocusToken = 0, onClose }: MobileCaptureB
     }
   }, [autoFocusToken]);
 
-  const closePopover = () => {
+  const closePopover = useCallback(() => {
     setPopover((current) => {
       if (current?.anchor.dataset.popoverAnchor === 'temporary') current.anchor.remove();
       return null;
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (popover?.anchor.dataset.popoverAnchor === 'temporary') popover.anchor.remove();
+    };
+  }, [popover]);
 
   const handleQuickAdd = () => {
     const trimmed = text.trim();
@@ -193,11 +199,17 @@ export function MobileCaptureBar({ autoFocusToken = 0, onClose }: MobileCaptureB
           )}
         </div>
 
-        {/* Input row */}
-        <div className="mx-3 mb-2 flex items-center gap-1.5 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] px-3 py-2">
+        <form
+          className="mx-3 mb-2 flex items-center gap-1.5 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] px-3 py-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleAISubmit();
+          }}
+        >
           <input
             ref={inputRef}
             type="text"
+            enterKeyHint="send"
             value={text}
             onChange={(e) => { setText(e.target.value); setError(null); }}
             onKeyDown={(e) => {
@@ -222,8 +234,7 @@ export function MobileCaptureBar({ autoFocusToken = 0, onClose }: MobileCaptureB
 
           {/* AI submit */}
           <button
-            type="button"
-            onClick={() => void handleAISubmit()}
+            type="submit"
             disabled={!text.trim() || isSubmitting}
             title="AI capture"
             className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-[var(--color-accent)] text-white disabled:opacity-40 transition-opacity active:opacity-70"
@@ -232,7 +243,7 @@ export function MobileCaptureBar({ autoFocusToken = 0, onClose }: MobileCaptureB
               ? <Loader2 size={13} className="animate-spin" />
               : <Sparkles size={13} strokeWidth={2.2} />}
           </button>
-        </div>
+        </form>
 
         {error && (
           <p className="text-[10px] text-rose-500 px-4 pb-2">{error}</p>

@@ -12,6 +12,7 @@ import {
   Maximize2,
   Minimize2,
   Plus,
+  SlidersHorizontal,
   Trash2,
   X,
   ZoomIn,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import * as api from '@/lib/api';
 import {
+  DEFAULT_MANDALA_LAYOUT_SETTINGS,
   MANDALA_CENTER,
   MANDALA_WORLD,
   calculateMandalaLayout,
@@ -29,7 +31,7 @@ import {
   type MandalaEdgeLayout,
   type MandalaNodeLayout,
 } from '@/lib/mandalaLayout';
-import type { MandalaDocument, MandalaNode } from '@/types';
+import type { MandalaDocument, MandalaLayoutSettings, MandalaNode } from '@/types';
 
 const DEFAULT_WIDTH = 1220;
 const DEFAULT_HEIGHT = 780;
@@ -82,17 +84,18 @@ function subtreeHeight(nodeId: string, nodes: MandalaNode[]): number {
 
 function edgePath(edge: MandalaEdgeLayout) {
   const { from, to, axis } = edge;
+  const toInset = edge.toInset ?? TILE_HALF;
   if (axis === 'horizontal') {
     const direction = Math.sign(to.x - from.x) || 1;
     const startX = from.x + direction * TILE_HALF;
-    const endX = to.x - direction * TILE_HALF;
+    const endX = to.x - direction * toInset;
     const handle = Math.max(28, Math.abs(endX - startX) * 0.42);
     return `M ${startX} ${from.y} C ${startX + direction * handle} ${from.y}, ${endX - direction * handle} ${to.y}, ${endX} ${to.y}`;
   }
 
   const direction = Math.sign(to.y - from.y) || 1;
   const startY = from.y + direction * TILE_HALF;
-  const endY = to.y - direction * TILE_HALF;
+  const endY = to.y - direction * toInset;
   const handle = Math.max(28, Math.abs(endY - startY) * 0.42);
   return `M ${from.x} ${startY} C ${from.x} ${startY + direction * handle}, ${to.x} ${endY - direction * handle}, ${to.x} ${endY}`;
 }
@@ -150,6 +153,41 @@ function MandalaTile({
   );
 }
 
+function SpacingSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="mt-3 block text-[11px] font-medium text-[var(--color-text-muted)]">
+      <span className="flex items-center justify-between gap-3">
+        {label}
+        <span className="tabular-nums text-[var(--color-text-secondary)]">{value}px</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="mt-2 h-1.5 w-full cursor-pointer accent-[var(--color-accent)]"
+        aria-label={`${label} Mandala spacing`}
+      />
+    </label>
+  );
+}
+
 export function MandalaPanel({ onClose }: { onClose: () => void }) {
   const initialSize = useMemo(viewportSize, []);
   const [size, setSize] = useState(initialSize);
@@ -159,6 +197,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [layoutControlsOpen, setLayoutControlsOpen] = useState(false);
   const [zoom, setZoom] = useState(0.65);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
@@ -166,22 +205,35 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
   const dragRef = useRef<{ startX: number; startY: number; x: number; y: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
   const panRef = useRef<{ startX: number; startY: number; x: number; y: number } | null>(null);
+  const layoutRef = useRef<ReturnType<typeof calculateMandalaLayout> | null>(null);
   const lastSavedRef = useRef('');
   const saveSequenceRef = useRef(0);
 
   const maximized = restoreFrame !== null;
   const layout = useMemo(() => document ? calculateMandalaLayout(document) : null, [document]);
+  layoutRef.current = layout;
   const selectedNode = document?.nodes.find((node) => node.id === selectedId) ?? null;
+  const layoutSettings = { ...DEFAULT_MANDALA_LAYOUT_SETTINGS, ...(document?.layout ?? {}) };
 
   const fitView = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const nextZoom = clamp(Math.min((rect.width - 40) / MANDALA_WORLD.width, (rect.height - 40) / MANDALA_WORLD.height), 0.42, 1);
+    const currentLayout = layoutRef.current;
+    const points = currentLayout
+      ? [MANDALA_CENTER, ...currentLayout.nodes, ...currentLayout.looseNodes]
+      : [MANDALA_CENTER];
+    const minX = Math.min(...points.map((point) => point.x)) - TILE_SIZE;
+    const maxX = Math.max(...points.map((point) => point.x)) + TILE_SIZE;
+    const minY = Math.min(...points.map((point) => point.y)) - TILE_SIZE;
+    const maxY = Math.max(...points.map((point) => point.y)) + TILE_SIZE;
+    const contentWidth = Math.max(TILE_SIZE * 3, maxX - minX);
+    const contentHeight = Math.max(TILE_SIZE * 3, maxY - minY);
+    const nextZoom = clamp(Math.min((rect.width - 40) / contentWidth, (rect.height - 40) / contentHeight), 0.2, 1);
     setZoom(nextZoom);
     setOffset({
-      x: (rect.width - MANDALA_WORLD.width * nextZoom) / 2,
-      y: (rect.height - MANDALA_WORLD.height * nextZoom) / 2,
+      x: (rect.width - contentWidth * nextZoom) / 2 - minX * nextZoom,
+      y: (rect.height - contentHeight * nextZoom) / 2 - minY * nextZoom,
     });
   }, []);
 
@@ -304,6 +356,17 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
     }));
   };
 
+  const updateLayoutSetting = (key: keyof MandalaLayoutSettings, value: number) => {
+    updateDocument((current) => ({
+      ...current,
+      layout: {
+        ...DEFAULT_MANDALA_LAYOUT_SETTINGS,
+        ...(current.layout ?? {}),
+        [key]: value,
+      },
+    }));
+  };
+
   const addMainNode = () => {
     if (!document) return;
     const node: MandalaNode = {
@@ -392,7 +455,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const nextZoom = clamp(zoom * factor, 0.35, 1.4);
+    const nextZoom = clamp(zoom * factor, 0.2, 1.4);
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     const worldX = (centerX - offset.x) / zoom;
@@ -443,6 +506,15 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
               {saveStatus === 'saved' && <><Check size={11} /> Saved</>}
               {saveStatus === 'error' && <><AlertCircle size={11} /> Save failed</>}
             </span>
+            <button
+              type="button"
+              onClick={() => setLayoutControlsOpen((open) => !open)}
+              className={`ui-icon-button ${layoutControlsOpen ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent)]' : ''}`}
+              title={layoutControlsOpen ? 'Hide layout spacing' : 'Adjust layout spacing'}
+              aria-pressed={layoutControlsOpen}
+            >
+              <SlidersHorizontal size={14} />
+            </button>
             <button type="button" onClick={toggleMaximize} className="ui-icon-button" title={maximized ? 'Restore window' : 'Maximize'}>
               {maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
@@ -494,7 +566,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
                   }}
                 >
                   <svg className="absolute inset-0 z-[1] overflow-visible" width={MANDALA_WORLD.width} height={MANDALA_WORLD.height} aria-hidden="true">
-                    <circle cx={MANDALA_CENTER.x} cy={MANDALA_CENTER.y} r={205} fill="none" stroke="var(--color-border)" strokeWidth="1.25" strokeDasharray="4 10" opacity="0.46" />
+                    <circle cx={MANDALA_CENTER.x} cy={MANDALA_CENTER.y} r={layout.mainRadius} fill="none" stroke="var(--color-border)" strokeWidth="1.25" strokeDasharray="4 10" opacity="0.46" />
                     {layout.edges.map((edge) => (
                       <path key={edge.id} d={edgePath(edge)} fill="none" stroke={edge.color} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
                     ))}
@@ -544,6 +616,71 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
           </div>
 
           <aside className="w-[286px] shrink-0 overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface-secondary)]/55 px-5 py-5">
+            {document && layoutControlsOpen && (
+              <div className="mb-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--color-text-secondary)]">
+                    <SlidersHorizontal size={14} className="text-[var(--color-accent)]" /> Layout spacing
+                  </div>
+                  <button
+                    type="button"
+                    className="text-[11px] font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]"
+                    onClick={() => updateDocument((current) => ({
+                      ...current,
+                      layout: { ...DEFAULT_MANDALA_LAYOUT_SETTINGS },
+                    }))}
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <p className="mt-4 text-[9px] font-semibold uppercase tracking-[0.13em] text-[var(--color-text-muted)]">Distance between levels</p>
+                <SpacingSlider
+                  label="Center → Level 1"
+                  value={layoutSettings.levelOneDistance}
+                  min={110}
+                  max={360}
+                  step={10}
+                  onChange={(value) => updateLayoutSetting('levelOneDistance', value)}
+                />
+                <SpacingSlider
+                  label="Level 1 → Level 2"
+                  value={layoutSettings.levelTwoDistance}
+                  min={110}
+                  max={360}
+                  step={10}
+                  onChange={(value) => updateLayoutSetting('levelTwoDistance', value)}
+                />
+                <SpacingSlider
+                  label="Level 2 → Level 3"
+                  value={layoutSettings.levelThreeDistance}
+                  min={110}
+                  max={360}
+                  step={10}
+                  onChange={(value) => updateLayoutSetting('levelThreeDistance', value)}
+                />
+
+                <p className="mt-5 text-[9px] font-semibold uppercase tracking-[0.13em] text-[var(--color-text-muted)]">Tiles within levels</p>
+                <SpacingSlider
+                  label="Level 2 tile gap"
+                  value={layoutSettings.levelTwoSpacing}
+                  min={0}
+                  max={160}
+                  step={4}
+                  onChange={(value) => updateLayoutSetting('levelTwoSpacing', value)}
+                />
+                <SpacingSlider
+                  label="Level 3 tile gap"
+                  value={layoutSettings.levelThreeSpacing}
+                  min={0}
+                  max={160}
+                  step={4}
+                  onChange={(value) => updateLayoutSetting('levelThreeSpacing', value)}
+                />
+
+                <p className="mt-3 text-[10px] leading-relaxed text-[var(--color-text-muted)]">Saved with this Mandala.</p>
+              </div>
+            )}
             {!document ? (
               <div className="flex justify-center py-12"><Loader2 size={18} className="animate-spin text-[var(--color-text-muted)]" /></div>
             ) : selectedId === '__center__' ? (

@@ -367,7 +367,16 @@ interface PlannerStore extends PlannerState {
   hydrateFromBackend: (data: BootData) => void;
   // Tasks
   toggleTask: (id: string) => void;
-  addTask: (data: { title: string; location: Task['location']; date?: string; projectId?: string }) => string;
+  addTask: (data: {
+    title: string;
+    location: Task['location'];
+    date?: string;
+    projectId?: string;
+    notes?: string;
+    startTime?: string;
+    endTime?: string;
+    tagId?: string;
+  }) => string;
   updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime' | 'estimateHours'>>) => void;
   deleteTask: (id: string) => void;
   // Read / Watch
@@ -607,11 +616,14 @@ export const usePlannerStore = create<PlannerStore>()(
             projectId: data.projectId,
           }),
           title:     data.title,
+          notes:     data.notes,
           status:    'pending',
           location:  data.location,
           date:      data.date,
+          startTime: data.startTime,
+          endTime:   data.endTime,
           projectId: data.projectId,
-          tagId:     projectTagId,
+          tagId:     data.tagId ?? projectTagId,
           createdAt: ts,
           updatedAt: ts,
         };

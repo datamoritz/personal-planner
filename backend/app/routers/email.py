@@ -8,6 +8,7 @@ from urllib import error, request
 
 from fastapi import APIRouter, Depends, HTTPException
 from googleapiclient.errors import HttpError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app import schemas
@@ -379,3 +380,103 @@ def suggest_task_from_email(
         raise HTTPException(status_code=502, detail="OpenAI returned invalid task suggestion")
 
     return schemas.EmailTaskSuggestion.model_validate(parsed)
+
+
+@router.post("/{message_id}/draft-suggestions", response_model=schemas.EmailDraftSuggestionsResponse)
+def suggest_drafts_from_email(
+    message_id: str,
+    payload: schemas.EmailDraftSuggestionsRequest,
+    db: Session = Depends(get_db),
+):
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is missing")
+
+    gmail = get_gmail_service(db)
+    email = _fetch_email_content(gmail, message_id)
+    item_name = "calendar event" if payload.mode == "event" else "planner task"
+    mode_guidance = (
+        "For events, use allDay true only when the email clearly describes an all-day event. "
+        "For timed events, include startTime and endTime; infer a one-hour duration when only a start time is clear. "
+        if payload.mode == "event"
+        else
+        "For tasks, prefer concise actionable titles. Use location today, myday, backlog, or project only when supported by the email. "
+        "Include tagName and projectTitle only when they clearly match information in the email. "
+    )
+
+    body = json.dumps({
+        "model": settings.OPENAI_TASK_MODEL,
+        "input": [
+            {
+                "role": "system",
+                "content": (
+                    f"Extract every distinct {item_name} from one email. "
+                    "Return only valid JSON with a top-level suggestions array. "
+                    "Each suggestion may contain these keys: title, notes, taskDate, startTime, endTime, "
+                    "allDay, location, status, tagName, projectTitle. "
+                    "Create one suggestion per distinct item, preserve the order in the email, and do not combine separate items. "
+                    "Return an empty suggestions array when there are no matching items. Return at most 10 suggestions. "
+                    "Use ISO dates like 2026-07-13 and 24-hour times like 14:30. "
+                    "Use the provided current date context for relative dates and missing years, and do not infer past years unless required. "
+                    f"{mode_guidance}"
+                    "Do not mention missing information and do not include markdown or explanatory prose."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "mode": payload.mode,
+                        "subject": email.subject,
+                        "body": email.body,
+                        "extra_instruction": (payload.promptAddition or "").strip() or None,
+                        "current_date": payload.currentDate.isoformat(),
+                        "current_datetime": payload.currentDateTime.isoformat(),
+                        "current_view": payload.currentView,
+                        "timezone": payload.timezone,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+    }).encode("utf-8")
+
+    req = request.Request(
+        "https://api.openai.com/v1/responses",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=30) as res:
+            raw = json.loads(res.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise HTTPException(status_code=502, detail=f"OpenAI error: {detail}") from exc
+    except error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI request failed: {exc.reason}") from exc
+
+    text = _extract_output_text(raw)
+    if not text:
+        raise HTTPException(status_code=502, detail="OpenAI returned no suggestions")
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON") from exc
+
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("suggestions"), list):
+        raise HTTPException(status_code=502, detail="OpenAI returned invalid suggestions")
+
+    try:
+        suggestions = [
+            schemas.EmailDraftSuggestion.model_validate(item)
+            for item in parsed["suggestions"][:10]
+            if isinstance(item, dict) and str(item.get("title") or "").strip()
+        ]
+    except ValidationError as exc:
+        raise HTTPException(status_code=502, detail="OpenAI returned invalid suggestion fields") from exc
+    return schemas.EmailDraftSuggestionsResponse(suggestions=suggestions)

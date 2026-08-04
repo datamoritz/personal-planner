@@ -97,6 +97,20 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
   //    on whichever droppable the pointer is physically over, not the nearest center.
   const within = pointerWithin(args);
   if (within.length > 0) {
+    if (activeContainerId === 'overdue') {
+      const crossContainerPriority = [
+        'drop-trash',
+        'drop-today-column',
+        'drop-today',
+        'drop-backlog',
+        'drop-upcoming',
+      ];
+      const crossContainerHit = crossContainerPriority.find((id) =>
+        id !== `drop-${activeContainerId}` && within.some((hit) => String(hit.id) === id)
+      );
+      if (crossContainerHit) return [{ id: crossContainerHit }];
+    }
+
     if (activeContainerId === 'today' || activeContainerId === 'backlog' || activeContainerId === 'upcoming') {
       const itemHits = within.filter((hit) => !String(hit.id).startsWith('drop-'));
       if (itemHits.length > 0) return itemHits;

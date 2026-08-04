@@ -251,6 +251,27 @@ class EmailTaskSuggestionRequest(BaseModel):
     timezone: str = "America/Denver"
 
 
+class EmailDraftSuggestion(BaseModel):
+    title: str | None = None
+    notes: str | None = None
+    taskDate: str | None = None
+    startTime: str | None = None
+    endTime: str | None = None
+    allDay: bool = False
+    location: str | None = None
+    status: str | None = None
+    tagName: str | None = None
+    projectTitle: str | None = None
+
+
+class EmailDraftSuggestionsRequest(EmailTaskSuggestionRequest):
+    mode: Literal["task", "event"]
+
+
+class EmailDraftSuggestionsResponse(BaseModel):
+    suggestions: list[EmailDraftSuggestion] = Field(default_factory=list, max_length=10)
+
+
 # ---------------------------------------------------------------------------
 # AI helpers
 # ---------------------------------------------------------------------------
@@ -436,9 +457,18 @@ class MandalaNode(BaseModel):
     sortOrder: int = 0
 
 
+class MandalaLayoutSettings(BaseModel):
+    levelOneDistance: int = Field(default=195, ge=110, le=360)
+    levelTwoDistance: int = Field(default=175, ge=110, le=360)
+    levelThreeDistance: int = Field(default=175, ge=110, le=360)
+    levelTwoSpacing: int = Field(default=28, ge=0, le=160)
+    levelThreeSpacing: int = Field(default=12, ge=0, le=160)
+
+
 class MandalaDocument(BaseModel):
     centerTitle: str = Field(min_length=1, max_length=80)
     nodes: list[MandalaNode] = Field(max_length=150)
+    layout: MandalaLayoutSettings = Field(default_factory=MandalaLayoutSettings)
     version: Literal[1] = 1
 
     @model_validator(mode="after")
