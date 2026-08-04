@@ -19,6 +19,7 @@ import { MobileWeekView } from './MobileWeekView';
 import { MobileMonthView } from './MobileMonthView';
 import { MobileProjectsSheet } from './MobileProjectsSheet';
 import { MobileCaptureBar } from './MobileCaptureBar';
+import { startGoogleReconnect } from '@/lib/api';
 import type { Task, RecurrentTask } from '@/types';
 
 type ActiveDrag =
@@ -202,7 +203,8 @@ export function MobileShell({
             </button>
             {googleNeedsReconnect ? (
               <button
-                onClick={() => window.open('https://planner-api.moritzknodler.com/auth/google/login', '_blank')}
+                type="button"
+                onClick={startGoogleReconnect}
                 className="ui-icon-button text-amber-500"
                 aria-label="Reconnect Google Calendar"
                 title="Reconnect Google Calendar"

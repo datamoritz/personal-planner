@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
+    FRONTEND_URL: str = "https://personal-planner-sooty.vercel.app"
     WATCHMODE_API_KEY: str = ""
 
     APPLE_ICLOUD_EMAIL: str = ""

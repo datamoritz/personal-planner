@@ -1,5 +1,6 @@
 import hashlib
 from datetime import datetime, time, timedelta
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,7 +27,7 @@ GOOGLE_SCOPES = [
 ]
 
 # In-memory OAuth state — intentionally not persisted (Phase 1 scope)
-_OAUTH_STATE_STORE: dict = {}
+_OAUTH_STATE_STORE: dict[str, str] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,24 @@ def _build_google_flow() -> Flow:
         scopes=GOOGLE_SCOPES,
         redirect_uri=settings.GOOGLE_REDIRECT_URI,
     )
+
+
+def _validated_google_return_to(return_to: str | None) -> str:
+    candidate = (return_to or settings.FRONTEND_URL).strip()
+    parsed = urlparse(candidate)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    allowed_origins = {value.rstrip("/") for value in settings.CORS_ORIGINS}
+    allowed_origins.add(settings.FRONTEND_URL.rstrip("/"))
+    if parsed.scheme not in {"http", "https"} or origin not in allowed_origins:
+        raise HTTPException(status_code=400, detail="Invalid Google OAuth return URL")
+    return candidate
+
+
+def _google_connected_return_url(return_to: str) -> str:
+    parsed = urlparse(return_to)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query["google"] = "connected"
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 def _save_google_token(db: Session, creds: Credentials) -> None:
@@ -332,7 +351,7 @@ def _update_event_resource(service, event_id: str, calendar_id: str, existing: d
 # ---------------------------------------------------------------------------
 
 @router.get("/auth/google/login")
-def auth_google_login():
+def auth_google_login(return_to: str | None = None):
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not settings.GOOGLE_REDIRECT_URI:
         raise HTTPException(status_code=500, detail="Google OAuth env vars missing")
 
@@ -342,19 +361,20 @@ def auth_google_login():
         include_granted_scopes="true",
         prompt="consent",
     )
-    _OAUTH_STATE_STORE["oauth_state"] = state
+    _OAUTH_STATE_STORE[state] = _validated_google_return_to(return_to)
     return RedirectResponse(auth_url)
 
 
 @router.get("/auth/google/callback")
 def auth_google_callback(code: str, state: str, db: Session = Depends(get_db)):
-    if state != _OAUTH_STATE_STORE.get("oauth_state"):
+    return_to = _OAUTH_STATE_STORE.pop(state, None)
+    if return_to is None:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
 
     flow = _build_google_flow()
     flow.fetch_token(code=code)
     _save_google_token(db, flow.credentials)
-    return {"ok": True, "message": "Google connected successfully and token saved"}
+    return RedirectResponse(_google_connected_return_url(return_to))
 
 
 @router.get("/google/status", response_model=schemas.GoogleConnectionStatus)

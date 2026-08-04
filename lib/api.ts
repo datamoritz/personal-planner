@@ -42,6 +42,12 @@ import type {
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'https://planner-api.moritzknodler.com';
 
+export function startGoogleReconnect(): void {
+  if (typeof window === 'undefined') return;
+  const returnTo = window.location.origin;
+  window.location.assign(`${API_BASE}/auth/google/login?return_to=${encodeURIComponent(returnTo)}`);
+}
+
 export function normalizeExecutionView(
   view: string | null | undefined,
 ): 'day' | 'week' | 'month' | 'year' {

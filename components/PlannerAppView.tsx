@@ -29,6 +29,7 @@ import { EmailToTaskPanelV2 } from './ui/EmailToTaskPanelV2';
 import { ReadWatchPopover } from './ui/ReadWatchPopover';
 import { SmartCaptureBar } from './ui/SmartCaptureBar';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
+import { startGoogleReconnect } from '@/lib/api';
 import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
 
 const MandalaPanel = dynamic(
@@ -270,7 +271,8 @@ export function PlannerAppView({
               </div>
               {googleNeedsReconnect ? (
                 <button
-                  onClick={() => window.open('https://planner-api.moritzknodler.com/auth/google/login', '_blank')}
+                  type="button"
+                  onClick={startGoogleReconnect}
                   title="Reconnect Google Calendar"
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-amber-700 bg-white/55 border border-amber-200/80 hover:bg-white/70 dark:bg-amber-900/18 dark:border-amber-700/35 dark:text-amber-300 transition-colors cursor-pointer"
                 >
