@@ -50,6 +50,21 @@ function translatedRectHits(
   return overlapArea >= Math.min(activeArea * 0.35, 1800);
 }
 
+function horizontalColumnHit(
+  x: number | null,
+  translated: { left: number; right: number; width: number } | null | undefined,
+  rect: { left: number; right: number },
+) {
+  if (x !== null && x >= rect.left && x <= rect.right) return true;
+  if (!translated) return false;
+
+  const centerX = translated.left + translated.width / 2;
+  if (centerX >= rect.left && centerX <= rect.right) return true;
+
+  const overlapX = Math.max(0, Math.min(translated.right, rect.right) - Math.max(translated.left, rect.left));
+  return overlapX >= translated.width * 0.35;
+}
+
 /**
  * When the dragged item's center is geometrically inside a week-cal-* droppable,
  * return it immediately. Checked against both pointerCoordinates (most accurate)
@@ -76,6 +91,18 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
       if (!rect) continue;
       if (pointInRect(px, py, rect)) {
         return [{ id: container.id }];
+      }
+    }
+
+    // Overdue lives in a separately scrolling/resizable sidebar panel. For rows
+    // farther down that panel, dnd-kit can retain a translated Y position outside
+    // the measured Today rect even while the pointer is visibly over the column.
+    // Today is a full-height destination, so use its horizontal bounds for this
+    // cross-column move and leave row-level ordering to later drags within Today.
+    if (activeContainerId === 'overdue') {
+      const todayColumnRect = droppableRects.get('drop-today-column');
+      if (todayColumnRect && horizontalColumnHit(px, translated, todayColumnRect)) {
+        return [{ id: 'drop-today-column' }];
       }
     }
 
