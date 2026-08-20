@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronsRight, FolderClosed, Trash2 } from 'lucide-react';
+import { ChevronsRight, FolderClosed, ListChecks, Trash2 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
@@ -10,6 +10,7 @@ import {
   usePlannerStore,
   selectOverdueTasks,
   selectBacklogTasks,
+  selectCompletedBacklogTasks,
   selectUpcomingTasks,
   selectRecurrentTasksSorted,
 } from '@/store/usePlannerStore';
@@ -20,6 +21,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { RecurrentTaskDetailPopover } from '@/components/ui/RecurrentTaskDetailPopover';
+import { TaskPill } from '@/components/ui/TaskPill';
 
 type TaskPopover      = { type: 'task';      id: string; anchor: HTMLElement };
 type RecurrentPopover = { type: 'recurrent'; id: string; anchor: HTMLElement };
@@ -70,6 +72,9 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
   const backlog  = activeTagFilter
     ? selectBacklogTasks(tasks).filter((t) => t.tagId === activeTagFilter)
     : selectBacklogTasks(tasks);
+  const completedBacklog = activeTagFilter
+    ? selectCompletedBacklogTasks(tasks).filter((t) => t.tagId === activeTagFilter)
+    : selectCompletedBacklogTasks(tasks);
   const upcoming = activeTagFilter
     ? selectUpcomingTasks(tasks, currentDate).filter((t) => t.tagId === activeTagFilter)
     : selectUpcomingTasks(tasks, currentDate);
@@ -78,6 +83,7 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
   const hasOverdue = overdue.length > 0;
 
   const [addingBacklog, setAddingBacklog]     = useState(false);
+  const [showCompletedBacklog, setShowCompletedBacklog] = useState(false);
   const [addingRecurrent, setAddingRecurrent] = useState(false);
   const [popover, setPopover]                 = useState<PopoverState>(null);
   const backlogInputOpen = addingBacklog || !!triggerBacklogAdd;
@@ -141,6 +147,28 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                 count={backlog.length}
                 onAdd={() => setAddingBacklog(true)}
                 addLabel="Add to backlog"
+                secondaryAction={(
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletedBacklog((visible) => !visible)}
+                    disabled={completedBacklog.length === 0}
+                    title={completedBacklog.length === 0
+                      ? 'No completed tasks'
+                      : showCompletedBacklog ? 'Hide completed tasks' : 'Show completed tasks'}
+                    aria-label={showCompletedBacklog ? 'Hide completed backlog tasks' : 'Show completed backlog tasks'}
+                    aria-pressed={showCompletedBacklog}
+                    className={[
+                      'ui-icon-button transition-opacity',
+                      completedBacklog.length === 0
+                        ? 'text-[var(--color-text-muted)] opacity-25 cursor-default'
+                        : showCompletedBacklog
+                        ? 'text-[var(--color-accent)] opacity-100'
+                        : 'text-[var(--color-text-muted)] opacity-45 hover:opacity-80',
+                    ].join(' ')}
+                  >
+                    <ListChecks size={12} strokeWidth={2} />
+                  </button>
+                )}
                 className="flex-shrink-0"
               />
               <DroppableSection
@@ -165,6 +193,26 @@ export function SidebarColumn({ onCollapse, triggerBacklogAdd, onBacklogAddHandl
                     onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
                   />
                 ))}
+                {showCompletedBacklog && completedBacklog.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 py-1.5" aria-label="Completed backlog tasks">
+                      <div className="h-px flex-1 bg-[var(--color-border-subtle)]" />
+                      <span className="text-[9px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)] opacity-70">
+                        Completed
+                      </span>
+                      <div className="h-px flex-1 bg-[var(--color-border-subtle)]" />
+                    </div>
+                    {completedBacklog.map((task) => (
+                      <TaskPill
+                        key={task.id}
+                        task={task}
+                        onToggle={toggleTask}
+                        onDoubleClick={(id, anchor) => setPopover({ type: 'task', id, anchor })}
+                        noHover
+                      />
+                    ))}
+                  </>
+                )}
                 {backlogInputOpen && (
                   <InlineTaskInput
                     placeholder="Backlog task…"

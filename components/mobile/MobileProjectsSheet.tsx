@@ -7,6 +7,7 @@ import {
   usePlannerStore,
   selectOverdueTasks,
   selectBacklogTasks,
+  selectCompletedBacklogTasks,
   selectUpcomingTasks,
   selectRecurrentTasksSorted,
 } from '@/store/usePlannerStore';
@@ -128,6 +129,7 @@ function ActionButton({
 export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
   const [tab, setTab]                       = useState<SheetTab>('projects');
   const [addingBacklog, setAddingBacklog]   = useState(false);
+  const [showCompletedBacklog, setShowCompletedBacklog] = useState(false);
   const [addingRecurrent, setAddingRecurrent] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [actionMenu, setActionMenu] = useState<
@@ -148,6 +150,7 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
 
   const overdue        = selectOverdueTasks(tasks);
   const backlog        = selectBacklogTasks(tasks);
+  const completedBacklog = selectCompletedBacklogTasks(tasks);
   const upcoming       = selectUpcomingTasks(tasks, currentDate);
   const recurrent      = selectRecurrentTasksSorted(recurrentTasks);
   const activeProjects = projects.filter((p) => p.status === 'active');
@@ -301,7 +304,9 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
                 </>
               )}
               {backlog.length === 0 && !addingBacklog && overdue.length === 0 && (
-                <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-6">Empty backlog</p>
+                <p className="text-xs text-[var(--color-text-muted)] italic text-center mt-6">
+                  {completedBacklog.length > 0 ? 'No active backlog tasks' : 'Empty backlog'}
+                </p>
               )}
               {backlog.map((task) => (
                 <TaskRow
@@ -311,6 +316,38 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
                   onDetail={() => setActionMenu({ type: 'task', id: task.id })}
                 />
               ))}
+              {completedBacklog.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletedBacklog((visible) => !visible)}
+                    aria-expanded={showCompletedBacklog}
+                    className="flex items-center gap-1.5 self-end py-1 text-[11px] text-[var(--color-text-muted)] opacity-65 hover:opacity-100 transition-opacity"
+                  >
+                    <CheckCircle2 size={12} strokeWidth={2} />
+                    {showCompletedBacklog ? 'Hide completed' : `Show completed (${completedBacklog.length})`}
+                  </button>
+                  {showCompletedBacklog && (
+                    <>
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="h-px flex-1 bg-[var(--color-border)]" />
+                        <span className="text-[9px] font-medium uppercase tracking-[0.08em] text-[var(--color-text-muted)] opacity-70">
+                          Completed
+                        </span>
+                        <div className="h-px flex-1 bg-[var(--color-border)]" />
+                      </div>
+                      {completedBacklog.map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          onToggle={() => toggleTask(task.id)}
+                          onDetail={() => setActionMenu({ type: 'task', id: task.id })}
+                        />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
               {addingBacklog && (
                 <InlineTaskInput
                   placeholder="Backlog task…"

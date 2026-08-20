@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 
 interface SectionHeaderProps {
@@ -7,6 +8,7 @@ interface SectionHeaderProps {
   count?: number;
   onAdd?: () => void;
   addLabel?: string;
+  secondaryAction?: ReactNode;
   className?: string;
 }
 
@@ -15,6 +17,7 @@ export function SectionHeader({
   count,
   onAdd,
   addLabel = 'Add',
+  secondaryAction,
   className = '',
 }: SectionHeaderProps) {
   return (
@@ -29,14 +32,19 @@ export function SectionHeader({
           </span>
         )}
       </div>
-      {onAdd && (
-        <button
-          onClick={onAdd}
-          title={addLabel}
-          className="ui-icon-button"
-        >
-          <Plus size={13} strokeWidth={2.5} />
-        </button>
+      {(secondaryAction || onAdd) && (
+        <div className="flex items-center gap-0.5">
+          {secondaryAction}
+          {onAdd && (
+            <button
+              onClick={onAdd}
+              title={addLabel}
+              className="ui-icon-button"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

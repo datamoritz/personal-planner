@@ -343,10 +343,12 @@ def _suggest_task_from_email(
                     "You convert one forwarded email into one planner task. "
                     "Return only valid JSON with these keys: title, notes, taskDate, startTime, endTime, estimateHours, location, status. "
                     "Use ISO date strings like 2026-07-13 and 24-hour times like 14:30 when a date or time is strongly implied. "
-                    "Use null for unknown optional fields. "
+                    "Use null for unknown optional fields except taskDate, which defaults to the current date. "
                     "Prefer a concise actionable title. "
                     "Use status pending unless the email clearly says the task is done. "
-                    "Use location backlog unless the email clearly implies today. "
+                    "When taskDate is known, use location today if it matches the provided current date, "
+                    "otherwise use location upcoming. When no date is stated or implied, use the provided "
+                    "current date as taskDate and location today. "
                     "Use the provided current date when interpreting relative dates. "
                     "Do not include markdown or explanatory prose."
                 ),
@@ -403,6 +405,21 @@ def _suggest_task_from_email(
         draft = TaskDraft.model_validate(parsed)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=f"Task JSON failed validation: {exc}") from exc
+
+    # Automated tasks always enter a dated planner lane; missing dates default
+    # to today so they appear in Tasks Today instead of Backlog.
+    normalized_task_date = draft.taskDate or now.date()
+    if normalized_task_date == now.date():
+        normalized_location = "today"
+    else:
+        normalized_location = "upcoming"
+
+    if draft.taskDate != normalized_task_date or draft.location != normalized_location:
+        draft = draft.model_copy(
+            update={"taskDate": normalized_task_date, "location": normalized_location}
+        )
+    parsed["taskDate"] = normalized_task_date.isoformat()
+    parsed["location"] = normalized_location
 
     return draft, parsed
 

@@ -1585,17 +1585,31 @@ export function selectMyDayTasks(tasks: Task[], date: string) {
 
 export function selectOverdueTasks(tasks: Task[]) {
   const realToday = format(new Date(), 'yyyy-MM-dd');
-  return tasks.filter(
-    (t) =>
-      t.status === 'pending' &&
-      t.date !== undefined &&
-      t.date < realToday &&
-      (t.location === 'today' || t.location === 'myday' || t.location === 'upcoming')
-  );
+  return tasks
+    .filter(
+      (t) =>
+        t.status === 'pending' &&
+        t.date !== undefined &&
+        t.date < realToday &&
+        (t.location === 'today' || t.location === 'myday' || t.location === 'upcoming')
+    )
+    .sort((a, b) => {
+      const dateDiff = (b.date ?? '').localeCompare(a.date ?? '');
+      if (dateDiff !== 0) return dateDiff;
+      const orderDiff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      if (orderDiff !== 0) return orderDiff;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
 }
 
 export function selectBacklogTasks(tasks: Task[]) {
-  return sortBySortOrder(tasks.filter((t) => t.location === 'backlog'));
+  return sortBySortOrder(tasks.filter((t) => t.location === 'backlog' && t.status === 'pending'));
+}
+
+export function selectCompletedBacklogTasks(tasks: Task[]) {
+  return tasks
+    .filter((t) => t.location === 'backlog' && t.status === 'done')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export function selectUpcomingTasks(tasks: Task[], currentDate: string) {
