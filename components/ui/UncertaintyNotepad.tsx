@@ -13,6 +13,7 @@ type MenuState = { lineIndex: number; anchor: { top: number; left: number } } | 
 export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) {
   const {
     uncertaintyNotes, setUncertaintyNotes,
+    uncertaintySyncStatus,
     selectedProjectIdForNotes, projects,
     currentDate, addTask, addProject, addRecurrentTask,
   } = usePlannerStore();
@@ -25,18 +26,30 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
 
   const lines = uncertaintyNotes.split('\n');
   const selectedProject = projects.find((p) => p.id === selectedProjectIdForNotes);
+  const syncLabel = uncertaintySyncStatus === 'saved' ? 'Saved'
+    : uncertaintySyncStatus === 'offline' ? 'Saved on this device · sync will retry'
+    : uncertaintySyncStatus === 'loading' ? 'Connecting…' : 'Saving…';
+  const syncStatus = (
+    <div role="status" className="flex-shrink-0 px-5 pb-2 text-[10px] text-[var(--color-notepad-muted)]">
+      {syncLabel}
+    </div>
+  );
 
   // ── Brainstorm mode: plain textarea ──────────────────────────────────────
   if (!actionsVisible) {
     return (
-      <textarea
-        ref={textareaRef}
-        value={uncertaintyNotes}
-        onChange={(e) => setUncertaintyNotes(e.target.value)}
-        placeholder="What is uncertain? Dump everything here…"
-        className="flex-1 w-full resize-none bg-transparent text-[15px] text-[var(--color-text-primary)] leading-[1.8] placeholder:text-[var(--color-text-muted)] outline-none px-5 py-4"
-        style={{ fontFamily: 'inherit' }}
-      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <textarea
+          ref={textareaRef}
+          value={uncertaintyNotes}
+          onChange={(e) => setUncertaintyNotes(e.target.value)}
+          placeholder="What is uncertain? Dump everything here…"
+          aria-label="What is uncertain?"
+          className="min-h-0 flex-1 w-full resize-none bg-transparent text-[16px] text-[var(--color-notepad-text)] caret-[var(--color-notepad-text)] leading-[1.8] placeholder:text-[var(--color-notepad-muted)] outline-none px-5 py-4"
+          style={{ fontFamily: 'inherit', WebkitTextFillColor: 'var(--color-notepad-text)' }}
+        />
+        {syncStatus}
+      </div>
     );
   }
 
@@ -126,7 +139,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
               <span
                 className={[
                   'flex-1 text-[15px] leading-[1.8] whitespace-pre-wrap break-words',
-                  isDone ? 'line-through text-[var(--color-text-muted)]' : 'text-[var(--color-text-primary)]',
+                  isDone ? 'line-through text-[var(--color-notepad-muted)]' : 'text-[var(--color-notepad-text)]',
                   isEmpty ? 'text-transparent select-none' : '',
                 ].join(' ')}
               >
@@ -175,7 +188,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
 
       {/* Multi-select action bar */}
       {hasSelection && (
-        <div className="flex-shrink-0 border-t border-[#f5df93] bg-[#fff7c7] px-5 py-3 flex items-center gap-2.5 flex-wrap">
+        <div className="flex-shrink-0 border-t border-[var(--color-border)] bg-[var(--color-notepad-header)] px-5 py-3 flex items-center gap-2.5 flex-wrap">
           <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mr-1">
             {nonEmptySelected.length} selected:
           </span>
@@ -197,6 +210,7 @@ export function UncertaintyNotepad({ actionsVisible }: UncertaintyNotepadProps) 
           </button>
         </div>
       )}
+      {syncStatus}
     </div>
   );
 }

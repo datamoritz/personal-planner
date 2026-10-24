@@ -12,6 +12,7 @@
  */
 
 import { addDays, addMonths, format, startOfDay, startOfMonth } from 'date-fns';
+import { NotepadConflictError, type NotepadDocument } from './notepadSync';
 import type {
   Task,
   Project,
@@ -67,6 +68,16 @@ async function request<T>(
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
+    let message: string | undefined;
+    try {
+      const error = JSON.parse(detail) as { detail?: unknown };
+      if (typeof error?.detail === 'string' && error.detail.trim()) {
+        message = error.detail;
+      }
+    } catch {
+      // Preserve the status and body when a proxy returns a non-JSON error.
+    }
+    if (message) throw new Error(message);
     throw new Error(`API ${options?.method ?? 'GET'} ${path} → ${res.status}: ${detail}`);
   }
   if (res.status === 204) return undefined as T;
@@ -78,6 +89,27 @@ const post = <T>(path: string, body: unknown)    => request<T>(path, { method: '
 const put = <T>(path: string, body: unknown)     => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) });
 const patch = <T>(path: string, body: unknown)   => request<T>(path, { method: 'PATCH',  body: JSON.stringify(body) });
 const del  = (path: string)                      => request<void>(path, { method: 'DELETE' });
+
+// ─── Shared notepad ─────────────────────────────────────────────────────────
+
+export function loadNotepad(signal?: AbortSignal): Promise<NotepadDocument> {
+  return request<NotepadDocument>('/notepad', { cache: 'no-store', signal });
+}
+
+export async function saveNotepad(document: NotepadDocument, signal?: AbortSignal): Promise<NotepadDocument> {
+  const res = await fetch(`${API_BASE}/notepad`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(document),
+    signal,
+  });
+  if (res.status === 409) {
+    const conflict = await res.json() as { current: NotepadDocument };
+    throw new NotepadConflictError(conflict.current);
+  }
+  if (!res.ok) throw new Error('Could not sync the notepad. Your changes are saved on this device.');
+  return res.json();
+}
 
 // ─── Recurrence helpers ─────────────────────────────────────────────────────
 

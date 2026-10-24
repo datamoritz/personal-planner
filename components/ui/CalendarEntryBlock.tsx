@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { NotesIndicator } from './NotesIndicator';
 import {
   END_HOUR,
   SLOT_HEIGHT,
@@ -251,10 +252,11 @@ export function CalendarEntryBlock({
       ].join(' ')}
     >
       <p className={[
-        `${compact ? 'text-[10px]' : 'text-xs'} font-semibold leading-tight truncate`,
+        `flex items-center gap-1 ${compact ? 'text-[10px]' : 'text-xs'} font-semibold leading-tight`,
         readOnly ? 'text-[var(--calendar-entry-text)]' : 'text-[var(--color-accent)]',
       ].join(' ')}>
-        {entry.title}
+        <span className="min-w-0 flex-1 truncate">{entry.title}</span>
+        <NotesIndicator notes={entry.notes} size={compact ? 9 : 11} />
       </p>
       <p className={[
         `${compact ? 'text-[9px]' : 'text-[10px]'} mt-0.5`,

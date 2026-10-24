@@ -10,6 +10,16 @@ from pydantic import BaseModel, Field, model_validator
 # Recurrent tasks
 # ---------------------------------------------------------------------------
 
+class UncertaintyNotepadRead(BaseModel):
+    text: str
+    revision: int
+
+
+class UncertaintyNotepadUpdate(BaseModel):
+    text: str
+    revision: int = Field(ge=0)
+
+
 class RecurringTaskGenerationRequest(BaseModel):
     start_date: date
     end_date: date

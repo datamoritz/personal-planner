@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { format } from 'date-fns';
 import { RefreshCw } from 'lucide-react';
 import type { RecurrentTask, RecurrenceFrequency } from '@/types';
+import { NotesIndicator } from './NotesIndicator';
 
 function formatFrequency(freq: RecurrenceFrequency): string {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -96,6 +97,7 @@ export function RecurrentTaskPill({
         {task.title}
       </span>
 
+      <NotesIndicator notes={task.notes} className="text-[var(--color-text-muted)]" />
       <div className="flex-shrink-0 w-[15px] h-[15px] flex items-center justify-center">
         <RefreshCw
           size={12}

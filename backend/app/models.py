@@ -84,6 +84,14 @@ class Milestone(Base):
     project: Mapped["Project | None"] = relationship(back_populates="milestones")
 
 
+class UncertaintyNotepad(Base):
+    __tablename__ = "uncertainty_notepad"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
 class MandalaState(Base):
     __tablename__ = "mandala_state"
 

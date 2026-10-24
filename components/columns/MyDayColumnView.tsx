@@ -147,7 +147,7 @@ export function MyDayColumnView({
       <div
         className={[
           'flex h-[52px] items-center justify-between px-4 border-b border-[var(--color-border)] flex-shrink-0 transition-colors',
-          notepadOpen ? 'bg-[#fff7c7]' : '',
+          notepadOpen ? 'bg-[var(--color-notepad-header)]' : '',
         ].join(' ')}
       >
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -216,7 +216,7 @@ export function MyDayColumnView({
       )}
 
       {notepadOpen && (
-        <div className="flex-1 flex flex-col min-h-0 bg-[#fffbe0]">
+        <div className="flex-1 flex flex-col min-h-0 bg-[var(--color-notepad)]">
           <UncertaintyNotepad actionsVisible={actionsMode} />
         </div>
       )}

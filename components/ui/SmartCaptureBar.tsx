@@ -218,7 +218,7 @@ export function SmartCaptureBar({ autoFocusToken = 0 }: { autoFocusToken?: numbe
           </button>
         </div>
         {error && (
-          <p className="absolute left-1/2 top-full mt-1 -translate-x-1/2 text-[10px] font-medium text-rose-500">
+          <p role="alert" className="absolute left-0 top-full z-10 mt-1 w-full rounded-lg border border-rose-200 bg-[var(--color-surface)] px-3 py-2 text-[11px] leading-4 text-rose-500 shadow-sm">
             {error}
           </p>
         )}

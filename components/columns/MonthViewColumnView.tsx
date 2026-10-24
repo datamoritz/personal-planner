@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { MonthViewMode, MonthTaskLayout, Task, CalendarEntry, AllDayEvent } from '@/types';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
+import { NotesIndicator } from '@/components/ui/NotesIndicator';
 
 interface MonthDayData {
   date: Date;
@@ -48,6 +49,7 @@ function formatEventTime(time?: string) {
 
 function MonthEventRow({
   title,
+  notes,
   time,
   tone,
   showTime,
@@ -58,6 +60,7 @@ function MonthEventRow({
   isPending = false,
 }: {
   title: string;
+  notes?: string | null;
   time?: string;
   tone: 'google' | 'events' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
@@ -91,6 +94,7 @@ function MonthEventRow({
       }}
     >
       <span className="truncate flex-1 min-w-0 font-medium">{title}</span>
+      <NotesIndicator notes={notes} size={10} />
       {trailingIndicator && <span className="flex-shrink-0 text-[10px] opacity-80">{trailingIndicator}</span>}
       {showTime && time && <span className="flex-shrink-0 text-[10px] opacity-80">{time}</span>}
     </div>
@@ -160,6 +164,7 @@ function MonthTaskRow({ task, onToggle }: { task: Task; onToggle: (id: string) =
       >
         {task.title}
       </span>
+      <NotesIndicator notes={task.notes} size={10} className="text-[var(--color-text-muted)]" />
     </div>
   );
 }
@@ -206,6 +211,7 @@ function MonthDraggableEventRow({
   id,
   containerId,
   title,
+  notes,
   time,
   tone,
   showTime,
@@ -218,6 +224,7 @@ function MonthDraggableEventRow({
   id: string;
   containerId: string;
   title: string;
+  notes?: string | null;
   time?: string;
   tone: 'google' | 'events' | 'task' | 'all-day' | 'birthday';
   showTime: boolean;
@@ -251,6 +258,7 @@ function MonthDraggableEventRow({
     >
       <MonthEventRow
         title={title}
+        notes={notes}
         time={time}
         tone={tone}
         showTime={showTime}
@@ -290,6 +298,7 @@ function MonthReadOnlyEventRow({
     <div className="cursor-pointer" onClick={(e) => onClick?.(event, e.currentTarget)}>
       <MonthEventRow
         title={title}
+        notes={event.notes}
         time={time}
         tone={tone}
         showTime={showTime}
@@ -454,7 +463,8 @@ function MonthDayCell({
                   id={event.id}
                   containerId={eventContainerId}
                   title={event.title}
-                tone={event.calendarRole === 'events' ? 'events' : 'all-day'}
+                  notes={event.notes}
+                  tone={event.calendarRole === 'events' ? 'events' : 'all-day'}
                   showTime={false}
                   dragType="google-all-day"
                   onDoubleClick={onGoogleEntryDoubleClick}
@@ -470,6 +480,7 @@ function MonthDayCell({
                 id={entry.id}
                 containerId={eventContainerId}
                 title={entry.title}
+                notes={entry.notes}
                 time={formatEventTime(entry.startTime)}
                 tone={entry.calendarRole === 'events' ? 'events' : 'google'}
                 showTime={showEventTimes}
@@ -483,6 +494,7 @@ function MonthDayCell({
                 id={task.id}
                 containerId={eventContainerId}
                 title={task.title}
+                notes={task.notes}
                 time={task.startTime ? formatEventTime(task.startTime) : ''}
                 tone="task"
                 showTime={showEventTimes}

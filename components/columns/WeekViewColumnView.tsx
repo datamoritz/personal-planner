@@ -9,6 +9,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { TimedTaskBlock } from '@/components/ui/TimedTaskBlock';
+import { NotesIndicator } from '@/components/ui/NotesIndicator';
 import { DroppableSection } from '@/components/dnd/DroppableSection';
 import { TaskDetailPopover } from '@/components/ui/TaskDetailPopover';
 import { GoogleCalendarEntryDetailPopover } from '@/components/ui/GoogleCalendarEntryDetailPopover';
@@ -147,7 +148,7 @@ function WeekAllDayEvent({
       {...listeners}
       title={event.notes ?? event.title}
       className={[
-        'px-1 py-0.5 text-[10px] font-medium text-[#10b981] bg-[#10b981]/10 truncate select-none cursor-grab transition-shadow',
+        'flex items-center gap-1 px-1 py-0.5 text-[10px] font-medium text-[#10b981] bg-[#10b981]/10 select-none cursor-grab transition-shadow',
         isStart ? 'rounded-l' : '-ml-1 rounded-l-none pl-2',
         isEnd ? 'rounded-r' : '-mr-1 rounded-r-none pr-2',
       ].join(' ')}
@@ -156,7 +157,8 @@ function WeekAllDayEvent({
         onDoubleClick(event.id, e.currentTarget);
       }}
     >
-      {event.title}
+      <span className="min-w-0 flex-1 truncate">{event.title}</span>
+      <NotesIndicator notes={event.notes} size={9} />
     </div>
   );
 }
@@ -176,14 +178,15 @@ function WeekReadOnlyAllDayEvent({
     <div
       title={event.notes ?? event.title}
       className={[
-        'px-1 py-0.5 text-[10px] font-medium truncate select-none shadow-[0_8px_20px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28 cursor-pointer',
+        'flex items-center gap-1 px-1 py-0.5 text-[10px] font-medium select-none shadow-[0_8px_20px_rgba(249,115,22,0.08)] ring-1 ring-[#fdba74]/28 cursor-pointer',
         'bg-[color-mix(in_srgb,#f97316_12%,white_88%)] text-[#b45309]',
         isStart ? 'rounded-l' : '-ml-1 rounded-l-none pl-2',
         isEnd ? 'rounded-r' : '-mr-1 rounded-r-none pr-2',
       ].join(' ')}
       onClick={(e) => onClick?.(event, e.currentTarget)}
     >
-      <span className="truncate">{event.title}</span>
+      <span className="min-w-0 flex-1 truncate">{event.title}</span>
+      <NotesIndicator notes={event.notes} size={9} />
       {event.source === 'apple_birthdays' && event.hasMessage && <span className="ml-1 flex-shrink-0 text-[10px] opacity-80">✓</span>}
     </div>
   );
@@ -253,6 +256,7 @@ function WeekTaskItem({
       >
         {task.title}
       </span>
+      <NotesIndicator notes={task.notes} size={10} className="text-[var(--color-text-muted)]" />
     </div>
   );
 }

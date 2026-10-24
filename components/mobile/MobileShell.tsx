@@ -166,7 +166,7 @@ export function MobileShell({
           onTouchStart={handleHeaderTouchStart}
           onTouchEnd={handleHeaderTouchEnd}
         >
-          <button onClick={navPrev} className="ui-icon-button" aria-label="Previous">
+          <button onClick={navPrev} className="ui-icon-button flex-shrink-0" aria-label="Previous">
             <ChevronLeft size={18} strokeWidth={2} />
           </button>
 
@@ -188,7 +188,7 @@ export function MobileShell({
             )}
           </div>
 
-          <div className="flex items-center gap-0.5">
+          <div className="flex flex-shrink-0 items-center gap-0.5">
             <button
               type="button"
               onClick={() => captureOpen ? setCaptureOpen(false) : openCapture()}

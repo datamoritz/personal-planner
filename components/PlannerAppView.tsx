@@ -28,6 +28,7 @@ import { DetailPopover } from './ui/DetailPopover';
 import { EmailToTaskPanelV2 } from './ui/EmailToTaskPanelV2';
 import { ReadWatchPopover } from './ui/ReadWatchPopover';
 import { SmartCaptureBar } from './ui/SmartCaptureBar';
+import { AboutPrivacyLinks } from './ui/AboutPrivacyLinks';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import { startGoogleReconnect } from '@/lib/api';
 import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
@@ -388,6 +389,9 @@ export function PlannerAppView({
               </>
             )}
           </div>
+          <footer className="flex-shrink-0 self-end pr-3 pt-1">
+            <AboutPrivacyLinks />
+          </footer>
         </div>
 
         <DragOverlay dropAnimation={null}>

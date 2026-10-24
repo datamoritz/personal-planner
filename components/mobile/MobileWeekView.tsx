@@ -2,6 +2,7 @@
 
 import { addDays, format, isToday, startOfWeek } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
+import { NotesIndicator } from '@/components/ui/NotesIndicator';
 import {
   usePlannerStore,
   selectTasksToday,
@@ -77,13 +78,15 @@ export function MobileWeekView() {
           {/* Summary column */}
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
             {day.allDay.slice(0, 2).map((ev) => (
-              <div key={ev.id} className="text-[11px] text-[var(--color-text-secondary)] truncate leading-snug">
-                {ev.title}
+              <div key={ev.id} className="flex items-center gap-1 text-[11px] text-[var(--color-text-secondary)] leading-snug">
+                <span className="min-w-0 truncate">{ev.title}</span>
+                <NotesIndicator notes={ev.notes} size={10} />
               </div>
             ))}
             {day.googleTimed.slice(0, 2).map((ev) => (
-              <div key={ev.id} className="text-[11px] text-[var(--color-google-event-text)] truncate leading-snug">
-                {ev.startTime.slice(0, 5)} {ev.title}
+              <div key={ev.id} className="flex items-center gap-1 text-[11px] text-[var(--color-google-event-text)] leading-snug">
+                <span className="min-w-0 truncate">{ev.startTime.slice(0, 5)} {ev.title}</span>
+                <NotesIndicator notes={ev.notes} size={10} />
               </div>
             ))}
             {day.untimedTasks.length > 0 && (

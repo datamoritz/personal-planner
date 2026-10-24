@@ -91,16 +91,17 @@ export function DayHeader() {
       <div className="flex items-center justify-between px-6 py-2.5 min-h-[58px]">
         <div style={{ width: '25%' }} />
 
-        <div className="flex items-center justify-center" style={{ width: '50%' }}>
+        <div className="grid min-w-0 grid-cols-[28px_minmax(0,1fr)_28px] items-center" style={{ width: '50%', maxWidth: 440 }}>
           <button
             onClick={navPrev}
             className="ui-icon-button"
+            aria-label="Previous"
           >
             <ChevronLeft size={16} strokeWidth={2} />
           </button>
 
-          <div className="flex items-center justify-center gap-2.5 min-w-[220px] px-3">
-            <span className="text-[1.15rem] font-bold tracking-tight text-[var(--color-text-primary)]" suppressHydrationWarning>
+          <div className="flex min-w-0 items-center justify-center gap-2.5 px-3">
+            <span className="truncate text-[1.15rem] font-bold tracking-tight text-[var(--color-text-primary)]" suppressHydrationWarning>
               {mounted ? (isYear ? format(date, 'yyyy') : isMonth ? format(date, 'MMMM yyyy') : isWeek ? formatWeekRange(currentDate) : format(date, 'EEEE, MMMM d')) : ''}
             </span>
             {mounted && (
@@ -108,7 +109,7 @@ export function DayHeader() {
                 type="button"
                 onClick={jumpToToday}
                 className={[
-                  'px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-[0.08em] transition-colors',
+                  'flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold tracking-[0.08em] transition-colors',
                   atPresentUnit
                     ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
                     : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-[var(--color-text-secondary)]',
@@ -122,6 +123,7 @@ export function DayHeader() {
           <button
             onClick={navNext}
             className="ui-icon-button"
+            aria-label="Next"
           >
             <ChevronRight size={16} strokeWidth={2} />
           </button>

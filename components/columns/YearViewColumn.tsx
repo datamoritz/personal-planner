@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { NotesIndicator } from '@/components/ui/NotesIndicator';
 import {
   addDays,
   eachMonthOfInterval,
@@ -26,6 +27,7 @@ import {
 type PreviewItem = {
   id: string;
   title: string;
+  notes?: string;
   timeLabel: string;
   tone: 'all-day' | 'google' | 'events' | 'task' | 'birthday';
   done?: boolean;
@@ -98,6 +100,7 @@ function buildMonthWeeks(
       ...dayAllDayEvents.map((event) => ({
         id: event.id,
         title: event.title,
+        notes: event.notes,
         timeLabel: 'all-day',
         tone: event.source === 'apple_birthdays'
           ? 'birthday' as const
@@ -108,12 +111,14 @@ function buildMonthWeeks(
       ...dayTimedEntries.map((entry) => ({
         id: entry.id,
         title: entry.title,
+        notes: entry.notes,
         timeLabel: formatPreviewTime(entry.startTime),
         tone: entry.calendarRole === 'events' ? 'events' as const : 'google' as const,
       })),
       ...dayTimedTasks.map((task) => ({
         id: task.id,
         title: task.title,
+        notes: task.notes,
         timeLabel: formatPreviewTime(task.startTime),
         tone: 'task' as const,
         done: task.status === 'done',
@@ -158,6 +163,7 @@ function HoverPreviewCard({ preview }: { preview: HoverPreview }) {
                   {item.title}
                 </div>
               </div>
+              <NotesIndicator notes={item.notes} size={10} className="text-[var(--color-text-muted)]" />
               <span className="flex-shrink-0 text-[11px] text-[var(--color-text-muted)]">{item.timeLabel}</span>
             </div>
           ))}

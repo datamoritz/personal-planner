@@ -1,5 +1,7 @@
 'use client';
 
+import { NotesIndicator } from './NotesIndicator';
+
 import { useCallback, useRef } from 'react';
 import { FolderClosed, RefreshCw } from 'lucide-react';
 import type { DraggableAttributes } from '@dnd-kit/core';
@@ -17,6 +19,7 @@ import { useSlotHeight } from '@/lib/slotHeightContext';
 interface TimedTaskLike {
   id: string;
   title: string;
+  notes?: string | null;
   status: string;
   location?: string;
   startTime?: string;
@@ -224,8 +227,9 @@ export function TimedTaskBlock({
         ].join(' ')}>
           {task.title}
         </span>
-        {(task.recurrentTaskId || (task.projectId && task.location !== 'project')) && (
-          <span className="flex flex-shrink-0 items-center gap-1">
+        {(task.notes?.trim() || task.recurrentTaskId || (task.projectId && task.location !== 'project')) && (
+          <span className={`flex flex-shrink-0 items-center gap-1 ${gripListeners ? 'mr-3' : ''}`}>
+            <NotesIndicator notes={task.notes} size={compact ? 9 : 11} className="text-[var(--color-text-muted)]" />
             {task.recurrentTaskId && (
               <RefreshCw size={9} className="text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />
             )}

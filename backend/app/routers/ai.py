@@ -11,6 +11,35 @@ from app import schemas
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+def _openai_http_error(exc: error.HTTPError) -> HTTPException:
+    detail = exc.read().decode("utf-8", errors="replace")
+    try:
+        payload = json.loads(detail)
+        upstream_error = payload.get("error", {}) if isinstance(payload, dict) else {}
+    except json.JSONDecodeError:
+        upstream_error = {}
+
+    if isinstance(upstream_error, dict):
+        code = upstream_error.get("code")
+        if code == "credit_balance_exhausted":
+            return HTTPException(
+                status_code=429,
+                detail="AI generation is unavailable because the OpenAI API account has no credits remaining. Add credits in OpenAI billing settings, then try again.",
+            )
+        if upstream_error.get("type") == "insufficient_quota":
+            return HTTPException(
+                status_code=429,
+                detail="AI generation is unavailable because the OpenAI API account has reached a billing or usage limit. Check OpenAI billing settings, then try again.",
+            )
+
+    if exc.code == 429:
+        return HTTPException(
+            status_code=429,
+            detail="AI generation is temporarily rate limited. Please try again shortly.",
+        )
+    return HTTPException(status_code=502, detail=f"OpenAI error: {detail}")
+
+
 def _extract_output_text(payload: dict) -> str:
     output_text = payload.get("output_text")
     if isinstance(output_text, str) and output_text.strip():
@@ -167,8 +196,7 @@ def suggest_emoji(payload: schemas.EmojiSuggestionRequest):
         with request.urlopen(req, timeout=20) as res:
             raw = json.loads(res.read().decode("utf-8"))
     except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise HTTPException(status_code=502, detail=f"OpenAI error: {detail}") from exc
+        raise _openai_http_error(exc) from exc
     except error.URLError as exc:
         raise HTTPException(status_code=502, detail=f"OpenAI request failed: {exc.reason}") from exc
 
@@ -236,8 +264,7 @@ def suggest_text_draft(payload: schemas.TextDraftRequest):
         with request.urlopen(req, timeout=30) as res:
             raw = json.loads(res.read().decode("utf-8"))
     except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise HTTPException(status_code=502, detail=f"OpenAI error: {detail}") from exc
+        raise _openai_http_error(exc) from exc
     except error.URLError as exc:
         raise HTTPException(status_code=502, detail=f"OpenAI request failed: {exc.reason}") from exc
 

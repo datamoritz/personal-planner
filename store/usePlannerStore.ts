@@ -347,6 +347,8 @@ interface PlannerStore extends PlannerState {
   monthTaskLayout: MonthTaskLayout;
   yearPreviewEnabled: boolean;
   uncertaintyNotes: string;
+  uncertaintyNotesBase: { text: string; revision: number } | null;
+  uncertaintySyncStatus: 'loading' | 'saving' | 'saved' | 'offline';
   expandedProjectIds: string[];
   mediaItems: MediaItem[];
   setUncertaintyNotes: (text: string) => void;
@@ -444,6 +446,8 @@ export const usePlannerStore = create<PlannerStore>()(
       monthTaskLayout:            'grid' as MonthTaskLayout,
       yearPreviewEnabled:         true,
       uncertaintyNotes:           '',
+      uncertaintyNotesBase:       null,
+      uncertaintySyncStatus:      'loading',
       expandedProjectIds:         [],
       mediaItems:                 [],
       selectedProjectIdForNotes:  null,
@@ -454,7 +458,7 @@ export const usePlannerStore = create<PlannerStore>()(
       projects:        [],
       tags:            [],
 
-      setUncertaintyNotes: (text) => set({ uncertaintyNotes: text }),
+      setUncertaintyNotes: (text) => set({ uncertaintyNotes: text, uncertaintySyncStatus: 'saving' }),
       toggleProjectExpanded: (projectId) =>
         set((s) => ({
           expandedProjectIds: s.expandedProjectIds.includes(projectId)
@@ -1564,6 +1568,7 @@ export const usePlannerStore = create<PlannerStore>()(
         monthTaskLayout:  s.monthTaskLayout,
         yearPreviewEnabled: s.yearPreviewEnabled,
         uncertaintyNotes: s.uncertaintyNotes,
+        uncertaintyNotesBase: s.uncertaintyNotesBase,
         expandedProjectIds: s.expandedProjectIds,
         mediaItems: s.mediaItems,
       }),

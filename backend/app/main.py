@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.db import check_db_connection
-from app.routers import ai, apple_calendar, email, email_automations, google, mandala, media, planner, projects, recurrent_tasks, tags, tasks, workload
+from app.routers import ai, apple_calendar, email, email_automations, google, mandala, media, notepad, planner, projects, recurrent_tasks, tags, tasks, workload
 
 app = FastAPI(title="Planner API")
 
@@ -29,6 +29,7 @@ app.include_router(ai.router)
 app.include_router(media.router)
 app.include_router(workload.router)
 app.include_router(mandala.router)
+app.include_router(notepad.router)
 
 
 @app.get("/")

@@ -17,6 +17,7 @@ import { usePlannerStore } from '@/store/usePlannerStore';
 import { usePlannerData } from '@/lib/usePlannerData';
 import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useNotepadSync } from '@/lib/useNotepadSync';
 import type { Task, RecurrentTask } from '@/types';
 import { PlannerAppView } from './PlannerAppView';
 import { MobileShell } from './mobile/MobileShell';
@@ -148,6 +149,7 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
   return closestCenter(args);
 }
 export function PlannerApp() {
+  useNotepadSync();
   const theme = usePlannerStore((s) => s.theme);
   const toggleTheme = usePlannerStore((s) => s.toggleTheme);
   const viewMode = usePlannerStore((s) => s.viewMode);

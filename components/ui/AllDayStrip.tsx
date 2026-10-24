@@ -1,6 +1,7 @@
 'use client';
 
 import type { AllDayEvent } from '@/types';
+import { NotesIndicator } from './NotesIndicator';
 
 interface AllDayStripProps {
   events: AllDayEvent[];
@@ -51,6 +52,7 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick, on
             ].join(' ')}
           />
           <span className="truncate flex-1 min-w-0">{ev.title}</span>
+          <NotesIndicator notes={ev.notes} size={10} />
           {ev.source === 'apple_birthdays' && ev.hasMessage && (
             <span className="flex-shrink-0 text-[10px] leading-none opacity-80">✓</span>
           )}

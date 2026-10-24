@@ -13,6 +13,8 @@ import {
 } from '@/store/usePlannerStore';
 import * as api from '@/lib/api';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
+import { NotesIndicator } from '@/components/ui/NotesIndicator';
+import { AboutPrivacyLinks } from '@/components/ui/AboutPrivacyLinks';
 import { RecurrentTaskDetailPopover } from '@/components/ui/RecurrentTaskDetailPopover';
 import type { Project, Task } from '@/types';
 
@@ -85,6 +87,7 @@ function TaskRow({
           {task.title}
         </span>
       </div>
+      <NotesIndicator notes={task.notes} className="text-[var(--color-text-muted)]" />
       <button
         type="button"
         onClick={(e) => onDetail(e.currentTarget)}
@@ -413,6 +416,7 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
                     ].join(' ')}>
                       {rt.title}
                     </span>
+                    <NotesIndicator notes={rt.notes} className="text-[var(--color-text-muted)]" />
                     <button
                       type="button"
                       onClick={(e) => setPopover({ type: 'recurrent', id: rt.id, anchor: e.currentTarget })}
@@ -441,6 +445,9 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
             </>
           )}
         </div>
+        <footer className="flex-shrink-0 border-t border-[var(--color-border)] px-4 pt-1" style={{ paddingBottom: 'max(4px, env(safe-area-inset-bottom))' }}>
+          <AboutPrivacyLinks touchFriendly />
+        </footer>
       </div>
 
       {actionMenu && (

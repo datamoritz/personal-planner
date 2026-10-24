@@ -12,6 +12,10 @@
   --color-text-primary:    #f2f2f6;
   --color-text-secondary:  #a0a5bc;
   --color-text-muted:      #676d86;
+  --color-notepad:         #29291f;
+  --color-notepad-header:  #333025;
+  --color-notepad-text:    #f2ecd8;
+  --color-notepad-muted:   #b7ae95;
   --color-accent:          #6f7dff;
   --color-accent-hover:    #8793ff;
   --color-accent-subtle:   rgba(111, 125, 255, 0.14);
@@ -51,6 +55,10 @@
   --color-text-primary:    #0c0c14;
   --color-text-secondary:  #55607a;
   --color-text-muted:      #8e96ab;
+  --color-notepad:         #fffbe0;
+  --color-notepad-header:  #fff7c7;
+  --color-notepad-text:    #302c20;
+  --color-notepad-muted:   #786d4b;
   --color-accent:          #5d6df4;
   --color-accent-hover:    #7280ff;
   --color-accent-subtle:   rgba(93, 109, 244, 0.09);
