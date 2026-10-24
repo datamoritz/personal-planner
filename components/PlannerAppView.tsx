@@ -159,7 +159,7 @@ export function PlannerAppView({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex flex-col flex-1 max-w-[1920px] mx-auto min-w-0">
+        <div className="relative flex flex-col flex-1 max-w-[1920px] mx-auto min-w-0">
           <div className="relative flex items-center justify-between px-3 pb-2">
             <div className="flex items-center gap-3.5">
               <span className="text-sm font-semibold tracking-tight text-[var(--color-text-primary)] flex-shrink-0">
@@ -389,7 +389,7 @@ export function PlannerAppView({
               </>
             )}
           </div>
-          <footer className="flex-shrink-0 self-end pr-3 pt-1">
+          <footer className="absolute right-3 -bottom-7 xl:-bottom-8">
             <AboutPrivacyLinks />
           </footer>
         </div>
