@@ -1,12 +1,12 @@
-const assert = require('node:assert/strict');
-const { test } = require('node:test');
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
 
 // Run against a configured preview or production origin. No Google consent is
 // submitted: the external page is intercepted after the real form redirect.
 const origin = process.env.PLANNER_TEST_ORIGIN;
 for (const engine of ['chromium', 'webkit']) {
   test(`${engine}: the real Google sign-in button navigates instead of downloading`, { skip: !origin }, async () => {
-    const playwright = require(process.env.PLANNER_PLAYWRIGHT_MODULE || 'playwright');
+    const { default: playwright } = await import(process.env.PLANNER_PLAYWRIGHT_MODULE || 'playwright');
     const browser = await playwright[engine].launch({ headless: true });
     try {
       const context = await browser.newContext();
