@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { allowedRequest, appOrigin, backendRequest, cookieOptions, LOGIN_COOKIE, privateHeaders } from '@/lib/server/auth';
 
 export async function POST(request: NextRequest) {
-  if (!allowedRequest(request)) return new NextResponse(null, { status: 403, headers: privateHeaders });
+  if (!allowedRequest(request)) return NextResponse.json({ detail: 'Sign-in must start from Planner. Reload the sign-in page and try again.' }, { status: 403, headers: privateHeaders });
   const verifier = randomBytes(48).toString('base64url');
   try {
     const response = await backendRequest('/auth/session/start', { method: 'POST', body: JSON.stringify({
