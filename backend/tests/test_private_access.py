@@ -117,6 +117,7 @@ class PrivateAccessTests(unittest.TestCase):
         query = parse_qs(urlparse(response.json()['url']).query)
         self.assertEqual(set(query['scope'][0].split()), {'openid', 'https://www.googleapis.com/auth/userinfo.email'})
         self.assertEqual(query['code_challenge_method'], ['S256']); self.assertNotIn('prompt', query)
+        self.assertNotIn('login_hint', query)
         with self.factory() as db: self.assertEqual(db.get(models.PlannerLoginAttempt, digest(query['state'][0])).nonce, query['nonce'][0])
         response = self.client.post('/auth/session/start', headers=self.gateway, json=dict(browser_challenge=digest('b'*64), frontend_origin='https://attacker.test'))
         self.assertEqual(response.status_code, 400)

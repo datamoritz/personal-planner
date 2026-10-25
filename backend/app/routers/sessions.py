@@ -68,7 +68,7 @@ def start_login(payload: LoginStart, db: Session = Depends(get_db)):
         db.execute(delete(model).where(model.expires_at <= now))
     state, nonce, verifier = (secrets.token_urlsafe(48) for _ in range(3))
     flow = login_flow(verifier=verifier)
-    url, _ = flow.authorization_url(state=state, nonce=nonce, login_hint=settings.AUTH_OWNER_EMAIL)
+    url, _ = flow.authorization_url(state=state, nonce=nonce)
     db.add(models.PlannerLoginAttempt(
         state_hash=digest(state), nonce=nonce, pkce_verifier=verifier,
         browser_challenge=payload.browser_challenge, frontend_origin=payload.frontend_origin,
