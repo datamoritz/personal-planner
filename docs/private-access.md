@@ -1,5 +1,7 @@
 # Private Planner access
 
+Canonical app address: `https://planner.moritzknodler.com`. See `docs/custom-domain.md` for DNS, login-origin configuration and recovery.
+
 Only the verified Google identity for `moritz.knoedler@gmail.com` can initialize access. Its permanent Google subject is then pinned in `planner_owner`; matching an email alone cannot replace an existing subject.
 
 ## Architecture
