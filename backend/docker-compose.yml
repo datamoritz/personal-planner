@@ -2,10 +2,12 @@ services:
   planner-backend:
     build: .
     container_name: planner-backend
-    command: /bin/sh -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: /bin/sh -lc "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
     environment:
       ENV: production
       API_SECRET: ${API_SECRET}
+      AUTH_GATEWAY_SECRET: ${AUTH_GATEWAY_SECRET}
+      AUTH_OWNER_EMAIL: ${AUTH_OWNER_EMAIL:-moritz.knoedler@gmail.com}
       DATABASE_URL: ${DATABASE_URL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_EMOJI_MODEL: ${OPENAI_EMOJI_MODEL:-gpt-4.1-mini}

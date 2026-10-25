@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { addDays, addYears, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
 import { usePlannerStore } from '@/store/usePlannerStore';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, checkPrivateAccess } from '@/lib/api';
 import type { AllDayEvent, CalendarEntry } from '@/types';
 
 export function useGoogleCalendar(): { refresh: () => void } {
@@ -45,6 +45,7 @@ export function useGoogleCalendar(): { refresh: () => void } {
     try {
       const url = `${API_BASE}/google/calendar-entries?start=${start}&end=${end}&tz=${encodeURIComponent(tz)}`;
       const res = await fetch(url, { signal: controller.signal });
+      checkPrivateAccess(res);
       if (!res.ok) {
         setGoogleNeedsReconnect(true);
         return;

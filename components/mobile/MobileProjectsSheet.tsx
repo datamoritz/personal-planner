@@ -15,6 +15,7 @@ import * as api from '@/lib/api';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
 import { NotesIndicator } from '@/components/ui/NotesIndicator';
 import { AboutPrivacyLinks } from '@/components/ui/AboutPrivacyLinks';
+import { AccountMenu } from '@/components/ui/AccountMenu';
 import { RecurrentTaskDetailPopover } from '@/components/ui/RecurrentTaskDetailPopover';
 import type { Project, Task } from '@/types';
 
@@ -445,7 +446,8 @@ export function MobileProjectsSheet({ onClose }: MobileProjectsSheetProps) {
             </>
           )}
         </div>
-        <footer className="flex-shrink-0 border-t border-[var(--color-border)] px-4 pt-1" style={{ paddingBottom: 'max(4px, env(safe-area-inset-bottom))' }}>
+        <footer className="flex flex-shrink-0 items-center justify-between border-t border-[var(--color-border)] px-4 pt-1" style={{ paddingBottom: 'max(4px, env(safe-area-inset-bottom))' }}>
+          <AccountMenu />
           <AboutPrivacyLinks touchFriendly />
         </footer>
       </div>

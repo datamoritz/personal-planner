@@ -29,6 +29,7 @@ import { EmailToTaskPanelV2 } from './ui/EmailToTaskPanelV2';
 import { ReadWatchPopover } from './ui/ReadWatchPopover';
 import { SmartCaptureBar } from './ui/SmartCaptureBar';
 import { AboutPrivacyLinks } from './ui/AboutPrivacyLinks';
+import { AccountMenu } from './ui/AccountMenu';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import { startGoogleReconnect } from '@/lib/api';
 import type { MonthViewMode, PlannerViewMode, RecurrentTask, Task } from '@/types';
@@ -177,6 +178,7 @@ export function PlannerAppView({
             )}
 
             <div className="flex items-center gap-1.5">
+              <AccountMenu />
               <div className="relative inline-flex">
                 <button
                   type="button"

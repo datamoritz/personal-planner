@@ -109,6 +109,12 @@ export default function PrivacyPage() {
 
         <PolicySection id="storage" title="4. Storage and security">
           <p>
+            Planner uses Google sign-in restricted to its owner. A persistent, secure, HTTP-only session cookie
+            remembers each signed-in device. The backend stores the owner’s Google account identifier and hashed
+            session credentials. Sessions expire after 30 days of inactivity or 90 days from sign-in and can be revoked
+            through the app. About and Privacy pages remain public; private planning data requires authenticated access.
+          </p>
+          <p>
             Planner stores planning records, shared notes, Google authorization tokens, and email automation history on
             its backend. Some preferences and lists are stored in the browser. Google tokens enable ongoing access and
             automatic refresh while the authorization remains valid.

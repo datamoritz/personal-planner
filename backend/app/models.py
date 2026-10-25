@@ -258,3 +258,38 @@ class AppleBirthdayContactCache(Base):
     last_synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class PlannerOwner(Base):
+    __tablename__ = "planner_owner"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    google_sub: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+
+
+class PlannerSession(Base):
+    __tablename__ = "planner_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    google_sub: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PlannerLoginAttempt(Base):
+    __tablename__ = "planner_login_attempts"
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    nonce: Mapped[str] = mapped_column(String(128), nullable=False)
+    pkce_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
+    browser_challenge: Mapped[str] = mapped_column(String(64), nullable=False)
+    frontend_origin: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PlannerLoginGrant(Base):
+    __tablename__ = "planner_login_grants"
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    browser_challenge: Mapped[str] = mapped_column(String(64), nullable=False)
+    google_sub: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

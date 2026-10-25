@@ -3,7 +3,7 @@ from datetime import datetime, time, timedelta
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request as WebRequest
 from fastapi.responses import RedirectResponse
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
@@ -27,7 +27,7 @@ GOOGLE_SCOPES = [
 ]
 
 # In-memory OAuth state — intentionally not persisted (Phase 1 scope)
-_OAUTH_STATE_STORE: dict[str, str] = {}
+_OAUTH_STATE_STORE: dict[str, tuple[str, str, datetime]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +351,7 @@ def _update_event_resource(service, event_id: str, calendar_id: str, existing: d
 # ---------------------------------------------------------------------------
 
 @router.get("/auth/google/login")
-def auth_google_login(return_to: str | None = None):
+def auth_google_login(request: WebRequest, return_to: str | None = None):
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET or not settings.GOOGLE_REDIRECT_URI:
         raise HTTPException(status_code=500, detail="Google OAuth env vars missing")
 
@@ -361,15 +361,33 @@ def auth_google_login(return_to: str | None = None):
         include_granted_scopes="true",
         prompt="consent",
     )
-    _OAUTH_STATE_STORE[state] = _validated_google_return_to(return_to)
+    now = datetime.utcnow()
+    for key, (_, _, expiry) in list(_OAUTH_STATE_STORE.items()):
+        if expiry <= now:
+            _OAUTH_STATE_STORE.pop(key, None)
+    _OAUTH_STATE_STORE[state] = (_validated_google_return_to(return_to), request.state.planner_session_hash, now + timedelta(minutes=10))
     return RedirectResponse(auth_url)
 
 
 @router.get("/auth/google/callback")
-def auth_google_callback(code: str, state: str, db: Session = Depends(get_db)):
-    return_to = _OAUTH_STATE_STORE.pop(state, None)
-    if return_to is None:
+def auth_google_callback(state: str, code: str | None = None, error: str | None = None, db: Session = Depends(get_db)):
+    from app.routers.sessions import complete_google_login
+    login_response = complete_google_login(state, code, error, db)
+    if login_response is not None:
+        return login_response
+    pending = _OAUTH_STATE_STORE.pop(state, None)
+    if pending is None:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    return_to, session_hash, expiry = pending
+    from app.auth import IDLE_LIFETIME
+    session = db.get(models.PlannerSession, session_hash)
+    now = datetime.utcnow()
+    if (expiry <= now or not session or session.revoked_at is not None
+            or session.expires_at <= now or session.last_seen_at <= now - IDLE_LIFETIME):
+        raise HTTPException(status_code=401, detail="Sign in to reconnect Google")
+
+    if error or not code:
+        return RedirectResponse(return_to)
 
     flow = _build_google_flow()
     flow.fetch_token(code=code)

@@ -41,7 +41,14 @@ import type {
   MandalaDocument,
 } from '@/types';
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'https://planner-api.moritzknodler.com';
+export const API_BASE = '/api/backend';
+
+export function checkPrivateAccess(response: Response): void {
+  if (response.status === 401 && response.headers.get('x-planner-auth') === 'required' && typeof window !== 'undefined') {
+    window.location.replace('/login');
+    throw new Error('Sign in to Planner');
+  }
+}
 
 export function startGoogleReconnect(): void {
   if (typeof window === 'undefined') return;
@@ -66,6 +73,7 @@ async function request<T>(
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
+  checkPrivateAccess(res);
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     let message: string | undefined;
@@ -103,6 +111,7 @@ export async function saveNotepad(document: NotepadDocument, signal?: AbortSigna
     body: JSON.stringify(document),
     signal,
   });
+  checkPrivateAccess(res);
   if (res.status === 409) {
     const conflict = await res.json() as { current: NotepadDocument };
     throw new NotepadConflictError(conflict.current);
