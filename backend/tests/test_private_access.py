@@ -1,5 +1,6 @@
 import os
 os.environ.setdefault('DATABASE_URL', 'sqlite://')
+import json
 import secrets
 import unittest
 from datetime import datetime, timedelta
@@ -8,6 +9,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from requests import Request as HTTPRequest, Response
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -16,7 +18,7 @@ from app.auth import digest
 from app.config import settings
 from app.db import get_db
 from app.main import app
-from app.routers import sessions
+from app.routers import google, sessions
 
 class PrivateAccessTests(unittest.TestCase):
     def setUp(self):
@@ -81,6 +83,45 @@ class PrivateAccessTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertIsNone(response.headers.get('x-planner-auth'))
         self.assertEqual(self.client.get('/tasks').headers.get('x-planner-auth'), 'required')
+
+    def calendar_callback(self, token):
+        start = self.client.get('/auth/google/login', headers=self.session(), follow_redirects=False)
+        self.assertEqual(start.status_code, 307)
+        state = parse_qs(urlparse(start.headers['location']).query)['state'][0]
+        upstream = Response()
+        upstream.status_code = 200
+        upstream._content = json.dumps(token).encode()
+        upstream.request = HTTPRequest('POST', 'https://oauth2.googleapis.com/token', data={'code': 'google-code'}).prepare()
+        with patch('requests_oauthlib.OAuth2Session.request', return_value=upstream), patch.object(google, '_save_google_token') as save:
+            response = self.client.get('/auth/google/callback', params=dict(state=state, code='google-code'), follow_redirects=False)
+        # The pending reconnect remains one-use even when token exchange fails.
+        replay = self.client.get('/auth/google/callback', params=dict(state=state, code='google-code'), follow_redirects=False)
+        self.assertEqual(replay.status_code, 400)
+        return response, save
+
+    def test_calendar_callback_accepts_existing_signin_scopes(self):
+        for extra in [[], ['openid', 'https://www.googleapis.com/auth/userinfo.email']]:
+            response, save = self.calendar_callback(dict(access_token='access', refresh_token='refresh', token_type='Bearer', expires_in=3600,
+                scope=' '.join(google.GOOGLE_SCOPES + extra)))
+            self.assertEqual(response.status_code, 307)
+            self.assertEqual(parse_qs(urlparse(response.headers['location']).query)['google'], ['connected'])
+            credentials = save.call_args.args[1]
+            self.assertEqual(credentials.token, 'access')
+            self.assertEqual(credentials.refresh_token, 'refresh')
+            self.assertTrue(credentials.has_scopes(google.GOOGLE_SCOPES))
+
+    def test_calendar_callback_rejects_missing_or_unexpected_permissions(self):
+        for scopes in [google.GOOGLE_SCOPES[:-1], google.GOOGLE_SCOPES + ['https://www.googleapis.com/auth/drive']]:
+            response, save = self.calendar_callback(dict(access_token='access', token_type='Bearer', scope=' '.join(scopes)))
+            self.assertEqual(response.status_code, 400)
+            save.assert_not_called()
+
+    def test_calendar_callback_handles_token_errors_without_a_server_crash(self):
+        for token in [dict(error='invalid_grant', error_description='sensitive-upstream-detail'), dict(token_type='Bearer')]:
+            response, save = self.calendar_callback(token)
+            self.assertEqual(response.status_code, 502)
+            self.assertNotIn('sensitive-upstream-detail', response.text)
+            save.assert_not_called()
 
     def test_cron_authorization_accepts_only_existing_secret_on_exact_post_paths(self):
         from fastapi import Request

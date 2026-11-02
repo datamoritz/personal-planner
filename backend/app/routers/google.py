@@ -11,6 +11,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from oauthlib.oauth2 import OAuth2Error
+from requests.exceptions import RequestException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -48,6 +50,24 @@ def _build_google_flow() -> Flow:
         scopes=GOOGLE_SCOPES,
         redirect_uri=settings.GOOGLE_REDIRECT_URI,
     )
+
+
+def _fetch_google_token(flow: Flow, code: str) -> None:
+    try:
+        token = flow.fetch_token(code=code, timeout=15)
+    except Warning as exc:
+        # Incremental consent can include identity scopes granted by Planner sign-in.
+        # OAuthlib exposes the validated token on its scope-change exception.
+        token = getattr(exc, "token", None)
+        if not isinstance(token, dict) or not token.get("access_token"):
+            raise
+    scopes = token.get("scope", [])
+    granted = set(scopes.split() if isinstance(scopes, str) else scopes)
+    required = set(GOOGLE_SCOPES)
+    allowed = required | {"openid", "https://www.googleapis.com/auth/userinfo.email"}
+    if not required <= granted <= allowed:
+        raise HTTPException(status_code=400, detail="Google did not grant the expected Planner permissions")
+    flow.oauth2session.token = token
 
 
 def _validated_google_return_to(return_to: str | None) -> str:
@@ -390,7 +410,10 @@ def auth_google_callback(state: str, code: str | None = None, error: str | None 
         return RedirectResponse(return_to)
 
     flow = _build_google_flow()
-    flow.fetch_token(code=code)
+    try:
+        _fetch_google_token(flow, code)
+    except (OAuth2Error, RequestException):
+        raise HTTPException(status_code=502, detail="Google authorization could not be completed; please reconnect again") from None
     _save_google_token(db, flow.credentials)
     return RedirectResponse(_google_connected_return_url(return_to))
 
