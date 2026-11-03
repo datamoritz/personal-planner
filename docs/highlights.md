@@ -20,7 +20,7 @@ Tasks have one scheduled date. A section spanning days becomes one task on its s
 
 ## Validation and local preview
 
-Apply migration `0018_highlights` before enabling the new frontend in a deployment. This change has not been deployed automatically.
+Production release: November 2, 2026. Migration `0018_highlights` was applied before promoting the frontend. See [the release and rollback record](releases/2026-11-02-highlights.md).
 
 Run:
 
