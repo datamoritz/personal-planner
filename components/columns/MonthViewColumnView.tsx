@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { MonthViewMode, MonthTaskLayout, Task, CalendarEntry, AllDayEvent } from '@/types';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
+import { DailyHighlightBackground, useHighlightSurface } from '@/components/highlights/HighlightSurface';
 import { NotesIndicator } from '@/components/ui/NotesIndicator';
 
 interface MonthDayData {
@@ -82,7 +83,7 @@ function MonthEventRow({
       : 'bg-[color-mix(in_srgb,var(--color-google-event-text)_68%,var(--color-google-event)_32%)] text-[color-mix(in_srgb,white_86%,var(--color-google-event-text)_14%)]';
 
   return (
-    <div
+    <div data-highlight-obstacle
       className={[
         `flex items-center gap-1.5 px-2 py-1 text-[11px] leading-tight ${toneClass}`,
         isStart ? 'rounded-l-[0.7rem]' : '-ml-1 rounded-l-none pl-2.5',
@@ -312,6 +313,7 @@ function MonthReadOnlyEventRow({
 }
 
 function MonthDayCell({
+  firstVisibleDate,
   day,
   todayString,
   monthViewMode,
@@ -327,6 +329,7 @@ function MonthDayCell({
   onEventCellDoubleClick,
   onBirthdayClick,
 }: {
+  firstVisibleDate: string;
   day: MonthDayData;
   todayString: string;
   monthViewMode: MonthViewMode;
@@ -342,6 +345,7 @@ function MonthDayCell({
   onEventCellDoubleClick: (date: string, anchor: HTMLElement) => void;
   onBirthdayClick: (event: AllDayEvent, anchor: HTMLElement) => void;
 }) {
+  const highlightSurface = useHighlightSurface('daily', day.dateString);
   const eventContainerId = `month-events-${day.dateString}`;
   const taskContainerId = `month-day-${day.dateString}`;
   const { setNodeRef: setEventDropRef, isOver: isEventOver } = useDroppable({
@@ -365,7 +369,7 @@ function MonthDayCell({
   const isPastDay = day.dateString < todayString;
 
   return (
-    <div
+    <div {...highlightSurface}
       className={[
         'relative min-h-0 border-l first:border-l-0 border-[var(--color-border-grid)] transition-colors',
         monthTaskLayout === 'grid' ? 'overflow-hidden' : '',
@@ -377,6 +381,7 @@ function MonthDayCell({
           : 'hover:bg-[color-mix(in_srgb,var(--color-center-col)_92%,var(--color-surface-raised)_8%)]',
       ].join(' ')}
     >
+      <DailyHighlightBackground date={day.dateString} firstVisibleDate={firstVisibleDate} />
       {isPastDay && (
         <div className="absolute inset-0 pointer-events-none z-[1]" style={{ background: 'var(--color-past-overlay)' }} />
       )}
@@ -565,6 +570,7 @@ export function MonthViewColumnView({
                 <MonthDayCell
                   key={day.dateString}
                   day={day}
+                  firstVisibleDate={weeks[0][0].dateString}
                   todayString={todayString}
                   monthViewMode={monthViewMode}
                   monthTaskLayout={monthTaskLayout}

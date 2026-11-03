@@ -222,6 +222,7 @@ export function CalendarEntryBlock({
 
   return (
     <div
+      data-highlight-obstacle
       ref={blockRef}
       onPointerDown={handleDragPointerDown}
       onClick={(e) => {

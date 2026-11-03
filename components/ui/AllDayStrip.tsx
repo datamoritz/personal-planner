@@ -5,12 +5,13 @@ import { NotesIndicator } from './NotesIndicator';
 
 interface AllDayStripProps {
   events: AllDayEvent[];
+  highlightSummary?: React.ReactNode;
   onEventDoubleClick?: (id: string, anchor: HTMLElement) => void;
   onEmptyDoubleClick?: (anchor: HTMLElement) => void;
   onReadOnlyEventClick?: (event: AllDayEvent, anchor: HTMLElement) => void;
 }
 
-export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick, onReadOnlyEventClick }: AllDayStripProps) {
+export function AllDayStrip({ events, highlightSummary, onEventDoubleClick, onEmptyDoubleClick, onReadOnlyEventClick }: AllDayStripProps) {
   return (
     <div
       className="flex flex-col gap-0.5 px-2 py-1 border-b border-[var(--color-border)] flex-shrink-0 min-h-[28px]"
@@ -20,6 +21,7 @@ export function AllDayStrip({ events, onEventDoubleClick, onEmptyDoubleClick, on
         onEmptyDoubleClick(e.currentTarget);
       }}
     >
+      {highlightSummary}
       {events.map((ev) => (
         <div
           key={ev.id}

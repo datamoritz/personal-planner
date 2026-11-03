@@ -29,6 +29,8 @@ import { EmailToTaskPanelV2 } from './ui/EmailToTaskPanelV2';
 import { ReadWatchPopover } from './ui/ReadWatchPopover';
 import { SmartCaptureBar } from './ui/SmartCaptureBar';
 import { AboutPrivacyLinks } from './ui/AboutPrivacyLinks';
+import { HighlightToggle } from './highlights/HighlightControls';
+import { HighlightDetails } from './highlights/HighlightDetails';
 import { AccountMenu } from './ui/AccountMenu';
 import { TaskGhost, RecurrentGhost } from './dnd/DragGhost';
 import { startGoogleReconnect } from '@/lib/api';
@@ -160,6 +162,7 @@ export function PlannerAppView({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
+        <HighlightDetails />
         <div className="relative flex flex-col flex-1 max-w-[1920px] mx-auto min-w-0">
           <div className="relative flex items-center justify-between px-3 pb-2">
             <div className="flex items-center gap-3.5">
@@ -179,6 +182,7 @@ export function PlannerAppView({
 
             <div className="flex items-center gap-1.5">
               <AccountMenu />
+              {!isPlannerView && <HighlightToggle />}
               <div className="relative inline-flex">
                 <button
                   type="button"

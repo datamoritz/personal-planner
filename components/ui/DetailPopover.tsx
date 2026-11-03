@@ -25,6 +25,7 @@ interface DetailPopoverProps {
   noPadding?: boolean;
   headerActions?: React.ReactNode;
   hideCloseButton?: boolean;
+  compact?: boolean;
 }
 
 export function DetailPopover({
@@ -36,6 +37,7 @@ export function DetailPopover({
   noPadding,
   headerActions,
   hideCloseButton = false,
+  compact = false,
 }: DetailPopoverProps) {
   // All hooks unconditional — required by React rules
   const { refs, floatingStyles, context } = useFloating({
@@ -109,12 +111,12 @@ export function DetailPopover({
           className={`${className ?? 'w-72'} ui-floating-surface bg-[var(--color-popover)]`}
         >
           {title && (
-            <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--color-popover-border)]">
-              <span className="ui-section-label">{title}</span>
+            <div className={`flex items-center justify-between border-b border-[var(--color-popover-border)] ${compact ? 'px-3 py-1.5' : 'px-4 py-3.5'}`}>
+              <span className={compact ? 'text-[11px] font-medium text-[var(--color-text-secondary)]' : 'ui-section-label'}>{title}</span>
               <div className="flex items-center gap-1.5">
                 {headerActions}
                 {!hideCloseButton && (
-                  <button onClick={onClose} className="ui-icon-button">
+                  <button onClick={onClose} aria-label="Close details" title="Close" className="ui-icon-button">
                     <X size={12} strokeWidth={2.5} />
                   </button>
                 )}
@@ -131,7 +133,7 @@ export function DetailPopover({
               )}
             </div>
           )}
-          <div className={noPadding ? '' : 'p-4 md:p-[1.125rem]'}>{children}</div>
+          <div className={noPadding ? '' : compact ? 'p-3' : 'p-4 md:p-[1.125rem]'}>{children}</div>
         </div>
       </FloatingFocusManager>
     </FloatingPortal>

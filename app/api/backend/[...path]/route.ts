@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { allowedRequest, appOrigin, backendRequest, privateHeaders, sessionToken } from '@/lib/server/auth';
 
-const resources = new Set(['tasks', 'projects', 'planner', 'goals', 'milestones', 'tags', 'recurrent-tasks', 'generate-recurring-tasks', 'google', 'apple-birthdays', 'email', 'ai', 'media', 'workload', 'mandala', 'notepad']);
+const resources = new Set(['tasks', 'projects', 'planner', 'goals', 'milestones', 'tags', 'recurrent-tasks', 'generate-recurring-tasks', 'google', 'apple-birthdays', 'email', 'ai', 'media', 'workload', 'mandala', 'notepad', 'highlights']);
 type Context = { params: Promise<{ path: string[] }> };
 
 async function handle(request: NextRequest, context: Context) {

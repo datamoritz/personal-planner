@@ -1,6 +1,8 @@
 'use client';
 
 import { CalendarDays, Maximize2, Minimize2, Sparkles, StickyNote } from 'lucide-react';
+import { HourlyHighlightBackground, DailyHighlightSummary, useHighlightSurface } from '@/components/highlights/HighlightSurface';
+import { usePlannerStore } from '@/store/usePlannerStore';
 import { AllDayStrip } from '@/components/ui/AllDayStrip';
 import { CalendarEntryBlock } from '@/components/ui/CalendarEntryBlock';
 import { DraggableTimedTaskBlock } from '@/components/dnd/DraggableTimedTaskBlock';
@@ -136,6 +138,8 @@ export function MyDayColumnView({
 }: MyDayColumnViewProps) {
   const slotHeight = useSlotHeight();
   const gridHeight = TOTAL_HOURS * slotHeight;
+  const highlightDate = usePlannerStore(s => s.currentDate);
+  const highlightSurface = useHighlightSurface('hourly', highlightDate, slotHeight, 48);
 
   const toOffset = (mins: number) => (mins / 60) * slotHeight;
   const toDuration = (s: string, e: string) => ((timeToMinutes(e) - timeToMinutes(s)) / 60) * slotHeight;
@@ -208,6 +212,7 @@ export function MyDayColumnView({
 
       {!notepadOpen && (
         <AllDayStrip
+          highlightSummary={<DailyHighlightSummary date={highlightDate} />}
           events={allDayEvents}
           onEventDoubleClick={onGoogleEntryDoubleClick}
           onEmptyDoubleClick={onAllDayEmptyDoubleClick}
@@ -223,7 +228,8 @@ export function MyDayColumnView({
 
       {!notepadOpen && (
         <div ref={setRef} className="flex-1 overflow-y-auto min-h-0">
-          <div className="relative" style={{ height: gridHeight }} onDoubleClick={handleGridDoubleClick}>
+          <div {...highlightSurface} className="relative" style={{ ...highlightSurface.style, height: gridHeight }} onDoubleClick={handleGridDoubleClick}>
+            <HourlyHighlightBackground date={highlightDate} hourHeight={slotHeight} gutter={48} />
             {hours.map((hour) => (
               <div
                 key={hour}

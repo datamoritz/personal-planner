@@ -40,7 +40,7 @@ export function TaskPill({
   // Use colorDark at low opacity so the tint works on both dark and light backgrounds
   const tagBg = (!isDone && !isOverdue && tag) ? tag.colorDark + '24' : undefined;
   return (
-    <div
+    <div data-highlight-obstacle
       onDoubleClick={(e) => {
         e.stopPropagation();
         onDoubleClick?.(task.id, e.currentTarget);

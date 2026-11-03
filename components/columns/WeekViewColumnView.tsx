@@ -1,6 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
+import { HourlyHighlightBackground, DailyHighlightSummary, useHighlightSurface } from '@/components/highlights/HighlightSurface';
 import { Plus } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
@@ -60,6 +61,7 @@ function CalendarDayDropZone({
   onDoubleClick: (e: React.MouseEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
 }) {
+  const highlightSurface = useHighlightSurface('hourly', dateStr, SLOT_HEIGHT);
   const { setNodeRef } = useDroppable({
     id: `week-cal-${dateStr}`,
     data: { containerId: 'week-cal' },
@@ -69,7 +71,8 @@ function CalendarDayDropZone({
     dayColRef(el);
   }, [setNodeRef, dayColRef]);
   return (
-    <div ref={combined} className={className} onDoubleClick={onDoubleClick}>
+    <div {...highlightSurface} ref={combined} className={className} onDoubleClick={onDoubleClick}>
+      <HourlyHighlightBackground date={dateStr} hourHeight={SLOT_HEIGHT} />
       {children}
     </div>
   );
@@ -112,6 +115,7 @@ function WeekAllDayDropZone({
         isOver ? 'bg-[color-mix(in_srgb,var(--color-google-event)_18%,var(--color-center-col)_82%)]' : '',
       ].join(' ')}
     >
+      <DailyHighlightSummary date={dateStr} />
       {children}
     </div>
   );

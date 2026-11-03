@@ -19,6 +19,7 @@ import { MobileWeekView } from './MobileWeekView';
 import { MobileMonthView } from './MobileMonthView';
 import { MobileProjectsSheet } from './MobileProjectsSheet';
 import { MobileCaptureBar } from './MobileCaptureBar';
+import { HighlightToggle } from '@/components/highlights/HighlightControls';
 import { startGoogleReconnect } from '@/lib/api';
 import type { Task, RecurrentTask } from '@/types';
 
@@ -189,6 +190,7 @@ export function MobileShell({
           </div>
 
           <div className="flex flex-shrink-0 items-center gap-0.5">
+            <HighlightToggle />
             <button
               type="button"
               onClick={() => captureOpen ? setCaptureOpen(false) : openCapture()}

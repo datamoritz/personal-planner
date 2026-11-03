@@ -293,3 +293,16 @@ class PlannerLoginGrant(Base):
     browser_challenge: Mapped[str] = mapped_column(String(64), nullable=False)
     google_sub: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PlannerHighlights(Base):
+    __tablename__ = 'planner_highlights'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class HighlightConversion(Base):
+    __tablename__ = 'highlight_conversions'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    result: Mapped[str] = mapped_column(Text, nullable=False)

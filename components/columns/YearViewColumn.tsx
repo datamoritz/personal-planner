@@ -1,5 +1,6 @@
 'use client';
 
+import { HighlightYearCell } from '@/components/highlights/HighlightSurface';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NotesIndicator } from '@/components/ui/NotesIndicator';
@@ -264,7 +265,8 @@ export function YearViewColumn() {
                 const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
                 const previewLabel = format(day.date, 'EEEE, MMM d');
                 return (
-                  <button
+                  <HighlightYearCell
+                    date={day.dateString}
                     key={day.dateString}
                     type="button"
                     onClick={() => {
@@ -315,7 +317,7 @@ export function YearViewColumn() {
                         : '',
                     ].join(' ')}
                   >
-                    <span>{format(day.date, 'd')}</span>
+                    <span className="pointer-events-none relative z-[1]">{format(day.date, 'd')}</span>
                     {yearPreviewEnabled && hasActivity && !isTodayCell && (
                       <div className="pointer-events-none absolute inset-x-1.5 bottom-1 flex items-center justify-center gap-1">
                         {day.allDayCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />}
@@ -323,7 +325,7 @@ export function YearViewColumn() {
                         {day.timedTaskCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]" />}
                       </div>
                     )}
-                  </button>
+                  </HighlightYearCell>
                 );
               })}
             </div>

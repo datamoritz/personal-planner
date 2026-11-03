@@ -2,6 +2,7 @@
 
 import { addDays, format, isToday, startOfWeek } from 'date-fns';
 import { ChevronRight } from 'lucide-react';
+import { DailyHighlightSummary } from '@/components/highlights/HighlightSurface';
 import { NotesIndicator } from '@/components/ui/NotesIndicator';
 import {
   usePlannerStore,
@@ -77,6 +78,7 @@ export function MobileWeekView() {
 
           {/* Summary column */}
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+            <DailyHighlightSummary date={day.dateString} />
             {day.allDay.slice(0, 2).map((ev) => (
               <div key={ev.id} className="flex items-center gap-1 text-[11px] text-[var(--color-text-secondary)] leading-snug">
                 <span className="min-w-0 truncate">{ev.title}</span>

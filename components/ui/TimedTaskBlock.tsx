@@ -168,6 +168,7 @@ export function TimedTaskBlock({
 
   return (
     <div
+      data-highlight-obstacle
       ref={combinedRef}
       onPointerDown={handleDragPointerDown}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick?.(task.id, e.currentTarget); }}

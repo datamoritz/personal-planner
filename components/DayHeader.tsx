@@ -3,6 +3,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { endOfWeek, format, isSameMonth, isToday, parseISO, startOfWeek } from 'date-fns';
+import { HighlightPalette, HighlightViewOptions } from './highlights/HighlightControls';
 import { usePlannerStore } from '@/store/usePlannerStore';
 
 function formatWeekRange(currentDate: string): string {
@@ -129,7 +130,8 @@ export function DayHeader() {
           </button>
         </div>
 
-        <div className="flex items-center justify-end gap-1.5" style={{ width: '25%' }}>
+        <div className="flex min-w-0 items-center justify-start gap-2 overflow-x-auto py-1" style={{ width: '25%' }}>
+          {(isYear || isMonth) && <HighlightViewOptions>
           {isYear ? (
             <div className="flex items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
               {([
@@ -198,8 +200,10 @@ export function DayHeader() {
               </div>
             </div>
           ) : (
-            <div className="w-14" />
+            null
           )}
+          </HighlightViewOptions>}
+          <HighlightPalette />
         </div>
       </div>
     </header>

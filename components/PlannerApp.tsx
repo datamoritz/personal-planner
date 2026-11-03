@@ -17,6 +17,7 @@ import { usePlannerStore } from '@/store/usePlannerStore';
 import { usePlannerData } from '@/lib/usePlannerData';
 import { useGoogleCalendar } from '@/lib/useGoogleCalendar';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { useHighlightSync } from '@/lib/useHighlightSync';
 import { useNotepadSync } from '@/lib/useNotepadSync';
 import type { Task, RecurrentTask } from '@/types';
 import { PlannerAppView } from './PlannerAppView';
@@ -150,6 +151,7 @@ function weekAwareCollisionDetection(args: Parameters<CollisionDetection>[0]) {
 }
 export function PlannerApp() {
   useNotepadSync();
+  useHighlightSync();
   const theme = usePlannerStore((s) => s.theme);
   const toggleTheme = usePlannerStore((s) => s.toggleTheme);
   const viewMode = usePlannerStore((s) => s.viewMode);
