@@ -8,6 +8,8 @@ The close X becomes a check mark after local note additions/deletions or tile-fi
 
 ## Storage and deployment
 
+Published November 24, 2026. Deployment identifiers, validation, backup, and rollback commands are recorded in [the release record](releases/2026-11-24-mandala-notes.md).
+
 Apply Alembic migration `0019_mandala_notes` before deploying this frontend. It adds the `mandala_notes` table, keyed by tile ID and day. Notes are stored separately from the Mandala structure, so renaming/reparenting and older structure saves cannot overwrite them. Deleting nodes removes their note rows in the same transaction. Note writes lock the structure row to prevent orphan notes during concurrent branch deletion.
 
 The existing owner-only gateway protects `/mandala/notes` and `/mandala/notes/day`. Note updates use compare-and-swap revisions, including first writes. Lost-response retries are idempotent. The client reuses the tested notepad merge logic to reconcile devices, preserving both versions when changes overlap. Writes are serialized per daily note; typing during a save remains pending. Browser storage keeps pending text across reloads. Autosave runs after 650 ms, on closing/switching windows, on reconnect, and retries failed saves after 20 seconds. Open windows also refresh their tile’s notes every 20 seconds while visible.
