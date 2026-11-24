@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   Check,
   CircleDot,
-  Link2,
   Link2Off,
   Loader2,
   LocateFixed,
@@ -13,12 +12,13 @@ import {
   Minimize2,
   Plus,
   SlidersHorizontal,
-  Trash2,
   X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
 import * as api from '@/lib/api';
+import { MandalaNotesWindow } from './MandalaNotesWindow';
+import { flushMandalaNotes, forgetMandalaNotes } from '@/lib/useMandalaNotes';
 import {
   DEFAULT_MANDALA_LAYOUT_SETTINGS,
   MANDALA_CENTER,
@@ -105,11 +105,13 @@ function MandalaTile({
   nodes,
   selected,
   onSelect,
+  onOpen,
 }: {
   layout: MandalaNodeLayout;
   nodes: MandalaNode[];
   selected: boolean;
   onSelect: () => void;
+  onOpen: () => void;
 }) {
   const { node, x, y, depth } = layout;
   const isLoose = node.kind === 'loose';
@@ -124,12 +126,14 @@ function MandalaTile({
   return (
     <button
       type="button"
-      data-mandala-node
+      data-mandala-node={node.id}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         event.stopPropagation();
         onSelect();
       }}
+      onDoubleClick={event => { event.stopPropagation(); onOpen(); }}
+      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); onSelect(); onOpen(); } }}
       className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[0.9rem] px-3 py-2 text-center font-medium leading-[1.12] transition-[transform,box-shadow] duration-150 hover:scale-[1.035] focus:outline-none"
       style={{
         left: x,
@@ -146,7 +150,7 @@ function MandalaTile({
         border: selected ? '2px solid var(--color-accent)' : '1px solid rgba(255,255,255,0.54)',
         zIndex: selected ? 4 : 3,
       }}
-      title={`${node.title.replaceAll('\n', ' ')} — click to edit`}
+      title={`${node.title.replaceAll('\n', ' ')} — double-click for notes`}
     >
       {node.title}
     </button>
@@ -189,12 +193,13 @@ function SpacingSlider({
 }
 
 export function MandalaPanel({ onClose }: { onClose: () => void }) {
-  const initialSize = useMemo(viewportSize, []);
+  const initialSize = useMemo(() => viewportSize(), []);
   const [size, setSize] = useState(initialSize);
   const [position, setPosition] = useState(() => centeredPosition(initialSize));
   const [restoreFrame, setRestoreFrame] = useState<{ size: typeof size; position: typeof position } | null>(null);
   const [document, setDocument] = useState<MandalaDocument | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [notesTile, setNotesTile] = useState<{ id: string; editing: boolean } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [layoutControlsOpen, setLayoutControlsOpen] = useState(false);
@@ -208,11 +213,12 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
   const layoutRef = useRef<ReturnType<typeof calculateMandalaLayout> | null>(null);
   const lastSavedRef = useRef('');
   const saveSequenceRef = useRef(0);
+  const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const maximized = restoreFrame !== null;
   const layout = useMemo(() => document ? calculateMandalaLayout(document) : null, [document]);
-  layoutRef.current = layout;
-  const selectedNode = document?.nodes.find((node) => node.id === selectedId) ?? null;
+  useLayoutEffect(() => { layoutRef.current = layout; }, [layout]);
+  const selectedNode = document?.nodes.find((node) => node.id === notesTile?.id) ?? null;
   const layoutSettings = { ...DEFAULT_MANDALA_LAYOUT_SETTINGS, ...(document?.layout ?? {}) };
 
   const fitView = useCallback(() => {
@@ -256,7 +262,9 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
   const persist = useCallback(async (nextDocument: MandalaDocument, sequence: number) => {
     setSaveStatus('saving');
     try {
-      await api.saveMandala(nextDocument);
+      const job = saveQueueRef.current.catch(() => {}).then(() => api.saveMandala(nextDocument));
+      saveQueueRef.current = job;
+      await job;
       if (sequence !== saveSequenceRef.current) return;
       lastSavedRef.current = JSON.stringify(nextDocument);
       setSaveStatus('saved');
@@ -269,7 +277,6 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
     if (!document) return;
     const serialized = JSON.stringify(document);
     if (serialized === lastSavedRef.current) return;
-    setSaveStatus('dirty');
     const sequence = ++saveSequenceRef.current;
     const timeout = window.setTimeout(() => void persist(document, sequence), 650);
     return () => window.clearTimeout(timeout);
@@ -280,6 +287,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
       const sequence = ++saveSequenceRef.current;
       void persist(document, sequence);
     }
+    void flushMandalaNotes().catch(() => {});
     onClose();
   }, [document, onClose, persist]);
 
@@ -312,7 +320,10 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
       panRef.current = null;
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closePanel();
+      if (event.key !== 'Escape') return;
+      if (notesTile) setNotesTile(null);
+      else if (layoutControlsOpen) setLayoutControlsOpen(false);
+      else closePanel();
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', stop);
@@ -322,7 +333,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
       window.removeEventListener('mouseup', stop);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [closePanel, maximized, position.x, position.y, size.height, size.width]);
+  }, [closePanel, layoutControlsOpen, notesTile, maximized, position.x, position.y, size.height, size.width]);
 
   useEffect(() => {
     const onResize = () => {
@@ -346,6 +357,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
   }, [fitView, maximized, size.height, size.width]);
 
   const updateDocument = useCallback((updater: (current: MandalaDocument) => MandalaDocument) => {
+    setSaveStatus('dirty');
     setDocument((current) => current ? updater(current) : current);
   }, []);
 
@@ -379,6 +391,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
     };
     updateDocument((current) => ({ ...current, nodes: [...current.nodes, node] }));
     setSelectedId(node.id);
+    setNotesTile({ id: node.id, editing: true });
   };
 
   const addLooseNode = () => {
@@ -392,6 +405,7 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
     };
     updateDocument((current) => ({ ...current, nodes: [...current.nodes, node] }));
     setSelectedId(node.id);
+    setNotesTile({ id: node.id, editing: true });
   };
 
   const addChildNode = () => {
@@ -405,18 +419,19 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
     };
     updateDocument((current) => ({ ...current, nodes: [...current.nodes, node] }));
     setSelectedId(node.id);
+    setNotesTile({ id: node.id, editing: true });
   };
 
   const deleteSelected = () => {
     if (!document || !selectedNode) return;
     const descendants = descendantsOf(selectedNode.id, document.nodes);
-    const extra = descendants.size > 0 ? ` and ${descendants.size} connected tile${descendants.size === 1 ? '' : 's'}` : '';
-    if (!window.confirm(`Delete “${selectedNode.title.replaceAll('\n', ' ')}”${extra}?`)) return;
+    forgetMandalaNotes(new Set([selectedNode.id, ...descendants]));
     updateDocument((current) => ({
       ...current,
       nodes: current.nodes.filter((node) => node.id !== selectedNode.id && !descendants.has(node.id)),
     }));
     setSelectedId(null);
+    setNotesTile(null);
   };
 
   const moveSelected = (destination: string) => {
@@ -475,6 +490,89 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
       })
       .sort((a, b) => nodeDepth(a.id, document.nodes) - nodeDepth(b.id, document.nodes) || a.sortOrder - b.sortOrder);
   }, [document, selectedNode]);
+
+  const notesTileId = notesTile?.id;
+  const notesAnchor = useCallback(() => notesTileId ? window.document.querySelector<HTMLElement>(`[data-mandala-node="${CSS.escape(notesTileId)}"]`) : null, [notesTileId]);
+  const anchorRevision = JSON.stringify([position, size, zoom, offset, layout?.nodes.map(node => [node.node.id, node.x, node.y]), layout?.looseNodes.map(node => [node.node.id, node.x, node.y])]);
+  const tileEditor = document && (notesTile?.id === '__center__' ? (
+    <div>                <label className="block text-[12px] font-medium text-[var(--color-text-secondary)]">
+                  Center title
+                  <input
+                    className="ui-input mt-2"
+                    value={document.centerTitle}
+                    maxLength={80}
+                    onChange={(event) => updateDocument((current) => ({ ...current, centerTitle: event.target.value || ' ' }))}
+                  />
+                </label></div>
+  ) : selectedNode ? <div className="space-y-3">                <label className="block text-[12px] font-medium text-[var(--color-text-secondary)]">
+                  Title
+                  <textarea
+                    className="ui-input mt-2 min-h-[84px] resize-none"
+                    aria-label="Tile title"
+                    value={selectedNode.title}
+                    maxLength={120}
+                    autoFocus
+                    onChange={(event) => updateNode(selectedNode.id, { title: event.target.value || ' ' })}
+                  />
+                </label>
+
+                <label className="block text-[12px] font-medium text-[var(--color-text-secondary)]">
+                  Place in
+                  <select
+                    className="ui-input mt-2"
+                    aria-label="Place in"
+                    value={selectedNode.kind === 'loose' ? '__loose__' : selectedNode.parentId ?? '__main__'}
+                    onChange={(event) => moveSelected(event.target.value)}
+                  >
+                    <option value="__main__">Main circle</option>
+                    <option value="__loose__" disabled={descendantsOf(selectedNode.id, document.nodes).size > 0}>Unconnected notes</option>
+                    {moveOptions.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {'—'.repeat(nodeDepth(candidate.id, document.nodes) - 1)} {candidate.title.replaceAll('\n', ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {selectedNode.kind === 'connected' && nodeDepth(selectedNode.id, document.nodes) === 1 && (
+                  <div>
+                    <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Branch color</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {PALETTE.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => updateNode(selectedNode.id, { color })}
+                          className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
+                          style={{
+                            background: color,
+                            borderColor: selectedNode.color === color ? 'var(--color-text-primary)' : 'rgba(255,255,255,0.75)',
+                            boxShadow: '0 2px 7px rgba(19,23,38,0.13)',
+                          }}
+                          title={color}
+                        />
+                      ))}
+                      <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-[var(--color-border)] bg-[conic-gradient(red,yellow,lime,aqua,blue,magenta,red)]" title="Custom color">
+                        <input
+                          type="color"
+                          value={selectedNode.color ?? PALETTE[0]}
+                          onChange={(event) => updateNode(selectedNode.id, { color: event.target.value })}
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.kind === 'connected' && nodeDepth(selectedNode.id, document.nodes) < 3 && (
+                  <button
+                    type="button"
+                    onClick={addChildNode}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm hover:bg-[var(--color-accent-hover)]"
+                  >
+                    <Plus size={14} /> Add child tile
+                  </button>
+                )}</div> : null);
 
   return (
     <div className="fixed inset-0 z-[82] pointer-events-none">
@@ -535,89 +633,8 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
               <button type="button" onClick={fitView} className="ui-icon-button" title="Fit mandala"><LocateFixed size={14} /></button>
             </div>
 
-            <div
-              ref={canvasRef}
-              className="absolute inset-0 cursor-grab overflow-hidden active:cursor-grabbing"
-              onMouseDown={(event) => {
-                if ((event.target as HTMLElement).closest('[data-mandala-node]')) return;
-                setSelectedId(null);
-                panRef.current = { startX: event.clientX, startY: event.clientY, ...offset };
-              }}
-              onWheel={(event) => {
-                event.preventDefault();
-                adjustZoom(event.deltaY < 0 ? 1.08 : 0.92);
-              }}
-            >
-              {loadError ? (
-                <div className="absolute inset-0 flex items-center justify-center px-8 text-center text-sm text-[var(--color-overdue)]">
-                  {loadError}
-                </div>
-              ) : !document || !layout ? (
-                <div className="absolute inset-0 flex items-center justify-center text-[var(--color-text-muted)]">
-                  <Loader2 size={22} className="animate-spin" />
-                </div>
-              ) : (
-                <div
-                  className="absolute left-0 top-0 origin-top-left"
-                  style={{
-                    width: MANDALA_WORLD.width,
-                    height: MANDALA_WORLD.height,
-                    transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                  }}
-                >
-                  <svg className="absolute inset-0 z-[1] overflow-visible" width={MANDALA_WORLD.width} height={MANDALA_WORLD.height} aria-hidden="true">
-                    <circle cx={MANDALA_CENTER.x} cy={MANDALA_CENTER.y} r={layout.mainRadius} fill="none" stroke="var(--color-border)" strokeWidth="1.25" strokeDasharray="4 10" opacity="0.46" />
-                    {layout.edges.map((edge) => (
-                      <path key={edge.id} d={edgePath(edge)} fill="none" stroke={edge.color} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-                    ))}
-                  </svg>
-
-                  <button
-                    type="button"
-                    data-mandala-node
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelectedId('__center__');
-                    }}
-                    className="absolute z-[3] flex h-[104px] w-[104px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[0.95rem] border border-white/15 bg-[#454B56] px-3 text-center text-[15px] font-semibold text-white shadow-[5px_8px_20px_rgba(19,23,38,0.22)]"
-                    style={{ left: MANDALA_CENTER.x, top: MANDALA_CENTER.y }}
-                  >
-                    {document.centerTitle}
-                  </button>
-
-                  {layout.nodes.map((nodeLayout) => (
-                    <MandalaTile
-                      key={nodeLayout.node.id}
-                      layout={nodeLayout}
-                      nodes={document.nodes}
-                      selected={selectedId === nodeLayout.node.id}
-                      onSelect={() => setSelectedId(nodeLayout.node.id)}
-                    />
-                  ))}
-
-                  {layout.looseNodes.length > 0 && (
-                    <div className="absolute left-[1110px] top-[1350px] z-[2] flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
-                      <Link2Off size={13} /> Loose notes
-                    </div>
-                  )}
-                  {layout.looseNodes.map((nodeLayout) => (
-                    <MandalaTile
-                      key={nodeLayout.node.id}
-                      layout={nodeLayout}
-                      nodes={document.nodes}
-                      selected={selectedId === nodeLayout.node.id}
-                      onSelect={() => setSelectedId(nodeLayout.node.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <aside className="w-[286px] shrink-0 overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-surface-secondary)]/55 px-5 py-5">
             {document && layoutControlsOpen && (
-              <div className="mb-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+              <div role="dialog" aria-label="Mandala layout spacing" className="absolute right-4 top-4 z-30 max-h-[calc(100%-32px)] w-[276px] overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-popover)] p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--color-text-secondary)]">
                     <SlidersHorizontal size={14} className="text-[var(--color-accent)]" /> Layout spacing
@@ -681,128 +698,92 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
                 <p className="mt-3 text-[10px] leading-relaxed text-[var(--color-text-muted)]">Saved with this Mandala.</p>
               </div>
             )}
-            {!document ? (
-              <div className="flex justify-center py-12"><Loader2 size={18} className="animate-spin text-[var(--color-text-muted)]" /></div>
-            ) : selectedId === '__center__' ? (
-              <div className="space-y-5">
-                <div>
-                  <p className="ui-section-label">CENTER</p>
-                  <h3 className="mt-1 text-base font-semibold text-[var(--color-text-primary)]">Your mandala</h3>
-                </div>
-                <label className="block text-[12px] font-medium text-[var(--color-text-secondary)]">
-                  Center title
-                  <input
-                    className="ui-input mt-2"
-                    value={document.centerTitle}
-                    maxLength={80}
-                    onChange={(event) => updateDocument((current) => ({ ...current, centerTitle: event.target.value || ' ' }))}
-                  />
-                </label>
-              </div>
-            ) : selectedNode ? (
-              <div className="space-y-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="ui-section-label">EDIT TILE</p>
-                    <h3 className="mt-1 text-base font-semibold text-[var(--color-text-primary)]">
-                      {selectedNode.kind === 'loose' ? 'Unconnected note' : `Level ${nodeDepth(selectedNode.id, document.nodes)}`}
-                    </h3>
-                  </div>
-                  <button type="button" onClick={deleteSelected} className="ui-icon-button ui-icon-button--danger" title="Delete tile"><Trash2 size={14} /></button>
-                </div>
 
-                <label className="block text-[12px] font-medium text-[var(--color-text-secondary)]">
-                  Title
-                  <textarea
-                    className="ui-input mt-2 min-h-[84px] resize-none"
-                    value={selectedNode.title}
-                    maxLength={120}
-                    autoFocus
-                    onChange={(event) => updateNode(selectedNode.id, { title: event.target.value || ' ' })}
-                  />
-                </label>
-
-                <label className="block text-[12px] font-medium text-[var(--color-text-secondary)]">
-                  Place in
-                  <select
-                    className="ui-input mt-2"
-                    value={selectedNode.kind === 'loose' ? '__loose__' : selectedNode.parentId ?? '__main__'}
-                    onChange={(event) => moveSelected(event.target.value)}
-                  >
-                    <option value="__main__">Main circle</option>
-                    <option value="__loose__">Unconnected notes</option>
-                    {moveOptions.map((candidate) => (
-                      <option key={candidate.id} value={candidate.id}>
-                        {'—'.repeat(nodeDepth(candidate.id, document.nodes) - 1)} {candidate.title.replaceAll('\n', ' ')}
-                      </option>
+            <div
+              ref={canvasRef}
+              className="absolute inset-0 cursor-grab overflow-hidden active:cursor-grabbing"
+              onMouseDown={(event) => {
+                if ((event.target as HTMLElement).closest('[data-mandala-node]')) return;
+                setSelectedId(null);
+                panRef.current = { startX: event.clientX, startY: event.clientY, ...offset };
+              }}
+              onWheel={(event) => {
+                event.preventDefault();
+                adjustZoom(event.deltaY < 0 ? 1.08 : 0.92);
+              }}
+            >
+              {loadError ? (
+                <div className="absolute inset-0 flex items-center justify-center px-8 text-center text-sm text-[var(--color-overdue)]">
+                  {loadError}
+                </div>
+              ) : !document || !layout ? (
+                <div className="absolute inset-0 flex items-center justify-center text-[var(--color-text-muted)]">
+                  <Loader2 size={22} className="animate-spin" />
+                </div>
+              ) : (
+                <div
+                  className="absolute left-0 top-0 origin-top-left"
+                  style={{
+                    width: MANDALA_WORLD.width,
+                    height: MANDALA_WORLD.height,
+                    transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+                  }}
+                >
+                  <svg className="absolute inset-0 z-[1] overflow-visible" width={MANDALA_WORLD.width} height={MANDALA_WORLD.height} aria-hidden="true">
+                    <circle cx={MANDALA_CENTER.x} cy={MANDALA_CENTER.y} r={layout.mainRadius} fill="none" stroke="var(--color-border)" strokeWidth="1.25" strokeDasharray="4 10" opacity="0.46" />
+                    {layout.edges.map((edge) => (
+                      <path key={edge.id} d={edgePath(edge)} fill="none" stroke={edge.color} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
                     ))}
-                  </select>
-                </label>
+                  </svg>
 
-                {selectedNode.kind === 'connected' && nodeDepth(selectedNode.id, document.nodes) === 1 && (
-                  <div>
-                    <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Branch color</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {PALETTE.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => updateNode(selectedNode.id, { color })}
-                          className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
-                          style={{
-                            background: color,
-                            borderColor: selectedNode.color === color ? 'var(--color-text-primary)' : 'rgba(255,255,255,0.75)',
-                            boxShadow: '0 2px 7px rgba(19,23,38,0.13)',
-                          }}
-                          title={color}
-                        />
-                      ))}
-                      <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-[var(--color-border)] bg-[conic-gradient(red,yellow,lime,aqua,blue,magenta,red)]" title="Custom color">
-                        <input
-                          type="color"
-                          value={selectedNode.color ?? PALETTE[0]}
-                          onChange={(event) => updateNode(selectedNode.id, { color: event.target.value })}
-                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                )}
-
-                {selectedNode.kind === 'connected' && nodeDepth(selectedNode.id, document.nodes) < 3 && (
                   <button
                     type="button"
-                    onClick={addChildNode}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-3 py-2.5 text-[12px] font-semibold text-white shadow-sm hover:bg-[var(--color-accent-hover)]"
+                    data-mandala-node="__center__"
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedId('__center__');
+                    }}
+                    onDoubleClick={event => { event.stopPropagation(); setSelectedId('__center__'); setNotesTile({ id: '__center__', editing: false }); }}
+                    onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); setSelectedId('__center__'); setNotesTile({ id: '__center__', editing: false }); } }}
+                    className="absolute z-[3] flex h-[104px] w-[104px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[0.95rem] border border-white/15 bg-[#454B56] px-3 text-center text-[15px] font-semibold text-white shadow-[5px_8px_20px_rgba(19,23,38,0.22)]"
+                    style={{ left: MANDALA_CENTER.x, top: MANDALA_CENTER.y }}
                   >
-                    <Plus size={14} /> Add child tile
+                    {document.centerTitle}
                   </button>
-                )}
-              </div>
-            ) : (
-              <div className="flex min-h-full flex-col">
-                <div>
-                  <p className="ui-section-label">YOUR BALANCE</p>
-                  <h3 className="mt-1 text-base font-semibold text-[var(--color-text-primary)]">Keep the whole picture visible.</h3>
-                  <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-text-muted)]">
-                    Select a tile to edit it. The mandala rearranges itself whenever its structure changes.
-                  </p>
+
+                  {layout.nodes.map((nodeLayout) => (
+                    <MandalaTile
+                      key={nodeLayout.node.id}
+                      layout={nodeLayout}
+                      nodes={document.nodes}
+                      selected={selectedId === nodeLayout.node.id}
+                      onSelect={() => setSelectedId(nodeLayout.node.id)}
+                      onOpen={() => { setSelectedId(nodeLayout.node.id); setNotesTile({ id: nodeLayout.node.id, editing: false }); }}
+                    />
+                  ))}
+
+                  {layout.looseNodes.length > 0 && (
+                    <div className="absolute left-[1110px] top-[1350px] z-[2] flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+                      <Link2Off size={13} /> Loose notes
+                    </div>
+                  )}
+                  {layout.looseNodes.map((nodeLayout) => (
+                    <MandalaTile
+                      key={nodeLayout.node.id}
+                      layout={nodeLayout}
+                      nodes={document.nodes}
+                      selected={selectedId === nodeLayout.node.id}
+                      onSelect={() => setSelectedId(nodeLayout.node.id)}
+                      onOpen={() => { setSelectedId(nodeLayout.node.id); setNotesTile({ id: nodeLayout.node.id, editing: false }); }}
+                    />
+                  ))}
                 </div>
-                <div className="mt-6 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={addMainNode} className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-4 text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)]">
-                    <Plus size={17} className="text-[var(--color-accent)]" /> Main area
-                  </button>
-                  <button type="button" onClick={addLooseNode} className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-4 text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)]">
-                    <Link2Off size={17} className="text-[var(--color-accent)]" /> Loose note
-                  </button>
-                </div>
-                <div className="mt-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[12px] text-[var(--color-text-muted)]">
-                  <div className="flex items-center gap-2 text-[var(--color-text-secondary)]"><Link2 size={14} /> Up to three levels</div>
-                  <p className="mt-2 leading-relaxed">Move tiles between branches with the “Place in” menu. Branch colors flow automatically to their children.</p>
-                </div>
-              </div>
-            )}
-          </aside>
+              )}
+            </div>
+          </div>
+
+
         </div>
 
         {!maximized && (
@@ -819,6 +800,14 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
           </button>
         )}
       </section>
+      {document && notesTile && (notesTile.id === '__center__' || selectedNode) && <MandalaNotesWindow
+        key={notesTile.id} nodeId={notesTile.id} title={selectedNode?.title ?? document.centerTitle}
+        color={selectedNode ? selectedNode.kind === 'loose' ? '#AAB2C1' : branchColor(selectedNode, document.nodes) : '#454B56'}
+        anchor={notesAnchor} anchorRevision={anchorRevision} editing={notesTile.editing}
+        onToggleEditing={() => setNotesTile(current => current ? { ...current, editing: !current.editing } : current)}
+        onClose={() => setNotesTile(null)} onDelete={selectedNode ? deleteSelected : undefined}
+        descendantCount={selectedNode ? descendantsOf(selectedNode.id, document.nodes).size : 0} editor={tileEditor}
+      />}
     </div>
   );
 }

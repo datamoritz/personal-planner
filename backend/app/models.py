@@ -306,3 +306,12 @@ class HighlightConversion(Base):
     __tablename__ = 'highlight_conversions'
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     result: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class MandalaNote(Base):
+    __tablename__ = 'mandala_notes'
+    node_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

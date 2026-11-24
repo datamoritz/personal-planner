@@ -1,6 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -91,9 +95,89 @@ def read_mandala(db: Session = Depends(get_db)):
 
 @router.put("/mandala", response_model=schemas.MandalaStateRead)
 def update_mandala(payload: schemas.MandalaStateUpdate, db: Session = Depends(get_db)):
-    state = _get_or_create_state(db)
+    _get_or_create_state(db)
+    state = db.scalar(select(models.MandalaState).where(models.MandalaState.id == 1).with_for_update().execution_options(populate_existing=True))
+    previous = schemas.MandalaDocument.model_validate_json(state.document_json)
+    removed = {node.id for node in previous.nodes} - {node.id for node in payload.document.nodes}
+    if removed:
+        db.execute(delete(models.MandalaNote).where(models.MandalaNote.node_id.in_(removed)))
     state.document_json = payload.document.model_dump_json()
     state.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(state)
     return schemas.MandalaStateRead(document=payload.document, updatedAt=state.updated_at)
+
+
+class MandalaNoteRead(BaseModel):
+    nodeId: str
+    day: date
+    text: str
+    revision: int
+    updatedAt: datetime | None = None
+
+
+class MandalaNoteUpdate(BaseModel):
+    nodeId: str = Field(min_length=1, max_length=100)
+    day: date
+    text: str = Field(max_length=100000)
+    revision: int = Field(ge=0)
+
+
+def _note_tile(db: Session, node_id: str, *, lock=False):
+    _get_or_create_state(db)
+    query = select(models.MandalaState).where(models.MandalaState.id == 1).execution_options(populate_existing=True)
+    state = db.scalar(query.with_for_update() if lock else query)
+    document = schemas.MandalaDocument.model_validate_json(state.document_json)
+    if node_id != '__center__' and not any(node.id == node_id for node in document.nodes):
+        raise HTTPException(status_code=404, detail='This Mandala tile no longer exists.')
+
+
+def _note_read(db: Session, node_id: str, day: date) -> MandalaNoteRead:
+    row = db.get(models.MandalaNote, (node_id, day), populate_existing=True)
+    return MandalaNoteRead(nodeId=node_id, day=day, text=row.text if row else '',
+                           revision=row.revision if row else 0, updatedAt=row.updated_at if row else None)
+
+
+@router.get('/mandala/notes')
+def read_tile_notes(node_id: str = Query(min_length=1, max_length=100), db: Session = Depends(get_db)):
+    _note_tile(db, node_id)
+    rows = db.scalars(select(models.MandalaNote).where(models.MandalaNote.node_id == node_id).order_by(models.MandalaNote.day.desc())).all()
+    return {'notes': [MandalaNoteRead(nodeId=row.node_id, day=row.day, text=row.text,
+                                    revision=row.revision, updatedAt=row.updated_at) for row in rows]}
+
+
+@router.get('/mandala/notes/day', response_model=MandalaNoteRead)
+def read_daily_note(node_id: str = Query(min_length=1, max_length=100), day: date = Query(), db: Session = Depends(get_db)):
+    _note_tile(db, node_id)
+    return _note_read(db, node_id, day)
+
+
+@router.put('/mandala/notes', response_model=MandalaNoteRead)
+def save_daily_note(payload: MandalaNoteUpdate, db: Session = Depends(get_db)):
+    # Lock the tile's document so a concurrent branch deletion cannot leave orphan notes.
+    _note_tile(db, payload.nodeId, lock=True)
+    now = datetime.utcnow()
+    if payload.revision == 0:
+        try:
+            db.add(models.MandalaNote(node_id=payload.nodeId, day=payload.day, text=payload.text, revision=1, updated_at=now))
+            db.commit()
+            return _note_read(db, payload.nodeId, payload.day)
+        except IntegrityError:
+            db.rollback()
+            _note_tile(db, payload.nodeId, lock=True)
+    else:
+        result = db.execute(update(models.MandalaNote).where(
+            models.MandalaNote.node_id == payload.nodeId, models.MandalaNote.day == payload.day,
+            models.MandalaNote.revision == payload.revision,
+        ).values(text=payload.text, revision=payload.revision + 1, updated_at=now))
+        if result.rowcount == 1:
+            db.commit()
+            return _note_read(db, payload.nodeId, payload.day)
+        db.rollback()
+    current = _note_read(db, payload.nodeId, payload.day)
+    if current.text == payload.text:
+        return current
+    return JSONResponse(status_code=409, content={
+        'detail': 'This daily note changed on another device.',
+        'current': current.model_dump(mode='json'),
+    })
