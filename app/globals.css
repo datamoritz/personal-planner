@@ -253,3 +253,39 @@ html, body {
 .month-cell-scroll::-webkit-scrollbar {
   display: none;
 }
+
+/* Preserve the published Mandala note editor's compact hanging dash lists.
+   Explicit rules also cover native lists inserted by Safari/contentEditable. */
+.mandala-note-editor ul {
+  margin: 0;
+  padding-inline-start: 12px;
+  list-style-type: "- ";
+}
+.mandala-note-editor li {
+  margin: 0;
+  padding: 0;
+}
+.mandala-note-editor li::marker { content: "- "; }
+.mandala-note-editor > :is(p, div) { margin: 0; min-height: 1lh; }
+.mandala-note-editor > [data-note-empty="true"]:not(:last-child) {
+  min-height: 0;
+  height: 0.75em;
+  line-height: 0.75;
+}
+/* Compact fields only in Mandala tracking, leaving task/event editors intact. */
+.mandala-tracking-field {
+  height: 26px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+}
+.ui-icon-button--mandala-linked {
+  color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.ui-icon-button--mandala-linked:hover {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-popover));
+}

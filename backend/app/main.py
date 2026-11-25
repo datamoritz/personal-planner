@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.db import check_db_connection
 from app.routers import ai, apple_calendar, email, email_automations, google, highlights, mandala, media, notepad, planner, projects, recurrent_tasks, sessions, tags, tasks, workload
+from app.routers import mandala_tracking
 from app.auth import authorize_request
 from starlette.concurrency import run_in_threadpool
 
@@ -43,6 +44,7 @@ app.include_router(ai.router)
 app.include_router(media.router)
 app.include_router(workload.router)
 app.include_router(mandala.router)
+app.include_router(mandala_tracking.router)
 app.include_router(notepad.router)
 app.include_router(highlights.router)
 app.include_router(sessions.router)

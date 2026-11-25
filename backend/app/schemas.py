@@ -31,6 +31,7 @@ class RecurringTaskGenerationResponse(BaseModel):
 
 
 class RecurrentTaskBase(BaseModel):
+    mandala_node_id: str | None = Field(default=None, max_length=100)
     project_id: Optional[int] = None
     tag_id: Optional[int] = None
     title: str
@@ -49,6 +50,7 @@ class RecurrentTaskCreate(RecurrentTaskBase):
 
 
 class RecurrentTaskUpdate(BaseModel):
+    mandala_node_id: str | None = Field(default=None, max_length=100)
     project_id: Optional[int] = None
     tag_id: Optional[int] = None
     title: Optional[str] = None
@@ -528,6 +530,8 @@ class MandalaStateRead(BaseModel):
 # ---------------------------------------------------------------------------
 
 class TaskCreate(BaseModel):
+    mandala_node_id: str | None = Field(default=None, max_length=100)
+    recurrent_cycle_date: date | None = None
     client_id: Optional[uuid.UUID] = None
     title: str
     notes: str | None = None
@@ -544,6 +548,9 @@ class TaskCreate(BaseModel):
 
 
 class TaskRead(BaseModel):
+    generated_by_mandala: bool = False
+    mandala_node_id: str | None = Field(default=None, max_length=100)
+    recurrent_cycle_date: date | None = None
     id: int
     client_id: Optional[uuid.UUID] = None
     title: str
@@ -567,6 +574,7 @@ class TaskRead(BaseModel):
 
 
 class TaskUpdate(BaseModel):
+    mandala_node_id: str | None = Field(default=None, max_length=100)
     title: str | None = None
     notes: str | None = None
     location: Optional[str] = None
@@ -583,6 +591,9 @@ class TaskUpdate(BaseModel):
 
 
 class TaskOut(BaseModel):
+    generated_by_mandala: bool = False
+    mandala_node_id: str | None = Field(default=None, max_length=100)
+    recurrent_cycle_date: date | None = None
     id: int
     client_id: Optional[uuid.UUID] = None
     title: str

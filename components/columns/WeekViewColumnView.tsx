@@ -1,4 +1,5 @@
 'use client';
+import { MandalaTaskIndicator } from '@/components/ui/MandalaTaskIndicator';
 
 import { format } from 'date-fns';
 import { HourlyHighlightBackground, DailyHighlightSummary, useHighlightSurface } from '@/components/highlights/HighlightSurface';
@@ -260,6 +261,7 @@ function WeekTaskItem({
       >
         {task.title}
       </span>
+      <MandalaTaskIndicator nodeId={task.mandalaNodeId} generated={task.generatedByMandala} />
       <NotesIndicator notes={task.notes} size={10} className="text-[var(--color-text-muted)]" />
     </div>
   );

@@ -35,6 +35,10 @@ export interface Tag {
 // ─── Task ──────────────────────────────────────────────────────────────────
 
 export interface Task {
+  mandalaNodeId?: string;
+  generatedByMandala?: boolean;
+  recurrentCycleDate?: string;
+  completedAt?: string;
   id: string;           // UUID — used as client_id in backend
   /** Backend integer PK — populated after first successful API sync */
   backendId?: number;
@@ -122,6 +126,7 @@ export interface AppleBirthdayMessage {
 // ─── Recurrent Task ────────────────────────────────────────────────────────
 
 export interface RecurrentTask {
+  mandalaNodeId?: string;
   id: string;           // UUID — used as client_id in backend
   /** Backend integer PK — populated after first successful API sync */
   backendId?: number;
@@ -367,4 +372,37 @@ export interface TextDraftResponse {
   location?: string | null;
   dateDetected?: boolean;
   timeDetected?: boolean;
+}
+
+// Optional Mandala tracking; all calendar calculations are server-authoritative.
+export interface MandalaTrackingConfig {
+  trackingType: 'none' | 'frequency' | 'review';
+  targetCount: number;
+  targetPeriod: 'day' | 'week' | 'month' | 'quarter' | 'year';
+  intervalValue: number;
+  intervalUnit: 'days' | 'weeks' | 'months';
+  autoGenerateTasks: boolean;
+  generationStrategy: 'beginning' | 'distributed' | 'behind';
+  generatedTaskTitle: string;
+  taskDestination: 'backlog' | 'today';
+  activatedOn?: string;
+  isPaused?: boolean;
+  pausedUntil?: string;
+  snoozedUntil?: string;
+}
+export interface MandalaActivity {
+  id: string; nodeId: string; type: 'activity' | 'review'; date: string;
+  occurredAt: string; notes: string; taskId?: number; fromTask: boolean;
+}
+export interface MandalaLinkedTask {
+  id: number; clientId: string; title: string; date?: string; location: TaskLocation;
+  generated: boolean; status: TaskStatus;
+}
+export interface MandalaTrackingSummary {
+  nodeId: string; settings: MandalaTrackingConfig; revision: number;
+  status: 'untracked' | 'fulfilled' | 'planned' | 'progress' | 'attention' | 'overdue' | 'paused';
+  target: number; completed: number; planned: number; outstanding: number;
+  periodStart?: string; periodEnd?: string; nextReview?: string; lastActivity?: string;
+  previousMissed?: boolean; unscheduled: MandalaLinkedTask[];
+  pendingTasks: MandalaLinkedTask[]; history: MandalaActivity[];
 }

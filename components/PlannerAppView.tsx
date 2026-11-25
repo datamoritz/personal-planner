@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   DndContext,
@@ -144,6 +144,12 @@ export function PlannerAppView({
 }: PlannerAppViewProps) {
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
   const [mandalaPanelOpen, setMandalaPanelOpen] = useState(false);
+  const [mandalaNodeId, setMandalaNodeId] = useState<string>();
+  useEffect(() => {
+    const open = (event: Event) => { setMandalaNodeId((event as CustomEvent<string>).detail); setMandalaPanelOpen(true); };
+    window.addEventListener('planner-open-mandala-node', open);
+    return () => window.removeEventListener('planner-open-mandala-node', open);
+  }, []);
   const [mediaPopoverOpen, setMediaPopoverOpen] = useState(false);
   const [mediaAnchor, setMediaAnchor] = useState<HTMLElement | null>(null);
   const [smartCaptureOpen, setSmartCaptureOpen] = useState(true);
@@ -406,7 +412,7 @@ export function PlannerAppView({
         </DragOverlay>
 
         <EmailToTaskPanelV2 open={emailPanelOpen} onClose={() => setEmailPanelOpen(false)} />
-        {mandalaPanelOpen && <MandalaPanel onClose={() => setMandalaPanelOpen(false)} />}
+        {mandalaPanelOpen && <MandalaPanel initialNodeId={mandalaNodeId} onClose={() => { setMandalaPanelOpen(false); setMandalaNodeId(undefined); }} />}
       </DndContext>
     </div>
   );

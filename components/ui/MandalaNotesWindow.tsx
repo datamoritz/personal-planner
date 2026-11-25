@@ -5,6 +5,10 @@ import { createPortal } from 'react-dom';
 import { AlertCircle, Check, Loader2, Pencil, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { useMandalaNotes } from '@/lib/useMandalaNotes';
+import { useMandalaTrackingDraft } from '@/lib/useMandalaTrackingDraft';
+import { useIsMobile } from '@/lib/useIsMobile';
+import type { MandalaActivity } from '@/types';
+import { MandalaTrackingActions, MandalaTrackingDetails, type TrackingMode } from './MandalaTrackingDetails';
 import { MandalaNoteEditor } from './MandalaNoteEditor';
 
 interface Frame { x: number; y: number; width: number; height: number }
@@ -29,7 +33,20 @@ export function MandalaNotesWindow({ nodeId, title, color, anchor, anchorRevisio
   const [frame, setFrame] = useState(() => beside(anchor(), 360, 440));
   const [placed, setPlaced] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const isMobile = useIsMobile();
+  const [trackingMode, setTrackingMode] = useState<TrackingMode>(null);
+  const [lastLogged, setLastLogged] = useState<MandalaActivity | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const trackingDraft = useMandalaTrackingDraft(nodeId);
+  const [closing, setClosing] = useState(false);
+  const edited = hasChanges || trackingDraft.dirty;
+  const finish = async () => {
+    if (closing) return;
+    setClosing(true);
+    try { await trackingDraft.flush(); onClose(); }
+    catch { setTrackingMode('settings'); }
+    finally { setClosing(false); }
+  };
   const drag = useRef<{ mode: 'move' | 'resize'; x: number; y: number; frame: Frame } | null>(null);
   useLayoutEffect(() => {
     if (placed) return;
@@ -70,18 +87,19 @@ export function MandalaNotesWindow({ nodeId, title, color, anchor, anchorRevisio
     style={{ left: frame.x, top: frame.y, width: frame.width, height: frame.height, background: tint,
       borderColor: `color-mix(in srgb, ${color} 35%, var(--color-popover-border))`, '--mandala-note-color': color } as CSSProperties}
     className="fixed z-[96] flex flex-col overflow-hidden rounded-2xl border shadow-[var(--shadow-floating)]"
-    onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); if (confirming) setConfirming(false); else onClose(); } }}>
+    onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); if (confirming) setConfirming(false); else void finish(); } }}>
     <header onPointerDown={event => start(event, 'move')} onPointerMove={move} onPointerUp={stop} onPointerCancel={stop}
       className="flex min-h-8 shrink-0 touch-none cursor-move items-center gap-1.5 border-b px-3 py-1"
       style={{ background: `color-mix(in srgb, ${color} 12%, var(--color-popover))`, borderColor: `color-mix(in srgb, ${color} 20%, transparent)` }}>
       <span className="h-3.5 w-0.5 shrink-0" style={{ background: color }} />
       <h3 className="min-w-0 flex-1 whitespace-pre-line text-[11px] font-semibold leading-snug text-[var(--color-text-primary)]">{title}</h3>
       {loading && <Loader2 size={11} className="shrink-0 animate-spin text-[var(--color-text-muted)]" aria-label="Loading notes" />}
-      {status === 'saving' && <Loader2 size={11} className="shrink-0 animate-spin text-[var(--color-text-muted)]" aria-label="Saving notes" />}
+      {(status === 'saving' || trackingDraft.saving) && <Loader2 size={11} className="shrink-0 animate-spin text-[var(--color-text-muted)]" aria-label="Saving notes" />}
       {status === 'offline' && <button type="button" onClick={retry} style={headerButtonSize} className="ui-icon-button text-amber-600" aria-label="Retry saving notes" title="Notes kept on this device. Retry saving."><AlertCircle size={13} /></button>}
+      {!isMobile && nodeId !== '__center__' && <MandalaTrackingActions nodeId={nodeId} mode={trackingMode} setMode={setTrackingMode} onLogged={activity => { setLastLogged(activity); setHasChanges(true); }} />}
       <button type="button" onClick={onToggleEditing} aria-label={editing ? 'Finish editing tile' : 'Edit tile'} aria-pressed={editing} title={editing ? 'Done' : 'Edit tile'} style={headerButtonSize} className="ui-icon-button">{editing ? <Check size={13} /> : <Pencil size={12} />}</button>
       {onDelete && <button type="button" onClick={() => setConfirming(value => !value)} aria-label="Delete tile" title="Delete branch" style={headerButtonSize} className="ui-icon-button ui-icon-button--danger"><Trash2 size={12} /></button>}
-      <button type="button" onClick={onClose} aria-label={hasChanges ? 'Done editing notes' : 'Close tile notes'} title={hasChanges ? 'Done — close notes' : 'Close'} style={headerButtonSize} className="ui-icon-button">{hasChanges ? <Check size={13} /> : <X size={13} />}</button>
+      <button type="button" disabled={closing} onClick={() => void finish()} aria-label={edited ? 'Done editing notes' : 'Close tile notes'} title={edited ? 'Save changes and close' : 'Close'} style={headerButtonSize} className="ui-icon-button">{edited ? <Check size={13} /> : <X size={13} />}</button>
     </header>
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-3" data-mandala-notes-scroll>
       {confirming && <div role="alertdialog" aria-label="Confirm branch deletion" className="mb-4 rounded-lg border border-red-400/25 bg-red-500/5 p-3 text-[12px] text-[var(--color-text-primary)]">
@@ -91,6 +109,8 @@ export function MandalaNotesWindow({ nodeId, title, color, anchor, anchorRevisio
       </div>}
       {editing && <div onChangeCapture={() => setHasChanges(true)} onClickCapture={event => { if ((event.target as HTMLElement).closest('button')) setHasChanges(true); }} className="mb-4 border-b border-[var(--color-border)] pb-4">{editor}</div>}
       {loadError && <div role="alert" className="mb-3 text-[11px] text-amber-600">{loadError} <button type="button" className="underline" onClick={retry}>Retry</button></div>}
+      {!isMobile && nodeId !== '__center__' && <MandalaTrackingDetails nodeId={nodeId} title={title} mode={trackingMode} setMode={setTrackingMode} lastLogged={lastLogged} onChanged={() => setHasChanges(true)} />}
+      {!isMobile && trackingMode === 'details' && <p className="mb-2 text-[9px] font-medium text-[var(--color-text-muted)]">Daily notes</p>}
       {notes.map(note => <div key={note.day} className="mb-4 last:mb-0">
         <p className="mb-1 text-[10px] font-medium tracking-wide text-[var(--color-text-muted)]" title={note.updatedAt ? `Last edited ${new Date(note.updatedAt.endsWith('Z') ? note.updatedAt : `${note.updatedAt}Z`).toLocaleString()}` : undefined}>
           <time dateTime={note.day}>{format(new Date(`${note.day}T12:00:00`), 'EEE, MMM d, yyyy')}</time>

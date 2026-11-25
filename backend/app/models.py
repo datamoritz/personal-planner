@@ -119,6 +119,7 @@ class RecurrentTask(Base):
     client_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, default=uuid.uuid4)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     tag_id: Mapped[int | None] = mapped_column(ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
+    mandala_node_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[str] = mapped_column(String(50), nullable=False, default="backlog")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -143,6 +144,12 @@ class Task(Base):
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     recurrent_task_id: Mapped[int | None] = mapped_column(ForeignKey("recurrent_tasks.id"), nullable=True)
     tag_id: Mapped[int | None] = mapped_column(ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
+    mandala_assignment_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='false')
+    mandala_node_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    generated_by_mandala: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='false')
+    mandala_touched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='false')
+    mandala_period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    recurrent_cycle_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
@@ -315,3 +322,29 @@ class MandalaNote(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MandalaPreferences(Base):
+    __tablename__ = 'mandala_preferences'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    timezone: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class MandalaTracking(Base):
+    __tablename__ = 'mandala_tracking'
+    node_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    settings_json: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class MandalaActivity(Base):
+    __tablename__ = 'mandala_activities'
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    node_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    activity_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    activity_date: Mapped[date] = mapped_column(Date, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey('tasks.id', ondelete='SET NULL'), nullable=True)
+    source_key: Mapped[str | None] = mapped_column(String(150), nullable=True, unique=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default='')

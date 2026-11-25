@@ -13,6 +13,7 @@ import {
 } from '@/store/usePlannerStore';
 import * as api from '@/lib/api';
 import { InlineTaskInput } from '@/components/ui/InlineTaskInput';
+import { MandalaTaskIndicator } from '@/components/ui/MandalaTaskIndicator';
 import { NotesIndicator } from '@/components/ui/NotesIndicator';
 import { AboutPrivacyLinks } from '@/components/ui/AboutPrivacyLinks';
 import { AccountMenu } from '@/components/ui/AccountMenu';
@@ -88,6 +89,7 @@ function TaskRow({
           {task.title}
         </span>
       </div>
+      <MandalaTaskIndicator nodeId={task.mandalaNodeId} generated={task.generatedByMandala} />
       <NotesIndicator notes={task.notes} className="text-[var(--color-text-muted)]" />
       <button
         type="button"

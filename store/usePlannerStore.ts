@@ -378,8 +378,9 @@ interface PlannerStore extends PlannerState {
     startTime?: string;
     endTime?: string;
     tagId?: string;
+    mandalaNodeId?: string;
   }) => string;
-  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime' | 'estimateHours'>>) => void;
+  updateTask: (id: string, updates: Partial<Pick<Task, 'title' | 'notes' | 'date' | 'startTime' | 'endTime' | 'estimateHours' | 'mandalaNodeId'>>) => void;
   deleteTask: (id: string) => void;
   // Read / Watch
   addMediaItem: (data: { title: string; kind: MediaKind; recommendedBy?: string; status?: MediaStatus }) => string;
@@ -392,7 +393,7 @@ interface PlannerStore extends PlannerState {
   convertTaskToMedia: (taskId: string, kind: MediaKind) => boolean;
   // Recurrent tasks
   addRecurrentTask: (data: { title: string; frequency: RecurrenceFrequency }) => void;
-  updateRecurrentTask: (id: string, updates: Partial<Pick<RecurrentTask, 'title' | 'notes' | 'frequency'>>) => void;
+  updateRecurrentTask: (id: string, updates: Partial<Pick<RecurrentTask, 'title' | 'notes' | 'frequency' | 'mandalaNodeId'>>) => void;
   deleteRecurrentTask: (id: string) => void;
   advanceRecurrentTask: (id: string) => void;
   spawnRecurrentTasksForNextMonths: (id: string, months?: number) => void;
@@ -542,11 +543,11 @@ export const usePlannerStore = create<PlannerStore>()(
           if (!recurrentTask) return;
 
           const cycleReferenceDate = prevTask.date ?? today;
-          const cycleDueDate = getRecurrentCycleDueDate(recurrentTask, cycleReferenceDate);
+          const cycleDueDate = prevTask.recurrentCycleDate ?? getRecurrentCycleDueDate(recurrentTask, cycleReferenceDate);
           const linkedTasks = prevTasks.filter(
             (task) =>
               task.recurrentTaskId === recurrentTask.id &&
-              getRecurrentCycleDueDate(recurrentTask, task.date ?? cycleReferenceDate) === cycleDueDate,
+              (task.recurrentCycleDate ?? getRecurrentCycleDueDate(recurrentTask, task.date ?? cycleReferenceDate)) === cycleDueDate,
           );
 
           const nextCompletedThroughDate = newStatus === 'done'
@@ -577,16 +578,11 @@ export const usePlannerStore = create<PlannerStore>()(
             ),
           }));
 
-          const patchTasks = linkedTasks
-            .filter((task) => task.backendId)
-            .map((task) => api.patchTask(task.backendId!, { status: newStatus }));
-          const patchRecurrent = recurrentTask.backendId
-            ? api.patchRecurrentTask(recurrentTask.backendId, {
-                completed_through_date: nextCompletedThroughDate ?? null,
-              })
+          const operation = recurrentTask.backendId
+            ? api.completeRecurrentCycle(recurrentTask.backendId, cycleDueDate, newStatus === 'done',
+                newStatus !== 'done' ? nextCompletedThroughDate : undefined, prevTask.backendId)
             : Promise.resolve();
-
-          Promise.all([...patchTasks, patchRecurrent]).catch((err) => {
+          operation.catch((err) => {
             console.error('[toggleTask]', err);
             set({ tasks: prevTasks, recurrentTasks: prevRecurrentTasks });
           });
@@ -620,6 +616,7 @@ export const usePlannerStore = create<PlannerStore>()(
             projectId: data.projectId,
           }),
           title:     data.title,
+          mandalaNodeId: data.mandalaNodeId,
           notes:     data.notes,
           status:    'pending',
           location:  data.location,
@@ -647,7 +644,11 @@ export const usePlannerStore = create<PlannerStore>()(
 
         const { projects, recurrentTasks, tags } = get();
         api.createTask(newTask, projects, recurrentTasks, tags)
-          .then(({ id: backendId }) => {
+          .then(async ({ id: backendId }) => {
+            const latest = get().tasks.find(t => t.id === newTask.id);
+            if (latest && latest.mandalaNodeId !== newTask.mandalaNodeId) {
+              await api.patchTask(backendId, { mandala_node_id: latest.mandalaNodeId ?? null });
+            }
             set((s) => ({
               tasks: s.tasks.map((t) => (t.id === newTask.id ? { ...t, backendId } : t)),
             }));
@@ -694,6 +695,7 @@ export const usePlannerStore = create<PlannerStore>()(
         const updated = get().tasks.find((t) => t.id === id);
         if (updated?.backendId) {
           const apiFields: Record<string, unknown> = {};
+          if ('mandalaNodeId' in updates) apiFields.mandala_node_id = updates.mandalaNodeId ?? null;
           if ('title' in updates)     apiFields.title      = updates.title ?? null;
           if ('notes' in updates)     apiFields.notes      = updates.notes ?? null;
           if ('date' in updates)      apiFields.task_date  = updates.date ?? null;
@@ -847,6 +849,7 @@ export const usePlannerStore = create<PlannerStore>()(
         const updated = get().recurrentTasks.find((r) => r.id === id);
         if (updated?.backendId) {
           const apiFields: Record<string, unknown> = {};
+          if ('mandalaNodeId' in updates) apiFields.mandala_node_id = updates.mandalaNodeId ?? null;
           if ('title' in updates)     apiFields.title            = updates.title;
           if ('notes' in updates)     apiFields.notes            = updates.notes ?? null;
           if ('frequency' in updates && updates.frequency)
@@ -909,7 +912,7 @@ export const usePlannerStore = create<PlannerStore>()(
           (task) =>
             task.recurrentTaskId === recurrentTask.id &&
             task.date &&
-            getRecurrentCycleDueDate(recurrentTask, task.date) === cycleDueDate,
+            (task.recurrentCycleDate ?? getRecurrentCycleDueDate(recurrentTask, task.date)) === cycleDueDate,
         );
 
         const nextRecurrentTask: RecurrentTask = {
@@ -930,16 +933,11 @@ export const usePlannerStore = create<PlannerStore>()(
           ),
         }));
 
-        const patchTasks = linkedTasks
-          .filter((task) => task.backendId)
-          .map((task) => api.patchTask(task.backendId!, { status: nextStatus }));
-        const patchRecurrent = recurrentTask.backendId
-          ? api.patchRecurrentTask(recurrentTask.backendId, {
-              completed_through_date: nextCompletedThroughDate ?? null,
-            })
+        const operation = recurrentTask.backendId
+          ? api.completeRecurrentCycle(recurrentTask.backendId, cycleDueDate, nextStatus === 'done',
+              nextStatus !== 'done' ? nextCompletedThroughDate : undefined)
           : Promise.resolve();
-
-        Promise.all([...patchTasks, patchRecurrent]).catch((err) => {
+        operation.catch((err) => {
           console.error('[advanceRecurrentTask]', err);
           set({ recurrentTasks: prevRecurrentTasks, tasks: prevTasks });
         });
@@ -971,6 +969,8 @@ export const usePlannerStore = create<PlannerStore>()(
           location: 'today',
           date,
           recurrentTaskId: id,
+          recurrentCycleDate: getRecurrentCycleDueDate(rt, date),
+          mandalaNodeId: rt.mandalaNodeId,
           tagId: rt.tagId,
           notes: rt.notes,
           createdAt: ts,
@@ -1418,6 +1418,8 @@ export const usePlannerStore = create<PlannerStore>()(
           location:        dest.location,
           date:            cycleDate,
           recurrentTaskId: recId,
+          recurrentCycleDate: getRecurrentCycleDueDate(rt, cycleDate),
+          mandalaNodeId: rt.mandalaNodeId,
           tagId:           rt.tagId,
           notes:           rt.notes,
           createdAt:       ts,

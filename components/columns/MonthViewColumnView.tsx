@@ -1,4 +1,5 @@
 'use client';
+import { MandalaTaskIndicator } from '@/components/ui/MandalaTaskIndicator';
 
 import { format } from 'date-fns';
 import { useCallback } from 'react';
@@ -165,6 +166,7 @@ function MonthTaskRow({ task, onToggle }: { task: Task; onToggle: (id: string) =
       >
         {task.title}
       </span>
+      <MandalaTaskIndicator nodeId={task.mandalaNodeId} generated={task.generatedByMandala} />
       <NotesIndicator notes={task.notes} size={10} className="text-[var(--color-text-muted)]" />
     </div>
   );

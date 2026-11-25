@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import type { Task } from '@/types';
+import { MandalaTaskIndicator } from './MandalaTaskIndicator';
 import { NotesIndicator } from './NotesIndicator';
 
 interface TaskPillProps {
@@ -102,8 +103,9 @@ export function TaskPill({
         </span>
       </span>
 
-      {(estimateLabel || showRecurrenceIcon || rightAdornment || task.notes?.trim()) && (
+      {(estimateLabel || showRecurrenceIcon || rightAdornment || task.mandalaNodeId || task.notes?.trim()) && (
         <span className="flex flex-shrink-0 items-center gap-1.5">
+          <MandalaTaskIndicator nodeId={task.mandalaNodeId} generated={task.generatedByMandala} />
           <NotesIndicator notes={task.notes} className="text-[var(--color-text-muted)]" />
           {showRecurrenceIcon && (
             <RefreshCw size={11} className="text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />

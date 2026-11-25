@@ -100,6 +100,8 @@ def update_mandala(payload: schemas.MandalaStateUpdate, db: Session = Depends(ge
     previous = schemas.MandalaDocument.model_validate_json(state.document_json)
     removed = {node.id for node in previous.nodes} - {node.id for node in payload.document.nodes}
     if removed:
+        from app.mandala_tracking import remove_nodes
+        remove_nodes(db, removed)
         db.execute(delete(models.MandalaNote).where(models.MandalaNote.node_id.in_(removed)))
     state.document_json = payload.document.model_dump_json()
     state.updated_at = datetime.utcnow()

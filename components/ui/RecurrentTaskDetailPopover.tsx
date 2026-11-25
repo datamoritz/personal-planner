@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { CalendarRange, Check, Sparkles, Trash2, X } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
+import { MandalaAssignmentPicker } from './MandalaAssignmentPicker';
 import { DetailPopover } from './DetailPopover';
 import { PopoverField, PopoverInput } from './PopoverField';
 import type { RecurrenceFrequency } from '@/types';
@@ -160,9 +161,11 @@ export function RecurrentTaskDetailPopover({
   const [frequency, setFrequency] = useState<RecurrenceFrequency>(
     rt?.frequency ?? { type: 'daily' }
   );
+  const [mandalaNodeId, setMandalaNodeId] = useState(rt?.mandalaNodeId);
   const [emojiLoading, setEmojiLoading] = useState(false);
 
   const hasChanges =
+    mandalaNodeId !== rt?.mandalaNodeId ||
     (title.trim() || rt?.title || '') !== (rt?.title ?? '') ||
     notes !== (rt?.notes ?? '') ||
     JSON.stringify(frequency) !== JSON.stringify(rt?.frequency ?? { type: 'daily' });
@@ -177,6 +180,7 @@ export function RecurrentTaskDetailPopover({
       title: title.trim() || rt.title,
       notes,
       frequency,
+      mandalaNodeId,
     });
     onClose();
   };
@@ -205,6 +209,7 @@ export function RecurrentTaskDetailPopover({
       className="w-[24rem]"
       headerActions={(
         <>
+          <MandalaAssignmentPicker value={mandalaNodeId} onChange={setMandalaNodeId} />
           <button
             type="button"
             onClick={handleSuggestEmoji}

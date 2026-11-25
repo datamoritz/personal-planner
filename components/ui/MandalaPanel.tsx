@@ -17,6 +17,8 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import * as api from '@/lib/api';
+import { useMandalaTrackingStore } from '@/lib/mandalaTracking';
+import { MandalaStatus } from './MandalaTrackingDetails';
 import { MandalaNotesWindow } from './MandalaNotesWindow';
 import { flushMandalaNotes, forgetMandalaNotes } from '@/lib/useMandalaNotes';
 import {
@@ -114,6 +116,7 @@ function MandalaTile({
   onOpen: () => void;
 }) {
   const { node, x, y, depth } = layout;
+  const tracking = useMandalaTrackingStore(state => state.summaries.find(item => item.nodeId === node.id));
   const isLoose = node.kind === 'loose';
   const color = isLoose ? '#AAB2C1' : branchColor(node, nodes);
   const background = isLoose
@@ -152,7 +155,9 @@ function MandalaTile({
       }}
       title={`${node.title.replaceAll('\n', ' ')} — double-click for notes`}
     >
+      {tracking && <MandalaStatus info={tracking} compact />}
       {node.title}
+      {tracking && tracking.settings.trackingType === 'frequency' && <span title={`${tracking.completed} completed, ${tracking.planned} planned`} className="pointer-events-none absolute bottom-1.5 left-0 w-full text-center text-[9px] tabular-nums leading-none" style={{ color: textColor, opacity: .7 }}>{tracking.completed}/{tracking.target}{tracking.planned ? ` · +${tracking.planned}` : ''}</span>}
     </button>
   );
 }
@@ -192,7 +197,7 @@ function SpacingSlider({
   );
 }
 
-export function MandalaPanel({ onClose }: { onClose: () => void }) {
+export function MandalaPanel({ onClose, initialNodeId }: { onClose: () => void; initialNodeId?: string }) {
   const initialSize = useMemo(() => viewportSize(), []);
   const [size, setSize] = useState(initialSize);
   const [position, setPosition] = useState(() => centeredPosition(initialSize));
@@ -216,6 +221,11 @@ export function MandalaPanel({ onClose }: { onClose: () => void }) {
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const maximized = restoreFrame !== null;
+  useEffect(() => {
+    if (!initialNodeId) return;
+    const frame = requestAnimationFrame(() => { setSelectedId(initialNodeId); setNotesTile({ id: initialNodeId, editing: false }); });
+    return () => cancelAnimationFrame(frame);
+  }, [initialNodeId]);
   const layout = useMemo(() => document ? calculateMandalaLayout(document) : null, [document]);
   useLayoutEffect(() => { layoutRef.current = layout; }, [layout]);
   const selectedNode = document?.nodes.find((node) => node.id === notesTile?.id) ?? null;

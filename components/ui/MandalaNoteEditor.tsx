@@ -138,7 +138,7 @@ export function MandalaNoteEditor({ text, onChange, label, today, focus }: {
     onChange(next);
   };
   return <div ref={ref} role="textbox" aria-multiline="true" aria-label={label} contentEditable suppressContentEditableWarning
-    data-mandala-note-editor data-empty={!text} data-placeholder={today ? 'A few thoughts on today…' : ''}
+    data-mandala-note-editor data-empty={!text}
     onInput={changed}
     onKeyDown={event => {
       if (event.nativeEvent.isComposing) return;
@@ -172,5 +172,5 @@ export function MandalaNoteEditor({ text, onChange, label, today, focus }: {
       changed();
     }}
     style={{ minHeight: today ? 100 : 36 }}
-    className="relative block w-full whitespace-pre-wrap break-words border-0 bg-transparent py-1 text-[12px] leading-[1.5] text-[var(--color-text-primary)] outline-none [&>:is(p,div)]:m-0 [&>:is(p,div)]:min-h-[1lh] [&>[data-note-empty=true]:not(:last-child)]:min-h-0 [&>[data-note-empty=true]:not(:last-child)]:h-[0.75em] [&>[data-note-empty=true]:not(:last-child)]:leading-[0.75] [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-3 [&_li]:m-0 [&_li]:pl-0 [&_li::marker]:content-['-_'] data-[empty=true]:before:pointer-events-none data-[empty=true]:before:absolute data-[empty=true]:before:text-[var(--color-text-muted)]/65 data-[empty=true]:before:content-[attr(data-placeholder)]" />;
+    className="mandala-note-editor relative block w-full whitespace-pre-wrap break-words border-0 bg-transparent py-1 text-[12px] leading-[1.5] text-[var(--color-text-primary)] outline-none [&>:is(p,div)]:m-0 [&>:is(p,div)]:min-h-[1lh] [&>[data-note-empty=true]:not(:last-child)]:min-h-0 [&>[data-note-empty=true]:not(:last-child)]:h-[0.75em] [&>[data-note-empty=true]:not(:last-child)]:leading-[0.75] [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-3 [&_li]:m-0 [&_li]:pl-0 [&_li::marker]:content-['-_'] data-[empty=true]:before:pointer-events-none data-[empty=true]:before:absolute data-[empty=true]:before:text-[var(--color-text-muted)]/65 data-[empty=true]:before:content-[attr(data-placeholder)]" />;
 }

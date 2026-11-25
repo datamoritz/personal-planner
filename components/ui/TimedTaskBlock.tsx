@@ -1,4 +1,5 @@
 'use client';
+import { MandalaTaskIndicator } from '@/components/ui/MandalaTaskIndicator';
 
 import { NotesIndicator } from './NotesIndicator';
 
@@ -17,6 +18,8 @@ import {
 import { useSlotHeight } from '@/lib/slotHeightContext';
 
 interface TimedTaskLike {
+  mandalaNodeId?: string;
+  generatedByMandala?: boolean;
   id: string;
   title: string;
   notes?: string | null;
@@ -228,8 +231,9 @@ export function TimedTaskBlock({
         ].join(' ')}>
           {task.title}
         </span>
-        {(task.notes?.trim() || task.recurrentTaskId || (task.projectId && task.location !== 'project')) && (
+        {(task.mandalaNodeId || task.notes?.trim() || task.recurrentTaskId || (task.projectId && task.location !== 'project')) && (
           <span className={`flex flex-shrink-0 items-center gap-1 ${gripListeners ? 'mr-3' : ''}`}>
+            <MandalaTaskIndicator nodeId={task.mandalaNodeId} generated={task.generatedByMandala} />
             <NotesIndicator notes={task.notes} size={compact ? 9 : 11} className="text-[var(--color-text-muted)]" />
             {task.recurrentTaskId && (
               <RefreshCw size={9} className="text-[var(--color-accent)] opacity-70" strokeWidth={2.5} />

@@ -65,31 +65,28 @@ export function normalizeExecutionView(
 
 // ─── HTTP helpers ───────────────────────────────────────────────────────────
 
-async function request<T>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  checkPrivateAccess(res);
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    let message: string | undefined;
-    try {
-      const error = JSON.parse(detail) as { detail?: unknown };
-      if (typeof error?.detail === 'string' && error.detail.trim()) {
-        message = error.detail;
-      }
-    } catch {
-      // Preserve the status and body when a proxy returns a non-JSON error.
+let pendingPlannerMutations = 0;
+export const hasPendingPlannerMutations = () => pendingPlannerMutations > 0;
+export async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const relevant = !!options?.method && options.method !== 'GET'
+    && (path === '/mandala' || /^\/(tasks|recurrent-tasks)(\/|$)/.test(path)
+      || (path.startsWith('/mandala/tracking/') && !path.endsWith('/evaluate') && !path.endsWith('/preferences')));
+  const signal = (name: string) => { if (typeof window !== 'undefined') window.dispatchEvent(new Event(name)); };
+  if (relevant) { pendingPlannerMutations++; signal('planner-data-invalidated'); }
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, ...options });
+    checkPrivateAccess(res);
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      let message: string | undefined;
+      try { const error = JSON.parse(detail) as { detail?: unknown }; if (typeof error.detail === 'string') message = error.detail; } catch {}
+      throw new Error(message || `API ${options?.method ?? 'GET'} ${path} → ${res.status}: ${detail}`);
     }
-    if (message) throw new Error(message);
-    throw new Error(`API ${options?.method ?? 'GET'} ${path} → ${res.status}: ${detail}`);
+    if (res.status === 204) return undefined as T;
+    return await res.json();
+  } finally {
+    if (relevant) { pendingPlannerMutations--; signal('planner-tasks-changed'); }
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
 
 const get  = <T>(path: string)                   => request<T>(path);
@@ -402,6 +399,10 @@ function toTask(
   return {
     id:               b.client_id ?? String(b.id),
     backendId:        b.id,
+    mandalaNodeId: b.mandala_node_id ?? undefined,
+    generatedByMandala: b.generated_by_mandala ?? false,
+    recurrentCycleDate: b.recurrent_cycle_date ?? undefined,
+    completedAt: b.completed_at ?? undefined,
     sortOrder:        b.sort_order ?? 0,
     title:            b.title,
     status:           b.status,
@@ -470,6 +471,7 @@ function toRecurrentTask(b: BackendRecurrentTask, tagIdMap: Map<number, string>)
   const anchorDate = b.anchor_date ?? b.created_at?.slice(0, 10) ?? format(new Date(), 'yyyy-MM-dd');
   const completedThroughDate = b.completed_through_date ?? undefined;
   return {
+    mandalaNodeId: b.mandala_node_id ?? undefined,
     id:                   b.client_id ?? String(b.id),
     backendId:            b.id,
     title:                b.title,
@@ -761,6 +763,8 @@ export async function createTask(
 ): Promise<{ id: number }> {
   const payload = {
     client_id:           task.id,
+    mandala_node_id: task.mandalaNodeId ?? null,
+    recurrent_cycle_date: task.recurrentCycleDate ?? null,
     title:               task.title,
     notes:               task.notes ?? null,
     location:            task.location,
@@ -787,6 +791,8 @@ export async function createTasksBulk(
   return post('/tasks/bulk', {
     tasks: tasks.map((task) => ({
       client_id: task.id,
+      mandala_node_id: task.mandalaNodeId ?? null,
+      recurrent_cycle_date: task.recurrentCycleDate ?? null,
       title: task.title,
       notes: task.notes ?? null,
       location: task.location,
@@ -947,6 +953,7 @@ export async function deleteProject(backendId: number): Promise<void> {
 
 export async function createRecurrentTask(rt: RecurrentTask, tags: Tag[]): Promise<{ id: number }> {
   return post<{ id: number }>('/recurrent-tasks', {
+    mandala_node_id: rt.mandalaNodeId ?? null,
     client_id:              rt.id,
     tag_id:                 resolveTagBackendId(rt.tagId, tags),
     title:                  rt.title,
@@ -1091,4 +1098,9 @@ export async function patchTag(backendId: number, fields: Record<string, unknown
 
 export async function deleteTag(backendId: number): Promise<void> {
   await del(`/tags/${backendId}`);
+}
+
+
+export async function completeRecurrentCycle(backendId: number, cycleDate: string, done: boolean, previousCycleDate?: string, taskId?: number): Promise<void> {
+  await post(`/recurrent-tasks/${backendId}/complete-cycle`, { cycle_date: cycleDate, done, previous_cycle_date: previousCycleDate ?? null, task_id: taskId ?? null });
 }

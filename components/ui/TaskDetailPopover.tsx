@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, Check, Clapperboard, Sparkles, Trash2 } from 'lucide-react';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { X } from 'lucide-react';
+import { MandalaAssignmentPicker } from './MandalaAssignmentPicker';
 import { DetailPopover } from './DetailPopover';
 import { PopoverField, PopoverInput } from './PopoverField';
 import { DateTimePicker } from './DateTimePicker';
@@ -26,6 +27,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
   const [startTime, setStartTime] = useState(task?.startTime ?? '');
   const [endTime,   setEndTime]   = useState(task?.endTime   ?? '');
   const [estimateHours, setEstimateHours] = useState(task?.estimateHours?.toString() ?? '');
+  const [mandalaNodeId, setMandalaNodeId] = useState(task?.mandalaNodeId);
   const [emojiLoading, setEmojiLoading] = useState(false);
 
   const handleClose = useCallback(() => {
@@ -35,6 +37,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
     }
 
     const updates: Parameters<typeof updateTask>[1] = {};
+    if (mandalaNodeId !== task.mandalaNodeId) updates.mandalaNodeId = mandalaNodeId;
     if (title.trim() && title !== task.title)     updates.title     = title.trim();
     if (notes        !== task.notes)               updates.notes     = notes;
     if (date         !== task.date)                updates.date      = date;
@@ -50,7 +53,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
     }
     if (Object.keys(updates).length) updateTask(taskId, updates);
     onClose();
-  }, [date, endTime, estimateHours, notes, onClose, startTime, task, taskId, title, updateTask]);
+  }, [mandalaNodeId, date, endTime, estimateHours, notes, onClose, startTime, task, taskId, title, updateTask]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -78,6 +81,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
         : null;
   const showTime = task.location === 'myday' || !!task.startTime;
   const hasChanges =
+    mandalaNodeId !== task.mandalaNodeId ||
     title.trim() !== task.title ||
     notes !== (task.notes ?? '') ||
     date !== task.date ||
@@ -106,6 +110,7 @@ export function TaskDetailPopover({ taskId, anchor, onClose, isDraft = false }: 
       className="w-[24rem]"
       headerActions={(
         <>
+          <MandalaAssignmentPicker value={mandalaNodeId} onChange={setMandalaNodeId} />
           <button
             type="button"
             onClick={handleSuggestEmoji}
