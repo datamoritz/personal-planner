@@ -1,5 +1,7 @@
 # Mandala goal tracking
 
+Published November 24, 2026. See [the release record](releases/2026-11-24-mandala-tracking.md) for deployment IDs, production validation, backup and rollback commands.
+
 Release branch: `codex/mandala-tracking-local`. The feature uses the existing private Planner gateway and task system. The isolated dummy preview is served at `http://127.0.0.1:13108`; visit `http://127.0.0.1:18109/preview` first to set its local-only session cookie. The fixture never calls Google or uses production tasks. Existing notes, calendar dimensions and task detail fields are retained.
 
 ## Interaction
